@@ -140,27 +140,26 @@ const App: React.FC = () => {
           </section>
 
           <section>
-            <h2 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-1.5">
-              <Minus size={14} /> 글꼴 크기
+            <h2 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center justify-between gap-1.5">
+              <div className="flex items-center gap-1.5">
+                <Minus size={14} /> 글꼴 크기
+              </div>
+              <span className="text-brand-primary text-[10px] font-bold">{settings.fontSize}px</span>
             </h2>
-            <div className="flex gap-2">
-              {[
-                { label: '작게', value: 12 },
-                { label: '보통', value: 14 },
-                { label: '크게', value: 16 },
-                { label: '매우 크게', value: 18 }
-              ].map((s) => (
-                <button
-                  key={s.value}
-                  onClick={() => updateSettings({ fontSize: s.value })}
-                  className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-all ${settings.fontSize === s.value
-                    ? 'border-brand-primary bg-brand-primary/5 text-brand-primary ring-1 ring-brand-primary'
-                    : 'border-gray-100 text-gray-600 hover:border-gray-300'
-                    }`}
-                >
-                  {s.label}
-                </button>
-              ))}
+            <div className="flex flex-col gap-2 p-2 bg-gray-50 rounded-lg border border-gray-100">
+              <input
+                type="range"
+                min="12"
+                max="24"
+                step="1"
+                value={settings.fontSize}
+                onChange={(e) => updateSettings({ fontSize: parseInt(e.target.value) })}
+                className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-primary"
+              />
+              <div className="flex justify-between text-[9px] text-gray-400 px-1 font-medium italic">
+                <span>12px</span>
+                <span>24px</span>
+              </div>
             </div>
           </section>
 
@@ -168,25 +167,19 @@ const App: React.FC = () => {
             <h2 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-1.5">
               <Palette size={14} /> 글꼴 색상
             </h2>
-            <div className="flex flex-wrap gap-3">
-              {[
-                { name: '진한 색', value: '#1a1a1a' },
-                { name: '회색', value: '#4b5563' },
-                { name: '네이비', value: '#1e3a8a' },
-                { name: '퍼플', value: '#581c87' },
-                { name: '다크 그린', value: '#064e3b' }
-              ].map((c) => (
-                <button
-                  key={c.value}
-                  onClick={() => updateSettings({ textColor: c.value })}
-                  className={`w-8 h-8 rounded-full border-2 transition-all ${settings.textColor === c.value
-                    ? 'border-brand-primary scale-110 shadow-sm'
-                    : 'border-transparent hover:scale-105'
-                    }`}
-                  style={{ backgroundColor: c.value }}
-                  title={c.name}
+            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+              <div className="relative">
+                <input
+                  type="color"
+                  value={settings.textColor}
+                  onChange={(e) => updateSettings({ textColor: e.target.value })}
+                  className="w-10 h-10 rounded-full border-2 border-white shadow-sm cursor-pointer appearance-none bg-transparent [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-full [&::-webkit-color-swatch]:border-none"
                 />
-              ))}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-gray-700 uppercase">{settings.textColor}</span>
+                <span className="text-[10px] text-gray-400 italic font-medium">원하는 색상을 선택하세요</span>
+              </div>
             </div>
           </section>
 
@@ -255,9 +248,9 @@ const App: React.FC = () => {
                   </div>
                   <p className="text-sm text-gray-800 line-clamp-3 leading-relaxed"
                     style={{
-                      fontFamily: settings.fontFamily,
-                      fontSize: `${settings.fontSize}px`,
-                      color: settings.textColor
+                      fontFamily: note.fontFamily || settings.fontFamily,
+                      fontSize: `${note.fontSize || settings.fontSize}px`,
+                      color: note.textColor || settings.textColor
                     }}>
                     {note.content || <span className="text-gray-300 italic">내용 없음</span>}
                   </p>

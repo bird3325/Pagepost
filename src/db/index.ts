@@ -36,6 +36,43 @@ export interface Note {
     isPinned: boolean;
     isCollapsed: boolean;
 
+    // Per-note font settings
+    fontFamily?: string;
+    fontSize?: number;
+    textColor?: string;
+
+    createdAt: number;
+    updatedAt: number;
+}
+
+export type MarkupType = 'pen' | 'highlight' | 'rect' | 'circle' | 'arrow' | 'text';
+
+export interface MarkupObject {
+    id: string;
+    url: string;         // Normalized URL
+    type: MarkupType;
+
+    // For 'pen' and 'highlight', we store points. 
+    // For others, we might store bounds or start/end points.
+    points?: { x: number; y: number }[];
+    bounds?: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    };
+
+    style: {
+        strokeColor: string;
+        strokeWidth: number;
+        opacity: number;
+        fontFamily?: string;  // For 'text' type
+        fontSize?: number;    // For 'text' type
+    };
+
+    content?: string;     // For 'text' type
+    linkedNoteId?: string; // Optional link to a Note
+
     createdAt: number;
     updatedAt: number;
 }

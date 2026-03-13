@@ -25,6 +25,9 @@ const handleMessage = (message: any) => {
         const targetElement = lastElement || document.body;
         const anchor = captureAnchor(targetElement, lastClickInfo.x, lastClickInfo.y);
 
+        // Capture current global settings to persist with the note
+        const currentSettings = useNoteStore.getState().settings;
+
         const newNote = {
             id: crypto.randomUUID(),
             url: normalizedUrl,
@@ -41,6 +44,9 @@ const handleMessage = (message: any) => {
             status: 'active' as const,
             isPinned: false,
             isCollapsed: false,
+            fontFamily: currentSettings.fontFamily,
+            fontSize: currentSettings.fontSize,
+            textColor: currentSettings.textColor,
             createdAt: Date.now(),
             updatedAt: Date.now()
         };

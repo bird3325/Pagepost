@@ -179,9 +179,9 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
                                 autoFocus
                                 className="w-full h-full bg-transparent resize-none border-none outline-none text-sm leading-relaxed"
                                 style={{
-                                    fontFamily: settings.fontFamily,
-                                    fontSize: `${settings.fontSize}px`,
-                                    color: settings.textColor
+                                    fontFamily: note.fontFamily || settings.fontFamily,
+                                    fontSize: `${note.fontSize || settings.fontSize}px`,
+                                    color: note.textColor || settings.textColor
                                 }}
                                 value={localContent}
                                 onChange={(e) => setLocalContent(e.target.value)}
@@ -194,9 +194,9 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
                             <div
                                 className="w-full h-full text-sm leading-relaxed cursor-text whitespace-pre-wrap overflow-y-auto"
                                 style={{
-                                    fontFamily: settings.fontFamily,
-                                    fontSize: `${settings.fontSize}px`,
-                                    color: settings.textColor
+                                    fontFamily: note.fontFamily || settings.fontFamily,
+                                    fontSize: `${note.fontSize || settings.fontSize}px`,
+                                    color: note.textColor || settings.textColor
                                 }}
                                 onClick={() => {
                                     setLocalContent(note.content);
