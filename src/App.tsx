@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNoteStore } from './store/useNoteStore';
 import { StickyNote, Search, Settings, ExternalLink, Trash2, MapPin, X, ChevronLeft, Type, AlertTriangle, Minus, Palette } from 'lucide-react';
-import { normalizeUrl } from './utils/url';
 
 const App: React.FC = () => {
   const {
@@ -26,22 +25,9 @@ const App: React.FC = () => {
 
 
   const goToNote = (note: any) => {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const activeTab = tabs[0];
-      if (!activeTab) return;
-
-      const normalizedActiveUrl = normalizeUrl(activeTab.url || '');
-
-      if (normalizedActiveUrl === note.url) {
-        // Same page, just scroll
-        chrome.tabs.sendMessage(activeTab.id!, { type: "SCROLL_TO_NOTE", noteId: note.id });
-      } else {
-        // Different page, navigate
-        // We append a hash to help the content script identify which note to scroll to after load
-        const targetUrl = note.url.includes('#') ? note.url : `${note.url}#pagepost-note-${note.id}`;
-        chrome.tabs.update(activeTab.id!, { url: targetUrl });
-      }
-    });
+    // Open in a new tab as requested ("새창으로 뜨도록")
+    const targetUrl = note.url.includes('#') ? note.url : `${note.url}#pagepost-note-${note.id}`;
+    chrome.tabs.create({ url: targetUrl });
   };
 
   return (

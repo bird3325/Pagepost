@@ -12,6 +12,12 @@ import contentStyles from './style.css?inline';
 let lastElement: HTMLElement | null = null;
 let lastClickInfo = { x: 0, y: 0 };
 
+// Capture the last right-click information to position the note correctly
+document.addEventListener('contextmenu', (e: MouseEvent) => {
+    lastElement = e.target as HTMLElement;
+    lastClickInfo = { x: e.clientX, y: e.clientY };
+}, true);
+
 const handleMessage = (message: any) => {
     console.log('PagePost: Message received:', message.type);
     if (message.type === "CREATE_NOTE_CLICK") {
@@ -65,8 +71,23 @@ const handleMessage = (message: any) => {
     }
 };
 
+const handleScrollHash = () => {
+    const hash = window.location.hash;
+    const match = hash.match(/#pagepost-note-([a-f0-9-]+)/i);
+    if (match) {
+        const noteId = match[1];
+        console.log('PagePost: Detected scroll-to hash for note:', noteId);
+        // Wait a bit for notes to load and render
+        setTimeout(() => {
+            handleMessage({ type: "SCROLL_TO_NOTE", noteId });
+        }, 1000);
+    }
+};
+
 const init = () => {
     console.log('PagePost: Initializing content script...');
+
+    handleScrollHash();
 
     if (!document.body) {
         console.log('PagePost: document.body not found, waiting...');
@@ -141,7 +162,10 @@ window.addEventListener('pagepost-url-change', (e: any) => {
 });
 
 window.addEventListener('popstate', () => checkUrlChange());
-window.addEventListener('hashchange', () => checkUrlChange());
+window.addEventListener('hashchange', () => {
+    checkUrlChange();
+    handleScrollHash();
+});
 setInterval(() => checkUrlChange(), 250); // Faster polling as safety fallback
 
 

@@ -14,7 +14,14 @@ export const normalizeUrl = (url: string): string => {
 
         // Return normalized string representation
         // We keep search and hash as they are often part of the route identity in SPAs
-        return urlObj.origin + urlObj.pathname + urlObj.search + urlObj.hash;
+        // BUT we strip our own internal scroll-to hash to ensure matching works
+        let hash = urlObj.hash;
+        if (hash.includes('#pagepost-note-')) {
+            // Remove the specific fragment while keeping others if any
+            hash = hash.replace(/#pagepost-note-[a-f0-9-]+/i, '');
+        }
+
+        return urlObj.origin + urlObj.pathname + urlObj.search + hash;
     } catch (e) {
         return url;
     }
