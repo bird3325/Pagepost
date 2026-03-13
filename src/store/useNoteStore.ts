@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { type Note } from '../db';
+import { type Note, type MarkupObject, type MarkupType } from '../db';
 import { normalizeUrl } from '../utils/url';
 
 interface NoteState {
@@ -9,12 +9,17 @@ interface NoteState {
     currentUrl: string;
     isGlobalView: boolean;
     searchQuery: string;
+    mode: 'note' | 'markup';
+    currentTool: MarkupType;
+    currentColor: string;
     settings: {
         fontFamily: string;
         fontSize: number;
         textColor: string;
     };
+    markups: MarkupObject[];
     fetchRequestId: number;
+    markupFetchRequestId: number;
 
 
     // Actions
@@ -26,11 +31,22 @@ interface NoteState {
     deleteAllNotes: () => Promise<void>;
     setActiveNoteId: (id: string | null) => void;
     setSearchQuery: (query: string) => void;
+    setMode: (mode: 'note' | 'markup') => void;
+    setTool: (tool: MarkupType) => void;
+    setColor: (color: string) => void;
     updateSettings: (settings: Partial<NoteState['settings']>) => Promise<void>;
     loadSettings: () => Promise<void>;
+
+    // Markup Actions
+    fetchMarkupsForUrl: (url: string) => Promise<void>;
+    addMarkup: (markup: MarkupObject) => Promise<void>;
+    updateMarkup: (id: string, updates: Partial<MarkupObject>) => Promise<void>;
+    deleteMarkup: (id: string) => Promise<void>;
+    clearAllMarkups: () => Promise<void>;
 }
 
 const STORAGE_KEY = 'pagepost_notes';
+const MARKUP_STORAGE_KEY = 'pagepost_markups';
 const SETTINGS_KEY = 'pagepost_settings';
 
 const isContextValid = () => {
@@ -53,8 +69,19 @@ export const useNoteStore = create<NoteState>((set, get) => {
                     if (isGlobalView) fetchAllNotes();
                     else if (targetUrl) fetchNotesForUrl(targetUrl);
                 }
+                if (changes[MARKUP_STORAGE_KEY]) {
+                    const { currentUrl, fetchMarkupsForUrl } = get();
+                    const targetUrl = currentUrl || (typeof window !== 'undefined' ? normalizeUrl(window.location.href) : '');
+                    if (targetUrl) fetchMarkupsForUrl(targetUrl);
+                }
                 if (changes[SETTINGS_KEY]) {
                     get().loadSettings();
+                }
+                if (changes['pagepost_mode']) {
+                    const newValue = changes['pagepost_mode'].newValue;
+                    if (newValue === 'note' || newValue === 'markup') {
+                        set({ mode: newValue });
+                    }
                 }
             }
         });
@@ -67,6 +94,9 @@ export const useNoteStore = create<NoteState>((set, get) => {
         currentUrl: '',
         isGlobalView: false,
         searchQuery: '',
+        mode: 'note',
+        currentTool: 'pen',
+        currentColor: '#3b82f6',
         fetchRequestId: 0,
 
         settings: {
@@ -74,6 +104,8 @@ export const useNoteStore = create<NoteState>((set, get) => {
             fontSize: 14,
             textColor: '#1a1a1a'
         },
+        markups: [],
+        markupFetchRequestId: 0,
 
         loadSettings: async () => {
             if (!isContextValid()) throw new Error('Extension context invalidated');
@@ -100,6 +132,14 @@ export const useNoteStore = create<NoteState>((set, get) => {
         },
 
         setSearchQuery: (query: string) => set({ searchQuery: query }),
+        setMode: async (mode: 'note' | 'markup') => {
+            if (isContextValid()) {
+                await chrome.storage.local.set({ 'pagepost_mode': mode });
+            }
+            set({ mode });
+        },
+        setTool: (tool: MarkupType) => set({ currentTool: tool }),
+        setColor: (color: string) => set({ currentColor: color }),
 
         fetchAllNotes: async () => {
             if (!isContextValid()) throw new Error('Extension context invalidated');
@@ -256,5 +296,102 @@ export const useNoteStore = create<NoteState>((set, get) => {
         },
 
         setActiveNoteId: (id: string | null) => set({ activeNoteId: id }),
+
+        // Markup Implementation
+        fetchMarkupsForUrl: async (url: string) => {
+            if (!isContextValid()) return;
+            const normalizedUrl = normalizeUrl(url);
+            const nextId = get().markupFetchRequestId + 1;
+            set({ markupFetchRequestId: nextId });
+
+            console.log(`PagePost: Fetching markups for URL [ReqID:${nextId}]:`, normalizedUrl);
+            try {
+                const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+                if (get().markupFetchRequestId !== nextId) return;
+
+                const allMarkups = (result[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
+                const filteredMarkups = allMarkups.filter(m => normalizeUrl(m.url) === normalizedUrl);
+
+                set({ markups: filteredMarkups });
+            } catch (error) {
+                console.error(`PagePost: Failed to fetch markups [ReqID:${nextId}]:`, error);
+            }
+        },
+
+        addMarkup: async (markup: MarkupObject) => {
+            if (!isContextValid()) throw new Error('Extension context invalidated');
+            try {
+                const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+                const allMarkups = (result[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
+
+                const normalizedUrl = normalizeUrl(markup.url);
+                const markupWithUrl = { ...markup, url: normalizedUrl };
+
+                const updatedAllMarkups = [...allMarkups, markupWithUrl];
+                await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
+
+                // Update local state
+                const { currentUrl, markups } = get();
+                if (currentUrl && normalizeUrl(currentUrl) === normalizedUrl) {
+                    set({ markups: [...markups, markupWithUrl] });
+                }
+            } catch (error) {
+                console.error('Failed to add markup:', error);
+            }
+        },
+
+        updateMarkup: async (id: string, updates: Partial<MarkupObject>) => {
+            if (!isContextValid()) throw new Error('Extension context invalidated');
+            try {
+                const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+                const allMarkups = (result[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
+
+                const updatedAt = Date.now();
+                const updatedAllMarkups = allMarkups.map(m => m.id === id ? { ...m, ...updates, updatedAt } : m);
+                await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
+
+                // Update local state
+                const { markups } = get();
+                set({ markups: markups.map(m => m.id === id ? { ...m, ...updates, updatedAt } : m) });
+            } catch (error) {
+                console.error('Failed to update markup:', error);
+            }
+        },
+
+        deleteMarkup: async (id: string) => {
+            if (!isContextValid()) throw new Error('Extension context invalidated');
+            try {
+                const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+                const allMarkups = (result[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
+
+                const updatedAllMarkups = allMarkups.filter(m => m.id !== id);
+                await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
+
+                // Update local state
+                const { markups } = get();
+                set({ markups: markups.filter(m => m.id !== id) });
+            } catch (error) {
+                console.error('Failed to delete markup:', error);
+            }
+        },
+
+        clearAllMarkups: async () => {
+            if (!isContextValid()) throw new Error('Extension context invalidated');
+            try {
+                const { currentUrl } = get();
+                if (!currentUrl) return;
+
+                const normalizedCurrentUrl = normalizeUrl(currentUrl);
+                const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+                const allMarkups = (result[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
+
+                const updatedAllMarkups = allMarkups.filter(m => normalizeUrl(m.url) !== normalizedCurrentUrl);
+                await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
+
+                set({ markups: [] });
+            } catch (error) {
+                console.error('Failed to clear markups:', error);
+            }
+        },
     };
 });

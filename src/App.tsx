@@ -1,12 +1,13 @@
 import React, { useEffect } from 'react';
 import { useNoteStore } from './store/useNoteStore';
-import { StickyNote, Search, Settings, ExternalLink, Trash2, MapPin, X, ChevronLeft, Type, AlertTriangle, Minus, Palette } from 'lucide-react';
+import { StickyNote, Search, Settings, ExternalLink, Trash2, MapPin, X, ChevronLeft, Type, AlertTriangle, Minus, Palette, PenTool } from 'lucide-react';
 
 const App: React.FC = () => {
   const {
     notes, fetchAllNotes, deleteNote, deleteAllNotes,
     searchQuery, setSearchQuery,
-    settings, updateSettings, loadSettings
+    settings, updateSettings, loadSettings,
+    mode, setMode
   } = useNoteStore();
 
 
@@ -47,9 +48,25 @@ const App: React.FC = () => {
             {isSettingsOpen ? '설정' : 'PagePost'}
           </h1>
         </div>
-        <div className="flex gap-2 text-gray-700">
+        <div className="flex gap-2 text-gray-700 items-center">
           {!isSettingsOpen && (
             <>
+              <div className="flex bg-black/10 rounded-lg p-0.5 mr-1">
+                <button
+                  onClick={() => setMode('note')}
+                  className={`p-1 rounded-md transition-all ${mode === 'note' ? 'bg-white shadow-sm text-brand-primary' : 'text-gray-500 hover:text-gray-700'}`}
+                  title="노트 모드"
+                >
+                  <StickyNote size={16} />
+                </button>
+                <button
+                  onClick={() => setMode('markup')}
+                  className={`p-1 rounded-md transition-all ${mode === 'markup' ? 'bg-white shadow-sm text-brand-primary' : 'text-gray-500 hover:text-gray-700'}`}
+                  title="마크업 모드"
+                >
+                  <PenTool size={16} />
+                </button>
+              </div>
               <button
                 onClick={() => setIsSearchOpen(!isSearchOpen)}
                 className={`p-1 hover:bg-black/5 rounded ${isSearchOpen ? 'bg-black/5' : ''}`}

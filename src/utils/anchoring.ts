@@ -101,18 +101,38 @@ export function restoreElement(anchor: Note['anchor']): HTMLElement | null {
         if (el) return el;
     } catch (e) { }
 
-    // 3. Text Context Match (Simplistic version)
-    // Search for the element containing the elementText and ideally surrounded by before/after
-    const allElements = document.querySelectorAll('*');
+    // 3. Text Context Match (Advanced)
+    const allElements = document.querySelectorAll('p, h1, h2, h3, h4, h5, h6, span, div, li, td, a');
     let bestMatch: HTMLElement | null = null;
     let bestScore = 0;
 
+    const targetText = anchor.context.elementText.trim();
+    if (!targetText) return null;
+
     for (const el of Array.from(allElements)) {
         const htmlEl = el as HTMLElement;
-        if (htmlEl.innerText && htmlEl.innerText.includes(anchor.context.elementText)) {
-            // Basic score based on text presence
-            let score = 0.5;
-            // You could add fuzzy matching logic here
+        // Skip elements with too many children to narrow down toleaf-ish nodes
+        if (htmlEl.children.length > 5) continue;
+
+        const elText = htmlEl.innerText || '';
+        if (elText.includes(targetText)) {
+            let score = 0;
+
+            // Context matching score
+            const fullText = document.body.innerText;
+            const idx = fullText.indexOf(elText);
+            if (idx !== -1) {
+                const actualBefore = fullText.substring(Math.max(0, idx - 50), idx);
+                const actualAfter = fullText.substring(idx + elText.length, idx + elText.length + 50);
+
+                // Simple overlap calculation (could be improved with dice coefficient)
+                if (actualBefore.includes(anchor.context.beforeText.substring(30))) score += 0.4;
+                if (actualAfter.includes(anchor.context.afterText.substring(0, 20))) score += 0.4;
+            }
+
+            // Element text similarity score (higher if text is more unique)
+            if (elText === targetText) score += 0.2;
+
             if (score > bestScore) {
                 bestScore = score;
                 bestMatch = htmlEl;
@@ -120,5 +140,6 @@ export function restoreElement(anchor: Note['anchor']): HTMLElement | null {
         }
     }
 
-    return bestMatch;
+    // Only return if we have a reasonably confident match
+    return bestScore > 0.3 ? bestMatch : null;
 }

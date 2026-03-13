@@ -1,25 +1,28 @@
 import React, { useEffect } from 'react';
 import { NoteCard } from './NoteCard';
 import { useNoteStore } from '../store/useNoteStore';
+import { MarkupLayer } from '../content/MarkupLayer';
+import { FloatingToolbar } from './FloatingToolbar';
 
 export const NoteContainer: React.FC = () => {
-    const { notes, fetchNotesForUrl, currentUrl } = useNoteStore();
+    const { notes, fetchNotesForUrl, fetchMarkupsForUrl } = useNoteStore();
 
-    // Initial fetch to ensure notes are loaded on mount
+    // Initial fetch to ensure notes and markups are loaded on mount
     useEffect(() => {
-        console.log('PagePost: NoteContainer mounted, current store URL:', currentUrl);
-        fetchNotesForUrl(window.location.href);
-    }, [fetchNotesForUrl]); // Remove currentUrl to avoid redundant fetches since content script handles it
-
-
-
-
+        const url = window.location.href;
+        fetchNotesForUrl(url);
+        fetchMarkupsForUrl(url);
+    }, [fetchNotesForUrl, fetchMarkupsForUrl]);
 
     return (
-        <div id="pagepost-notes-root">
-            {notes.map((note) => (
-                <NoteCard key={note.id} note={note} />
-            ))}
+        <div id="pagepost-notes-root" className="pointer-events-none">
+            <MarkupLayer />
+            <FloatingToolbar />
+            <div className="pointer-events-none">
+                {notes.map((note) => (
+                    <NoteCard key={note.id} note={note} />
+                ))}
+            </div>
         </div>
     );
 };

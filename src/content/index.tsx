@@ -118,7 +118,7 @@ const init = () => {
             pointerEvents: 'none',
             zIndex: '2147483647',
         });
-        document.body.appendChild(host);
+        document.documentElement.appendChild(host);
 
         const shadow = host.attachShadow({ mode: 'open' });
         const rootContainer = document.createElement('div');

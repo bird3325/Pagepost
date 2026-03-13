@@ -45,7 +45,7 @@ export interface Note {
     updatedAt: number;
 }
 
-export type MarkupType = 'pen' | 'highlight' | 'rect' | 'circle' | 'arrow' | 'text';
+export type MarkupType = 'pen' | 'highlight' | 'rect' | 'circle' | 'arrow' | 'text' | 'eraser';
 
 export interface MarkupObject {
     id: string;
