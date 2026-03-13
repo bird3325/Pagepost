@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-primary: #FFD54F;
+  --color-brand-secondary: #4FC3F7;
+  --color-brand-accent: #FF6F61;
+
+  --color-note-yellow: #FFF9C4;
+  --color-note-green: #B2DFDB;
+  --color-note-pink: #F8BBD0;
+  --color-note-lavender: #E1BEE7;
+  --color-note-blue: #BBDEFB;
+}
+
+:root {
+  font-family: 'Pretendard Variable', system-ui, -apple-system, sans-serif;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+}

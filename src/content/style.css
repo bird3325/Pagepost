@@ -1,0 +1,6 @@
+/* PagePost Content Styles */
+.pagepost-note-container {
+    all: initial;
+    position: absolute;
+    z-index: 2147483647;
+}
