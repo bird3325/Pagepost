@@ -1,14 +1,38 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useNoteStore } from '../store/useNoteStore';
+import { type MarkupType } from '../db';
 import { captureAnchor, restoreElement, getRelativePoint, getAbsolutePoint } from '../utils/anchoring';
 
 export const MarkupLayer: React.FC = () => {
-    const { mode, notes, markups, addMarkup, deleteMarkup, currentTool, currentColor, settings, activeNoteId } = useNoteStore();
+    const { mode, notes, markups, addMarkup, deleteMarkup, currentTool, currentColor, settings, activeNoteId, selectedMarkupId, setSelectedMarkupId } = useNoteStore();
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const drawingRef = useRef(false);
     const [isDrawing, setIsDrawing] = useState(false); // Keep for UI/render cycle
     const [currentPoints, setCurrentPoints] = useState<{ x: number; y: number }[]>([]);
     const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+
+    const getPagePoints = (markup: any) => {
+        let points = markup.points || [];
+        if (points.length < 1) return [];
+
+        if (markup.linkedNoteId) {
+            const linkedNote = notes.find(n => n.id === markup.linkedNoteId);
+            if (linkedNote) {
+                return points.map((p: any) => ({
+                    x: (linkedNote.notePosition.x + p.x),
+                    y: (linkedNote.notePosition.y + p.y)
+                }));
+            }
+            return [];
+        } else if (markup.anchor) {
+            const el = restoreElement(markup.anchor);
+            if (el) {
+                return points.map((p: any) => getAbsolutePoint(el, p.x, p.y));
+            }
+            return [];
+        }
+        return points;
+    };
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -40,51 +64,38 @@ export const MarkupLayer: React.FC = () => {
 
             // Draw existing markups
             markups.forEach((markup: any) => {
+                let points = getPagePoints(markup);
+                if (points.length < 1) return;
+
+                // --- STYLING ---
                 ctx.beginPath();
-                ctx.strokeStyle = markup.style.strokeColor;
-                ctx.lineWidth = markup.style.strokeWidth;
                 ctx.lineCap = 'round';
                 ctx.lineJoin = 'round';
 
-                // Highlight if linked to the active note
+                // Base style from markup
+                ctx.strokeStyle = markup.style.strokeColor;
+                ctx.lineWidth = markup.style.strokeWidth;
+                ctx.globalAlpha = markup.style.opacity;
+
+                // Selection / Active highlight
                 const isActive = markup.linkedNoteId === activeNoteId;
-                ctx.globalAlpha = isActive ? 1.0 : markup.style.opacity;
-                if (isActive) {
-                    ctx.shadowColor = markup.style.strokeColor;
-                    ctx.shadowBlur = 10;
+                const isSelected = markup.id === selectedMarkupId;
+
+                if (isActive || isSelected) {
+                    ctx.shadowColor = isSelected ? '#ffffff' : markup.style.strokeColor;
+                    ctx.shadowBlur = isSelected ? 20 : 10;
+                    ctx.globalAlpha = 1.0;
+                    if (isSelected) {
+                        ctx.lineWidth = markup.style.strokeWidth + 3;
+                    }
                 } else {
                     ctx.shadowBlur = 0;
+                    ctx.shadowColor = 'transparent';
                 }
 
-                let points = markup.points || [];
-                if (points.length < 1) return;
-
-                if (markup.linkedNoteId) {
-                    const linkedNote = notes.find(n => n.id === markup.linkedNoteId);
-                    if (linkedNote) {
-                        // Map points relative to the note's top-left
-                        points = points.map((p: any) => ({
-                            x: (linkedNote.notePosition.x + p.x) - window.scrollX,
-                            y: (linkedNote.notePosition.y + p.y) - window.scrollY
-                        }));
-                    } else {
-                        return; // Note lost, skip drawing linked markup
-                    }
-                } else if (markup.anchor) {
-                    const el = restoreElement(markup.anchor);
-                    if (el) {
-                        // Map relative points to current absolute screen coordinates
-                        points = points.map((p: any) => {
-                            const abs = getAbsolutePoint(el, p.x, p.y);
-                            return { x: abs.x, y: abs.y - window.scrollY };
-                        });
-                    } else {
-                        return;
-                    }
-                }
-
+                // Actually draw based on type
                 if (markup.type === 'pen' || markup.type === 'highlight') {
-                    ctx.beginPath();
+                    if (markup.type === 'highlight') ctx.globalAlpha = 0.4;
                     ctx.moveTo(points[0].x, points[0].y);
                     for (let i = 1; i < points.length; i++) {
                         ctx.lineTo(points[i].x, points[i].y);
@@ -402,7 +413,7 @@ export const MarkupLayer: React.FC = () => {
         };
 
         render();
-    }, [markups, isDrawing, currentPoints, currentColor, currentTool, canvasSize]);
+    }, [markups, isDrawing, currentPoints, currentColor, currentTool, canvasSize, selectedMarkupId, activeNoteId, notes, settings]);
 
     // Handle canvas resizing to match document
     useEffect(() => {
@@ -437,11 +448,18 @@ export const MarkupLayer: React.FC = () => {
 
     const handleMouseDown = (e: React.MouseEvent) => {
         if (mode !== 'markup') return; // Only allow interaction in markup mode
-        e.preventDefault(); // Prevent text selection/drag interference
-        drawingRef.current = true;
-        setIsDrawing(true);
+
         const x = e.clientX + window.scrollX;
         const y = e.clientY + window.scrollY;
+
+        if (currentTool === 'select') {
+            checkAndSelect(x, y);
+            return; // Don't start drawing
+        }
+
+        e.preventDefault();
+        drawingRef.current = true;
+        setIsDrawing(true);
 
         if (currentTool === 'eraser') {
             checkAndErase(x, y);
@@ -474,15 +492,52 @@ export const MarkupLayer: React.FC = () => {
             drawingRef.current = false;
             setIsDrawing(false);
         } else {
+            // For drawing tools (pen, highlight, shapes)
+            drawingRef.current = true;
+            setIsDrawing(true);
             setCurrentPoints([{ x, y }]);
+        }
+    };
+
+    const checkAndSelect = (x: number, y: number) => {
+        const threshold = 40; // Increased radius for easier hit detection
+        const found = markups.find(markup => {
+            // Get actual page coordinates for this markup
+            const points = getPagePoints(markup);
+
+            if (points.length === 0) return false;
+
+            // For stickers, check distance to the single point
+            if (markup.type === 'sticker') {
+                const p = points[0];
+                const distance = Math.sqrt(Math.pow(p.x - x, 2) + Math.pow(p.y - y, 2));
+                return distance < 50; // Even larger hit area for stickers
+            }
+
+            // For paths and shapes, check distance to any point
+            return points.some((p: { x: number; y: number }) => {
+                const distance = Math.sqrt(Math.pow(p.x - x, 2) + Math.pow(p.y - y, 2));
+                return distance < threshold;
+            });
+        });
+
+        if (found) {
+            setSelectedMarkupId(found.id);
+            // Sync toolbar attributes to the selected markup's current state
+            useNoteStore.setState({
+                currentColor: found.style.strokeColor
+            });
+        } else {
+            setSelectedMarkupId(null);
         }
     };
 
     const checkAndErase = (x: number, y: number) => {
         const threshold = 15; // Detection radius
         const markupToDelete = markups.find(markup => {
-            if (!markup.points) return false;
-            return markup.points.some(p => {
+            const points = getPagePoints(markup);
+            if (points.length === 0) return false;
+            return points.some((p: { x: number; y: number }) => {
                 const distance = Math.sqrt(Math.pow(p.x - x, 2) + Math.pow(p.y - y, 2));
                 return distance < threshold;
             });
@@ -512,8 +567,14 @@ export const MarkupLayer: React.FC = () => {
 
         if (currentPoints.length > 1) {
             // For shapes, we only need start and end points
-            const isShape = ['rect', 'circle', 'arrow', 'star', 'heart', 'triangle', 'chat', 'lightning', 'diamond', 'pentagon', 'hexagon', 'cross', 'cloud', 'banner', 'burst1', 'burst2'].includes(currentTool);
+            const isShape = ['rect', 'circle', 'arrow', 'star', 'heart', 'triangle', 'chat', 'lightning', 'diamond', 'pentagon', 'hexagon', 'cross', 'cloud', 'banner', 'burst1', 'burst2'].includes(currentTool as any);
             const rawPoints = isShape ? [currentPoints[0], currentPoints[currentPoints.length - 1]] : currentPoints;
+
+            // Only add markup if we have a valid tool
+            if (currentTool === 'select' || currentTool === 'eraser') {
+                setCurrentPoints([]);
+                return;
+            }
 
             // --- Smart Anchoring Logic ---
             // 1. Find the element under the first point
@@ -542,7 +603,7 @@ export const MarkupLayer: React.FC = () => {
             addMarkup({
                 id: crypto.randomUUID(),
                 url: window.location.href,
-                type: currentTool,
+                type: currentTool as MarkupType,
                 points: finalPoints,
                 anchor, // Store anchor info
                 linkedNoteId: activeNoteId || undefined,
@@ -567,7 +628,7 @@ export const MarkupLayer: React.FC = () => {
                 top: 0,
                 left: 0,
                 cursor: mode === 'markup'
-                    ? (currentTool === 'highlight' ? 'cell' : currentTool === 'eraser' ? 'not-allowed' : 'crosshair')
+                    ? (currentTool === 'select' ? 'pointer' : currentTool === 'highlight' ? 'cell' : currentTool === 'eraser' ? 'not-allowed' : 'crosshair')
                     : 'default',
                 zIndex: 10,
                 maxWidth: '100%',

@@ -5,12 +5,13 @@ import { normalizeUrl } from '../utils/url';
 interface NoteState {
     notes: Note[];
     activeNoteId: string | null;
+    selectedMarkupId: string | null;
     isLoading: boolean;
     currentUrl: string;
     isGlobalView: boolean;
     searchQuery: string;
     mode: 'note' | 'markup' | 'capture';
-    currentTool: MarkupType;
+    currentTool: MarkupType | 'eraser' | 'select';
     currentColor: string;
     settings: {
         fontFamily: string;
@@ -40,9 +41,10 @@ interface NoteState {
     deleteNote: (id: string) => Promise<void>;
     deleteAllNotes: () => Promise<void>;
     setActiveNoteId: (id: string | null) => void;
+    setSelectedMarkupId: (id: string | null) => void;
     setSearchQuery: (query: string) => void;
     setMode: (mode: 'note' | 'markup' | 'capture') => void;
-    setTool: (tool: MarkupType) => void;
+    setTool: (tool: MarkupType | 'eraser' | 'select') => void;
     setColor: (color: string) => void;
     updateSettings: (settings: Partial<NoteState['settings']>) => Promise<void>;
     loadSettings: () => Promise<void>;
@@ -116,6 +118,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
     return {
         notes: [],
         activeNoteId: null,
+        selectedMarkupId: null,
         isLoading: false,
         currentUrl: '',
         isGlobalView: false,
@@ -183,8 +186,20 @@ export const useNoteStore = create<NoteState>((set, get) => {
             }
             set({ mode });
         },
-        setTool: (tool: MarkupType) => set({ currentTool: tool }),
-        setColor: (color: string) => set({ currentColor: color }),
+        setActiveNoteId: (id) => set({ activeNoteId: id, selectedMarkupId: null }),
+        setSelectedMarkupId: (id) => set({ selectedMarkupId: id }),
+        setTool: (tool) => set({ currentTool: tool, selectedMarkupId: tool === 'select' ? get().selectedMarkupId : null }),
+        setColor: (color: string) => {
+            set({ currentColor: color });
+            // If a markup is selected, update it immediately
+            const { selectedMarkupId, updateMarkup, markups } = get();
+            if (selectedMarkupId) {
+                const markup = markups.find(m => m.id === selectedMarkupId);
+                if (markup) {
+                    updateMarkup(selectedMarkupId, { style: { ...markup.style, strokeColor: color } });
+                }
+            }
+        },
 
         fetchAllNotes: async () => {
             if (!isContextValid()) throw new Error('Extension context invalidated');
@@ -379,7 +394,6 @@ export const useNoteStore = create<NoteState>((set, get) => {
             }
         },
 
-        setActiveNoteId: (id: string | null) => set({ activeNoteId: id }),
 
         // Markup Implementation
         fetchMarkupsForUrl: async (url: string) => {

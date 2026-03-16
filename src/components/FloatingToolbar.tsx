@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useNoteStore } from '../store/useNoteStore';
 import { type MarkupType } from '../db';
-import { StickyNote, PenTool, Highlighter, Eraser, Trash2, ChevronLeft, ChevronRight, Palette, Type, Minus, Camera, X, Square, Circle, ArrowRight, Undo2, Smile, Star, Heart, Triangle, MessageSquare, Zap, Diamond, Pentagon, Hexagon, Plus, Cloud, Flag, Sparkles, Flame } from 'lucide-react';
+import { StickyNote, PenTool, Highlighter, Eraser, Trash2, ChevronLeft, ChevronRight, Palette, Type, Minus, Camera, X, Square, Circle, ArrowRight, Undo2, Smile, Star, Heart, Triangle, MessageSquare, Zap, Diamond, Pentagon, Hexagon, Plus, Cloud, Flag, Sparkles, Flame, MousePointer2 } from 'lucide-react';
 
 export const FloatingToolbar: React.FC = () => {
-    const { mode, setMode, currentTool, setTool, currentColor, setColor, clearAllMarkups, undoMarkup, settings, updateSettings } = useNoteStore();
+    const { mode, setMode, currentTool, setTool, currentColor, setColor, clearAllMarkups, undoMarkup, settings, updateSettings, selectedMarkupId, updateMarkup, markups } = useNoteStore();
     const [isExpanded, setIsExpanded] = useState(true);
     const [isVisible, setIsVisible] = useState(false);
 
@@ -220,6 +220,13 @@ export const FloatingToolbar: React.FC = () => {
                                     >
                                         <Eraser size={20} />
                                     </button>
+                                    <button
+                                        onClick={() => setTool('select')}
+                                        className={`p-2 rounded-lg transition-all ${currentTool === 'select' ? 'bg-brand-primary text-gray-900' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
+                                        title="선택 및 수정"
+                                    >
+                                        <MousePointer2 size={20} />
+                                    </button>
 
                                     <div className="w-px h-8 bg-white/10 mx-1" />
 
@@ -301,7 +308,15 @@ export const FloatingToolbar: React.FC = () => {
                                                 onClick={() => {
                                                     const key = currentTool === 'highlight' ? 'highlightWidth' : 'penWidth';
                                                     const min = currentTool === 'highlight' ? 5 : 1;
-                                                    updateSettings({ [key]: Math.max(min, settings[key] - (currentTool === 'highlight' ? 5 : 1)) });
+                                                    const newValue = Math.max(min, (settings as any)[key] - (currentTool === 'highlight' ? 5 : 1));
+                                                    updateSettings({ [key]: newValue });
+
+                                                    if (selectedMarkupId) {
+                                                        const markup = markups.find(m => m.id === selectedMarkupId);
+                                                        if (markup) {
+                                                            updateMarkup(selectedMarkupId, { style: { ...markup.style, strokeWidth: newValue } });
+                                                        }
+                                                    }
                                                 }}
                                                 className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-all shadow-sm"
                                                 title="두께 감소"
@@ -324,7 +339,15 @@ export const FloatingToolbar: React.FC = () => {
                                                 onClick={() => {
                                                     const key = currentTool === 'highlight' ? 'highlightWidth' : 'penWidth';
                                                     const max = currentTool === 'highlight' ? 100 : 20;
-                                                    updateSettings({ [key]: Math.min(max, settings[key] + (currentTool === 'highlight' ? 5 : 1)) });
+                                                    const newValue = Math.min(max, (settings as any)[key] + (currentTool === 'highlight' ? 5 : 1));
+                                                    updateSettings({ [key]: newValue });
+
+                                                    if (selectedMarkupId) {
+                                                        const markup = markups.find(m => m.id === selectedMarkupId);
+                                                        if (markup) {
+                                                            updateMarkup(selectedMarkupId, { style: { ...markup.style, strokeWidth: newValue } });
+                                                        }
+                                                    }
                                                 }}
                                                 className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-all shadow-sm"
                                                 title="두께 증가"
@@ -368,7 +391,7 @@ export const FloatingToolbar: React.FC = () => {
                         </div>
                     )}
                 </div>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 };

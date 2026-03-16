@@ -12589,6 +12589,7 @@ const useNoteStore = create((set, get) => {
   return {
     notes: [],
     activeNoteId: null,
+    selectedMarkupId: null,
     isLoading: false,
     currentUrl: "",
     isGlobalView: false,
@@ -12651,8 +12652,19 @@ const useNoteStore = create((set, get) => {
       }
       set({ mode });
     },
-    setTool: (tool) => set({ currentTool: tool }),
-    setColor: (color) => set({ currentColor: color }),
+    setActiveNoteId: (id) => set({ activeNoteId: id, selectedMarkupId: null }),
+    setSelectedMarkupId: (id) => set({ selectedMarkupId: id }),
+    setTool: (tool) => set({ currentTool: tool, selectedMarkupId: tool === "select" ? get().selectedMarkupId : null }),
+    setColor: (color) => {
+      set({ currentColor: color });
+      const { selectedMarkupId, updateMarkup, markups } = get();
+      if (selectedMarkupId) {
+        const markup = markups.find((m) => m.id === selectedMarkupId);
+        if (markup) {
+          updateMarkup(selectedMarkupId, { style: { ...markup.style, strokeColor: color } });
+        }
+      }
+    },
     fetchAllNotes: async () => {
       if (!isContextValid()) throw new Error("Extension context invalidated");
       set({ isLoading: true, isGlobalView: true });
@@ -12795,7 +12807,6 @@ const useNoteStore = create((set, get) => {
         console.error("Failed to delete all notes:", error);
       }
     },
-    setActiveNoteId: (id) => set({ activeNoteId: id }),
     // Markup Implementation
     fetchMarkupsForUrl: async (url) => {
       if (!isContextValid()) return;
@@ -13167,6 +13178,7 @@ const Dashboard = () => {
     stats,
     settings
   } = useNoteStore();
+  const [selectedDomain, setSelectedDomain] = React.useState(null);
   reactExports.useEffect(() => {
     fetchAllNotes();
     fetchAllMarkups();
@@ -13179,6 +13191,10 @@ const Dashboard = () => {
     });
     return groups;
   }, [notes]);
+  const filteredNotes = reactExports.useMemo(() => {
+    if (!selectedDomain) return notes;
+    return notes.filter((n) => n.domain === selectedDomain);
+  }, [notes, selectedDomain]);
   const sortedDomains = reactExports.useMemo(() => {
     return Object.keys(notesByDomain).sort(
       (a, b) => notesByDomain[b].length - notesByDomain[a].length
@@ -13229,20 +13245,39 @@ const Dashboard = () => {
           /* @__PURE__ */ jsxRuntimeExports.jsx(Funnel, { size: 16 }),
           " 사이트 리스트"
         ] }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "divide-y divide-slate-50 max-h-[500px] overflow-y-auto", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "divide-y divide-slate-50 max-h-[500px] overflow-y-auto font-sans", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              onClick: () => setSelectedDomain(null),
+              className: `w-full px-4 py-3.5 text-left hover:bg-slate-50 transition-colors flex items-center justify-between group ${!selectedDomain ? "bg-brand-primary/5 border-l-4 border-brand-primary" : ""}`,
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-sm font-bold ${!selectedDomain ? "text-brand-primary" : "text-slate-700"}`, children: "모든 사이트" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] text-slate-400 font-medium uppercase mt-0.5", children: [
+                    "전체 ",
+                    notes.length,
+                    "개의 주석"
+                  ] })
+                ] }),
+                !selectedDomain && /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronRight, { size: 14, className: "text-brand-primary" })
+              ]
+            }
+          ),
           sortedDomains.map((domain) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "button",
             {
-              className: "w-full px-4 py-3.5 text-left hover:bg-slate-50 transition-colors flex items-center justify-between group",
+              onClick: () => setSelectedDomain(domain),
+              className: `w-full px-4 py-3.5 text-left hover:bg-slate-50 transition-colors flex items-center justify-between group ${selectedDomain === domain ? "bg-brand-primary/5 border-l-4 border-brand-primary" : ""}`,
               children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col truncate pr-2", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-bold text-slate-700 truncate group-hover:text-brand-primary", children: domain }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-sm font-bold truncate group-hover:text-brand-primary ${selectedDomain === domain ? "text-brand-primary" : "text-slate-700"}`, children: domain }),
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] text-slate-400 font-medium uppercase mt-0.5", children: [
                     notesByDomain[domain].length,
                     "개의 주석"
                   ] })
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronRight, { size: 14, className: "text-slate-300 group-hover:text-brand-primary transition-colors" })
+                selectedDomain === domain && /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronRight, { size: 14, className: "text-brand-primary" })
               ]
             },
             domain
@@ -13256,7 +13291,7 @@ const Dashboard = () => {
           "Recent Activity"
         ] }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-6", children: [
-          notes.map((note) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-md transition-all flex flex-col group", children: [
+          filteredNotes.map((note) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-md transition-all flex flex-col group", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-5 flex items-start justify-between", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-2.5 h-10 rounded-full", style: { backgroundColor: note.color } }),
