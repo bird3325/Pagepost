@@ -1,15 +1,31 @@
 import React, { useEffect } from 'react';
 import { useNoteStore } from './store/useNoteStore';
 import { StickyNote, Search, Settings, ExternalLink, Trash2, MapPin, X, ChevronLeft, Type, AlertTriangle, Minus, Palette, PenTool, Eye, EyeOff } from 'lucide-react';
+import Dashboard from './components/Dashboard';
 
 const App: React.FC = () => {
+  const [isFullPage, setIsFullPage] = React.useState(window.innerWidth > 500);
+
+  useEffect(() => {
+    const handleResize = () => setIsFullPage(window.innerWidth > 500);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  if (isFullPage) {
+    return <Dashboard />;
+  }
+
+  return <PopupView />;
+};
+
+const PopupView: React.FC = () => {
   const {
     notes, fetchAllNotes, deleteNote, deleteAllNotes,
     searchQuery, setSearchQuery,
     settings, updateSettings, loadSettings,
     mode, setMode
   } = useNoteStore();
-
 
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
@@ -19,14 +35,11 @@ const App: React.FC = () => {
     fetchAllNotes();
   }, [fetchAllNotes, loadSettings]);
 
-
   useEffect(() => {
     fetchAllNotes();
   }, [searchQuery, fetchAllNotes]);
 
-
   const goToNote = (note: any) => {
-    // Open in a new tab as requested ("새창으로 뜨도록")
     const targetUrl = note.url.includes('#') ? note.url : `${note.url}#pagepost-note-${note.id}`;
     chrome.tabs.create({ url: targetUrl });
   };

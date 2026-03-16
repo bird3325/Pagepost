@@ -26,7 +26,13 @@ interface NoteState {
 
 
     // Actions
+    stats: {
+        totalNotes: number;
+        totalMarkups: number;
+        domainCount: number;
+    };
     fetchAllNotes: () => Promise<void>;
+    fetchAllMarkups: () => Promise<void>;
     fetchNotesForUrl: (url: string) => Promise<void>;
     addNote: (note: Note) => Promise<void>;
     updateNote: (id: string, updates: Partial<Note>) => Promise<void>;
@@ -114,6 +120,11 @@ export const useNoteStore = create<NoteState>((set, get) => {
         currentUrl: '',
         isGlobalView: false,
         searchQuery: '',
+        stats: {
+            totalNotes: 0,
+            totalMarkups: 0,
+            domainCount: 0
+        },
         mode: 'note',
         currentTool: 'pen',
         currentColor: '#3b82f6',
@@ -196,6 +207,39 @@ export const useNoteStore = create<NoteState>((set, get) => {
                 set({ notes: sortedNotes, isLoading: false });
             } catch (error) {
                 console.error('Failed to fetch all notes:', error);
+                set({ isLoading: false });
+            }
+        },
+
+        fetchAllMarkups: async () => {
+            if (!isContextValid()) return;
+            set({ isLoading: true });
+            try {
+                const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+                const allMarkups = (result[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
+
+                // Filter by search query if exists (global search)
+                const query = get().searchQuery.toLowerCase();
+                const filteredMarkups = query
+                    ? allMarkups.filter(m => m.content?.toLowerCase().includes(query))
+                    : allMarkups;
+
+                set({ markups: filteredMarkups, isLoading: false });
+
+                // Update stats after both notes and markups are fetched
+                const notesResult = await chrome.storage.local.get(STORAGE_KEY);
+                const allNotes = (notesResult[STORAGE_KEY] || []) as Note[];
+                const domains = new Set(allNotes.map(n => n.domain));
+
+                set({
+                    stats: {
+                        totalNotes: allNotes.length,
+                        totalMarkups: allMarkups.length,
+                        domainCount: domains.size
+                    }
+                });
+            } catch (error) {
+                console.error('Failed to fetch all markups:', error);
                 set({ isLoading: false });
             }
         },

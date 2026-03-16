@@ -12593,6 +12593,11 @@ const useNoteStore = create((set, get) => {
     currentUrl: "",
     isGlobalView: false,
     searchQuery: "",
+    stats: {
+      totalNotes: 0,
+      totalMarkups: 0,
+      domainCount: 0
+    },
     mode: "note",
     currentTool: "pen",
     currentColor: "#3b82f6",
@@ -12664,6 +12669,30 @@ const useNoteStore = create((set, get) => {
         set({ notes: sortedNotes, isLoading: false });
       } catch (error) {
         console.error("Failed to fetch all notes:", error);
+        set({ isLoading: false });
+      }
+    },
+    fetchAllMarkups: async () => {
+      if (!isContextValid()) return;
+      set({ isLoading: true });
+      try {
+        const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+        const allMarkups = result[MARKUP_STORAGE_KEY] || [];
+        const query = get().searchQuery.toLowerCase();
+        const filteredMarkups = query ? allMarkups.filter((m) => m.content?.toLowerCase().includes(query)) : allMarkups;
+        set({ markups: filteredMarkups, isLoading: false });
+        const notesResult = await chrome.storage.local.get(STORAGE_KEY);
+        const allNotes = notesResult[STORAGE_KEY] || [];
+        const domains = new Set(allNotes.map((n) => n.domain));
+        set({
+          stats: {
+            totalNotes: allNotes.length,
+            totalMarkups: allMarkups.length,
+            domainCount: domains.size
+          }
+        });
+      } catch (error) {
+        console.error("Failed to fetch all markups:", error);
         set({ isLoading: false });
       }
     },
@@ -12942,15 +12971,31 @@ const createLucideIcon = (iconName, iconNode) => {
   Component.displayName = toPascalCase(iconName);
   return Component;
 };
-const __iconNode$e = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
-const ChevronLeft = createLucideIcon("chevron-left", __iconNode$e);
-const __iconNode$d = [
+const __iconNode$k = [
+  ["path", { d: "M8 2v4", key: "1cmpym" }],
+  ["path", { d: "M16 2v4", key: "4m81vk" }],
+  ["rect", { width: "18", height: "18", x: "3", y: "4", rx: "2", key: "1hopcy" }],
+  ["path", { d: "M3 10h18", key: "8toen8" }]
+];
+const Calendar = createLucideIcon("calendar", __iconNode$k);
+const __iconNode$j = [
+  ["path", { d: "M3 3v16a2 2 0 0 0 2 2h16", key: "c24i48" }],
+  ["path", { d: "M18 17V9", key: "2bz60n" }],
+  ["path", { d: "M13 17V5", key: "1frdt8" }],
+  ["path", { d: "M8 17v-3", key: "17ska0" }]
+];
+const ChartColumn = createLucideIcon("chart-column", __iconNode$j);
+const __iconNode$i = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
+const ChevronLeft = createLucideIcon("chevron-left", __iconNode$i);
+const __iconNode$h = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
+const ChevronRight = createLucideIcon("chevron-right", __iconNode$h);
+const __iconNode$g = [
   ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
   ["path", { d: "M10 14 21 3", key: "gplh6r" }],
   ["path", { d: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6", key: "a6xqqp" }]
 ];
-const ExternalLink = createLucideIcon("external-link", __iconNode$d);
-const __iconNode$c = [
+const ExternalLink = createLucideIcon("external-link", __iconNode$g);
+const __iconNode$f = [
   [
     "path",
     {
@@ -12968,8 +13013,8 @@ const __iconNode$c = [
   ],
   ["path", { d: "m2 2 20 20", key: "1ooewy" }]
 ];
-const EyeOff = createLucideIcon("eye-off", __iconNode$c);
-const __iconNode$b = [
+const EyeOff = createLucideIcon("eye-off", __iconNode$f);
+const __iconNode$e = [
   [
     "path",
     {
@@ -12979,8 +13024,24 @@ const __iconNode$b = [
   ],
   ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
 ];
-const Eye = createLucideIcon("eye", __iconNode$b);
-const __iconNode$a = [
+const Eye = createLucideIcon("eye", __iconNode$e);
+const __iconNode$d = [
+  [
+    "path",
+    {
+      d: "M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z",
+      key: "sc7q7i"
+    }
+  ]
+];
+const Funnel = createLucideIcon("funnel", __iconNode$d);
+const __iconNode$c = [
+  ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
+  ["path", { d: "M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20", key: "13o1zl" }],
+  ["path", { d: "M2 12h20", key: "9i4pu4" }]
+];
+const Globe = createLucideIcon("globe", __iconNode$c);
+const __iconNode$b = [
   [
     "path",
     {
@@ -12990,10 +13051,10 @@ const __iconNode$a = [
   ],
   ["circle", { cx: "12", cy: "10", r: "3", key: "ilqhr7" }]
 ];
-const MapPin = createLucideIcon("map-pin", __iconNode$a);
-const __iconNode$9 = [["path", { d: "M5 12h14", key: "1ays0h" }]];
-const Minus = createLucideIcon("minus", __iconNode$9);
-const __iconNode$8 = [
+const MapPin = createLucideIcon("map-pin", __iconNode$b);
+const __iconNode$a = [["path", { d: "M5 12h14", key: "1ays0h" }]];
+const Minus = createLucideIcon("minus", __iconNode$a);
+const __iconNode$9 = [
   [
     "path",
     {
@@ -13006,8 +13067,8 @@ const __iconNode$8 = [
   ["circle", { cx: "6.5", cy: "12.5", r: ".5", fill: "currentColor", key: "qy21gx" }],
   ["circle", { cx: "8.5", cy: "7.5", r: ".5", fill: "currentColor", key: "fotxhn" }]
 ];
-const Palette = createLucideIcon("palette", __iconNode$8);
-const __iconNode$7 = [
+const Palette = createLucideIcon("palette", __iconNode$9);
+const __iconNode$8 = [
   [
     "path",
     {
@@ -13025,13 +13086,13 @@ const __iconNode$7 = [
   ["path", { d: "m2.3 2.3 7.286 7.286", key: "1wuzzi" }],
   ["circle", { cx: "11", cy: "11", r: "2", key: "xmgehs" }]
 ];
-const PenTool = createLucideIcon("pen-tool", __iconNode$7);
-const __iconNode$6 = [
+const PenTool = createLucideIcon("pen-tool", __iconNode$8);
+const __iconNode$7 = [
   ["path", { d: "m21 21-4.34-4.34", key: "14j7rj" }],
   ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }]
 ];
-const Search = createLucideIcon("search", __iconNode$6);
-const __iconNode$5 = [
+const Search = createLucideIcon("search", __iconNode$7);
+const __iconNode$6 = [
   [
     "path",
     {
@@ -13041,8 +13102,8 @@ const __iconNode$5 = [
   ],
   ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
 ];
-const Settings = createLucideIcon("settings", __iconNode$5);
-const __iconNode$4 = [
+const Settings = createLucideIcon("settings", __iconNode$6);
+const __iconNode$5 = [
   [
     "path",
     {
@@ -13052,7 +13113,18 @@ const __iconNode$4 = [
   ],
   ["path", { d: "M15 3v5a1 1 0 0 0 1 1h5", key: "6s6qgf" }]
 ];
-const StickyNote = createLucideIcon("sticky-note", __iconNode$4);
+const StickyNote = createLucideIcon("sticky-note", __iconNode$5);
+const __iconNode$4 = [
+  [
+    "path",
+    {
+      d: "M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z",
+      key: "vktsd0"
+    }
+  ],
+  ["circle", { cx: "7.5", cy: "7.5", r: ".5", fill: "currentColor", key: "kqv944" }]
+];
+const Tag = createLucideIcon("tag", __iconNode$4);
 const __iconNode$3 = [
   ["path", { d: "M10 11v6", key: "nco0om" }],
   ["path", { d: "M14 11v6", key: "outv1u" }],
@@ -13084,7 +13156,164 @@ const __iconNode = [
   ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
 ];
 const X = createLucideIcon("x", __iconNode);
+const Dashboard = () => {
+  const {
+    notes,
+    fetchAllNotes,
+    fetchAllMarkups,
+    deleteNote,
+    searchQuery,
+    setSearchQuery,
+    stats,
+    settings
+  } = useNoteStore();
+  reactExports.useEffect(() => {
+    fetchAllNotes();
+    fetchAllMarkups();
+  }, [fetchAllNotes, fetchAllMarkups]);
+  const notesByDomain = reactExports.useMemo(() => {
+    const groups = {};
+    notes.forEach((note) => {
+      if (!groups[note.domain]) groups[note.domain] = [];
+      groups[note.domain].push(note);
+    });
+    return groups;
+  }, [notes]);
+  const sortedDomains = reactExports.useMemo(() => {
+    return Object.keys(notesByDomain).sort(
+      (a, b) => notesByDomain[b].length - notesByDomain[a].length
+    );
+  }, [notesByDomain]);
+  const goToNote = (note) => {
+    const targetUrl = note.url.includes("#") ? note.url : `${note.url}#pagepost-note-${note.id}`;
+    chrome.tabs.create({ url: targetUrl });
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "min-h-screen bg-[#f8fafc] text-slate-900 font-sans p-6 lg:p-10", style: { fontFamily: settings.fontFamily }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-7xl mx-auto", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("h1", { className: "text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(StickyNote, { className: "text-brand-primary", size: 32 }),
+          "PagePost Review Dashboard"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-slate-500 font-medium", children: "모든 웹사이트의 주석과 조각들을 한눈에 관리하세요." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center gap-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative group", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Search, { className: "absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-brand-primary", size: 18 }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "text",
+            placeholder: "검색 (메모, 도메인, 태그)...",
+            value: searchQuery,
+            onChange: (e) => setSearchQuery(e.target.value),
+            className: "pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl w-full md:w-80 shadow-sm focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary outline-none transition-all"
+          }
+        )
+      ] }) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10", children: [
+      { label: "전체 메모", value: stats.totalNotes, icon: StickyNote, color: "text-blue-500", bg: "bg-blue-50" },
+      { label: "마크업 요소", value: stats.totalMarkups, icon: PenTool, color: "text-emerald-500", bg: "bg-emerald-50" },
+      { label: "작업 사이트", value: stats.domainCount, icon: Globe, color: "text-indigo-500", bg: "bg-indigo-50" },
+      { label: "활성 태그", value: notes.reduce((acc, n) => acc + n.tags.length, 0), icon: Tag, color: "text-amber-500", bg: "bg-amber-50" }
+    ].map((stat, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-5 transition-transform hover:scale-[1.02]", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `${stat.bg} ${stat.color} p-4 rounded-xl`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(stat.icon, { size: 24 }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-slate-400 uppercase tracking-wider", children: stat.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-2xl font-bold mt-0.5", children: stat.value })
+      ] })
+    ] }, idx)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 lg:grid-cols-12 gap-10", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("aside", { className: "lg:col-span-3 space-y-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "font-bold text-slate-700 flex items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Funnel, { size: 16 }),
+          " 사이트 리스트"
+        ] }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "divide-y divide-slate-50 max-h-[500px] overflow-y-auto", children: [
+          sortedDomains.map((domain) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              className: "w-full px-4 py-3.5 text-left hover:bg-slate-50 transition-colors flex items-center justify-between group",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col truncate pr-2", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-bold text-slate-700 truncate group-hover:text-brand-primary", children: domain }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] text-slate-400 font-medium uppercase mt-0.5", children: [
+                    notesByDomain[domain].length,
+                    "개의 주석"
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronRight, { size: 14, className: "text-slate-300 group-hover:text-brand-primary transition-colors" })
+              ]
+            },
+            domain
+          )),
+          sortedDomains.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-10 text-center text-slate-400 text-sm italic font-medium", children: "데이터가 없습니다." })
+        ] })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "lg:col-span-9 space-y-8", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center justify-between mb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-xl font-bold flex items-center gap-2 text-slate-800 uppercase tracking-tight", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Calendar, { size: 20, className: "text-brand-primary" }),
+          "Recent Activity"
+        ] }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-6", children: [
+          notes.map((note) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-md transition-all flex flex-col group", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-5 flex items-start justify-between", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-2.5 h-10 rounded-full", style: { backgroundColor: note.color } }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col max-w-[200px]", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-bold text-brand-primary truncate uppercase tracking-wide", children: note.domain }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("time", { className: "text-[10px] text-slate-400 font-medium mt-0.5", children: [
+                    new Date(note.updatedAt).toLocaleDateString(),
+                    " · ",
+                    new Date(note.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                  ] })
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-1.5 translate-x-2 -translate-y-2 opacity-0 group-hover:opacity-100 transition-opacity", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => goToNote(note), className: "p-2 hover:bg-slate-100 rounded-xl text-slate-500 hover:text-brand-primary transition-colors", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExternalLink, { size: 18 }) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => deleteNote(note.id), className: "p-2 hover:bg-red-50 rounded-xl text-slate-300 hover:text-red-500 transition-colors", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Trash2, { size: 18 }) })
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-5 pb-5 flex-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "p",
+              {
+                className: "text-slate-700 leading-relaxed text-sm lg:text-base line-clamp-6 whitespace-pre-wrap italic font-serif",
+                style: {
+                  fontFamily: note.fontFamily || settings.fontFamily,
+                  fontSize: `${(note.fontSize || settings.fontSize) + 2}px`,
+                  color: note.textColor || settings.textColor
+                },
+                children: note.content || "박성된 내용이 없습니다."
+              }
+            ) }),
+            note.tags.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-5 py-4 border-t border-slate-50 bg-slate-50/30 flex flex-wrap gap-2", children: note.tags.map((tag) => /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[11px] font-bold px-2.5 py-1 bg-white text-slate-500 rounded-lg border border-slate-100 shadow-sm flex items-center gap-1.5 transition-colors hover:border-brand-primary/20 hover:text-brand-primary", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { size: 10 }),
+              " ",
+              tag
+            ] }, tag)) })
+          ] }, note.id)),
+          notes.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "col-span-full py-20 bg-white rounded-3xl border-2 border-dashed border-slate-100 flex flex-col items-center justify-center text-slate-300 gap-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ChartColumn, { size: 48, strokeWidth: 1 }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-bold uppercase tracking-widest text-sm", children: "No annotations found" })
+          ] })
+        ] })
+      ] })
+    ] })
+  ] }) });
+};
 const App = () => {
+  const [isFullPage, setIsFullPage] = React.useState(window.innerWidth > 500);
+  reactExports.useEffect(() => {
+    const handleResize = () => setIsFullPage(window.innerWidth > 500);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+  if (isFullPage) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(Dashboard, {});
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(PopupView, {});
+};
+const PopupView = () => {
   const {
     notes,
     fetchAllNotes,
