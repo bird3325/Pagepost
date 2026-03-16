@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useNoteStore } from '../store/useNoteStore';
-import { StickyNote, PenTool, Highlighter, Eraser, Trash2, ChevronLeft, ChevronRight, Palette, Type, Minus, Camera, X } from 'lucide-react';
+import { type MarkupType } from '../db';
+import { StickyNote, PenTool, Highlighter, Eraser, Trash2, ChevronLeft, ChevronRight, Palette, Type, Minus, Camera, X, Square, Circle, ArrowRight, Undo2, Smile, Star, Heart, Triangle, MessageSquare, Zap, Diamond, Pentagon, Hexagon, Plus, Cloud, Flag, Sparkles, Flame } from 'lucide-react';
 
 export const FloatingToolbar: React.FC = () => {
-    const { mode, setMode, currentTool, setTool, currentColor, setColor, clearAllMarkups, settings, updateSettings } = useNoteStore();
+    const { mode, setMode, currentTool, setTool, currentColor, setColor, clearAllMarkups, undoMarkup, settings, updateSettings } = useNoteStore();
     const [isExpanded, setIsExpanded] = useState(true);
     const [isVisible, setIsVisible] = useState(false);
 
@@ -16,6 +17,30 @@ export const FloatingToolbar: React.FC = () => {
     }, [isExpanded]);
 
     const [isFontPickerOpen, setIsFontPickerOpen] = useState(false);
+    const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
+    const [isShapePickerOpen, setIsShapePickerOpen] = useState(false);
+    const [selectedSticker, setSelectedSticker] = useState('✅');
+    const [selectedShape, setSelectedShape] = useState<MarkupType>('rect');
+
+    const stickers = ['✅', '❌', '⚠️', '💡', '📌', '❤️', '⭐', '🔥', '👍', '👎', '👏', '🚀'];
+    const shapes = [
+        { id: 'rect' as MarkupType, icon: <Square size={20} />, label: '사각형' },
+        { id: 'circle' as MarkupType, icon: <Circle size={20} />, label: '원형' },
+        { id: 'arrow' as MarkupType, icon: <ArrowRight size={20} />, label: '화살표' },
+        { id: 'star' as MarkupType, icon: <Star size={20} />, label: '별' },
+        { id: 'heart' as MarkupType, icon: <Heart size={20} />, label: '하트' },
+        { id: 'triangle' as MarkupType, icon: <Triangle size={20} />, label: '삼각형' },
+        { id: 'chat' as MarkupType, icon: <MessageSquare size={20} />, label: '말풍선' },
+        { id: 'lightning' as MarkupType, icon: <Zap size={20} />, label: '번개' },
+        { id: 'diamond' as MarkupType, icon: <Diamond size={20} />, label: '다이아몬드' },
+        { id: 'pentagon' as MarkupType, icon: <Pentagon size={20} />, label: '오각형' },
+        { id: 'hexagon' as MarkupType, icon: <Hexagon size={20} />, label: '육각형' },
+        { id: 'cross' as MarkupType, icon: <Plus size={20} />, label: '십자가' },
+        { id: 'cloud' as MarkupType, icon: <Cloud size={20} />, label: '구름' },
+        { id: 'banner' as MarkupType, icon: <Flag size={20} />, label: '배너' },
+        { id: 'burst1' as MarkupType, icon: <Sparkles size={20} />, label: '폭발1' },
+        { id: 'burst2' as MarkupType, icon: <Flame size={20} />, label: '폭발2' }
+    ];
 
     const fonts = [
         { name: '기본 (Pretendard)', value: 'Pretendard, -apple-system, sans-serif' },
@@ -197,6 +222,77 @@ export const FloatingToolbar: React.FC = () => {
                                     </button>
 
                                     <div className="w-px h-8 bg-white/10 mx-1" />
+
+                                    {/* Shapes */}
+                                    <div className="relative">
+                                        <button
+                                            onClick={() => setIsShapePickerOpen(!isShapePickerOpen)}
+                                            className={`p-2 rounded-lg transition-all ${['rect', 'circle', 'arrow'].includes(currentTool) ? 'bg-brand-primary text-gray-900' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
+                                            title="도형"
+                                        >
+                                            {shapes.find(s => s.id === selectedShape)?.icon || <Square size={20} />}
+                                        </button>
+                                        {isShapePickerOpen && (
+                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 bg-gray-800 shadow-2xl border border-white/10 rounded-2xl p-2 grid grid-cols-4 gap-1 backdrop-blur-xl z-[100] w-48">
+                                                {shapes.map(s => (
+                                                    <button
+                                                        key={s.id}
+                                                        onClick={() => {
+                                                            setSelectedShape(s.id);
+                                                            setTool(s.id);
+                                                            setIsShapePickerOpen(false);
+                                                        }}
+                                                        className={`p-2 rounded-xl transition-all ${currentTool === s.id ? 'bg-brand-primary text-gray-900' : 'text-gray-400 hover:bg-white/10 hover:text-white'}`}
+                                                        title={s.label}
+                                                    >
+                                                        {s.icon}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="w-px h-8 bg-white/10 mx-1" />
+
+                                    {/* Stickers */}
+                                    <div className="relative">
+                                        <button
+                                            onClick={() => setIsStickerPickerOpen(!isStickerPickerOpen)}
+                                            className={`p-2 rounded-lg transition-all ${currentTool === 'sticker' ? 'bg-brand-primary text-gray-900' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
+                                            title="스티커"
+                                        >
+                                            <span className="text-xl leading-none">{currentTool === 'sticker' ? selectedSticker : <Smile size={20} />}</span>
+                                        </button>
+                                        {isStickerPickerOpen && (
+                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 bg-gray-800 shadow-2xl border border-white/10 rounded-2xl p-3 grid grid-cols-4 gap-2 w-48 backdrop-blur-xl z-[100]">
+                                                {stickers.map(s => (
+                                                    <button
+                                                        key={s}
+                                                        onClick={() => {
+                                                            setSelectedSticker(s);
+                                                            setTool('sticker');
+                                                            setIsStickerPickerOpen(false);
+                                                            // Store the selected sticker in a global hidden state if needed, or we'll pass it via MarkupLayer
+                                                            (window as any).__pagepost_selected_sticker = s;
+                                                        }}
+                                                        className="text-2xl hover:bg-white/10 p-2 rounded-xl transition-all hover:scale-125"
+                                                    >
+                                                        {s}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="w-px h-8 bg-white/10 mx-1" />
+
+                                    <button
+                                        onClick={() => undoMarkup()}
+                                        className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-all"
+                                        title="실행 취소 (Undo)"
+                                    >
+                                        <Undo2 size={20} />
+                                    </button>
 
                                     {/* Thickness Selector */}
                                     {currentTool !== 'eraser' && (

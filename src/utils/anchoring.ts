@@ -77,8 +77,8 @@ export function captureAnchor(el: HTMLElement, x: number, y: number): Note['anch
             elementText: text.substring(0, 200),
         },
         position: {
-            x: (x - rect.left) / rect.width, // Relative % inside element
-            y: (y - rect.top) / rect.height,
+            x: (x - (rect.left + window.scrollX)) / rect.width,
+            y: (y - (rect.top + window.scrollY)) / rect.height,
             scrollY: window.scrollY,
         }
     };
@@ -142,4 +142,26 @@ export function restoreElement(anchor: Note['anchor']): HTMLElement | null {
 
     // Only return if we have a reasonably confident match
     return bestScore > 0.3 ? bestMatch : null;
+}
+
+/**
+ * Converts screen coordinates to relative percentages within an element.
+ */
+export function getRelativePoint(el: HTMLElement, x: number, y: number): { x: number; y: number } {
+    const rect = el.getBoundingClientRect();
+    return {
+        x: (x - (rect.left + window.scrollX)) / rect.width,
+        y: (y - (rect.top + window.scrollY)) / rect.height
+    };
+}
+
+/**
+ * Converts relative percentages back to absolute screen coordinates based on current element position.
+ */
+export function getAbsolutePoint(el: HTMLElement, relX: number, relY: number): { x: number; y: number } {
+    const rect = el.getBoundingClientRect();
+    return {
+        x: rect.left + window.scrollX + (relX * rect.width),
+        y: rect.top + window.scrollY + (relY * rect.height)
+    };
 }

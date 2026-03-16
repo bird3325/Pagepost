@@ -5,7 +5,7 @@ import { MarkupLayer } from '../content/MarkupLayer';
 import { FloatingToolbar } from './FloatingToolbar';
 
 export const NoteContainer: React.FC = () => {
-    const { notes, fetchNotesForUrl, fetchMarkupsForUrl, settings, loadSettings, mode } = useNoteStore();
+    const { notes, fetchNotesForUrl, fetchMarkupsForUrl, settings, loadSettings, mode, setActiveNoteId } = useNoteStore();
 
     // Initial fetch to ensure notes and markups are loaded on mount
     useEffect(() => {
@@ -13,7 +13,16 @@ export const NoteContainer: React.FC = () => {
         loadSettings();
         fetchNotesForUrl(url);
         fetchMarkupsForUrl(url);
-    }, [fetchNotesForUrl, fetchMarkupsForUrl, loadSettings]);
+
+        const handleBackgroundClick = (e: MouseEvent) => {
+            // If clicking root or body directly, clear selection
+            if (e.target === document.body || (e.target as HTMLElement).id === 'pagepost-notes-root') {
+                setActiveNoteId(null);
+            }
+        };
+        window.addEventListener('mousedown', handleBackgroundClick);
+        return () => window.removeEventListener('mousedown', handleBackgroundClick);
+    }, [fetchNotesForUrl, fetchMarkupsForUrl, loadSettings, setActiveNoteId]);
 
     const isExtensionPage = window.location.protocol === 'chrome-extension:';
 

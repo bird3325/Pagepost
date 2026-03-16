@@ -12734,6 +12734,11 @@ const useNoteStore = create((set, get) => {
         console.error("Failed to update note:", error);
       }
     },
+    updateNoteState: (id, updates) => {
+      set((state) => ({
+        notes: state.notes.map((n) => n.id === id ? { ...n, ...updates } : n)
+      }));
+    },
     deleteNote: async (id) => {
       if (!isContextValid()) throw new Error("Extension context invalidated");
       try {
@@ -12784,14 +12789,14 @@ const useNoteStore = create((set, get) => {
       try {
         const normalizedUrl = normalizeUrl(markup.url);
         const markupWithUrl = { ...markup, url: normalizedUrl };
-        const { currentUrl, markups } = get();
-        if (currentUrl && normalizeUrl(currentUrl) === normalizedUrl) {
-          set({ markups: [...markups, markupWithUrl] });
-        }
         const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
         const allMarkups = result[MARKUP_STORAGE_KEY] || [];
         const updatedAllMarkups = [...allMarkups, markupWithUrl];
         await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
+        const { currentUrl, markups } = get();
+        if (currentUrl && normalizeUrl(currentUrl) === normalizedUrl) {
+          set({ markups: [...markups, markupWithUrl] });
+        }
       } catch (error) {
         console.error("Failed to add markup:", error);
       }
@@ -12822,6 +12827,27 @@ const useNoteStore = create((set, get) => {
       } catch (error) {
         console.error("Failed to delete markup:", error);
       }
+    },
+    undoMarkup: async () => {
+      if (!isContextValid()) return;
+      const { markups, currentUrl } = get();
+      if (markups.length === 0 || !currentUrl) return;
+      try {
+        const normalizedUrl = normalizeUrl(currentUrl);
+        const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+        const allMarkups = result[MARKUP_STORAGE_KEY] || [];
+        const urlMarkups = allMarkups.filter((m) => normalizeUrl(m.url) === normalizedUrl);
+        if (urlMarkups.length === 0) return;
+        const lastMarkupId = urlMarkups[urlMarkups.length - 1].id;
+        const updatedAllMarkups = allMarkups.filter((m) => m.id !== lastMarkupId);
+        await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
+        set({ markups: markups.filter((m) => m.id !== lastMarkupId) });
+      } catch (error) {
+        console.error("Failed to undo markup:", error);
+      }
+    },
+    redoMarkup: async () => {
+      console.log("Redo not yet implemented for persistent storage");
     },
     clearAllMarkups: async () => {
       if (!isContextValid()) throw new Error("Extension context invalidated");

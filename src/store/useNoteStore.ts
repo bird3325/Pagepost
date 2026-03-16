@@ -30,6 +30,7 @@ interface NoteState {
     fetchNotesForUrl: (url: string) => Promise<void>;
     addNote: (note: Note) => Promise<void>;
     updateNote: (id: string, updates: Partial<Note>) => Promise<void>;
+    updateNoteState: (id: string, updates: Partial<Note>) => void;
     deleteNote: (id: string) => Promise<void>;
     deleteAllNotes: () => Promise<void>;
     setActiveNoteId: (id: string | null) => void;
@@ -45,6 +46,8 @@ interface NoteState {
     addMarkup: (markup: MarkupObject) => Promise<void>;
     updateMarkup: (id: string, updates: Partial<MarkupObject>) => Promise<void>;
     deleteMarkup: (id: string) => Promise<void>;
+    undoMarkup: () => Promise<void>;
+    redoMarkup: () => Promise<void>;
     clearAllMarkups: () => Promise<void>;
 }
 
@@ -294,6 +297,12 @@ export const useNoteStore = create<NoteState>((set, get) => {
             }
         },
 
+        updateNoteState: (id: string, updates: Partial<Note>) => {
+            set((state) => ({
+                notes: state.notes.map(n => n.id === id ? { ...n, ...updates } : n)
+            }));
+        },
+
         deleteNote: async (id: string) => {
             if (!isContextValid()) throw new Error('Extension context invalidated');
             try {
@@ -355,17 +364,17 @@ export const useNoteStore = create<NoteState>((set, get) => {
                 const normalizedUrl = normalizeUrl(markup.url);
                 const markupWithUrl = { ...markup, url: normalizedUrl };
 
-                // 1. Optimistic Update: Update local state immediately for instant feedback
-                const { currentUrl, markups } = get();
-                if (currentUrl && normalizeUrl(currentUrl) === normalizedUrl) {
-                    set({ markups: [...markups, markupWithUrl] });
-                }
-
-                // 2. Persist to storage
+                // 1. Persist to storage
                 const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
                 const allMarkups = (result[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
                 const updatedAllMarkups = [...allMarkups, markupWithUrl];
                 await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
+
+                // Update local state and history
+                const { currentUrl, markups } = get();
+                if (currentUrl && normalizeUrl(currentUrl) === normalizedUrl) {
+                    set({ markups: [...markups, markupWithUrl] });
+                }
             } catch (error) {
                 console.error('Failed to add markup:', error);
             }
@@ -404,6 +413,36 @@ export const useNoteStore = create<NoteState>((set, get) => {
             } catch (error) {
                 console.error('Failed to delete markup:', error);
             }
+        },
+
+        undoMarkup: async () => {
+            if (!isContextValid()) return;
+            const { markups, currentUrl } = get();
+            if (markups.length === 0 || !currentUrl) return;
+
+            try {
+                const normalizedUrl = normalizeUrl(currentUrl);
+                const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+                const allMarkups = (result[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
+
+                // Find markups for current URL and remove the last one added
+                const urlMarkups = allMarkups.filter(m => normalizeUrl(m.url) === normalizedUrl);
+                if (urlMarkups.length === 0) return;
+
+                const lastMarkupId = urlMarkups[urlMarkups.length - 1].id;
+                const updatedAllMarkups = allMarkups.filter(m => m.id !== lastMarkupId);
+
+                await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
+                set({ markups: markups.filter(m => m.id !== lastMarkupId) });
+            } catch (error) {
+                console.error('Failed to undo markup:', error);
+            }
+        },
+
+        redoMarkup: async () => {
+            // REDO is complex with persistent storage unless we have a trash/history table.
+            // For now, focusing on UNDO as it's the most requested per-session feature.
+            console.log('Redo not yet implemented for persistent storage');
         },
 
         clearAllMarkups: async () => {

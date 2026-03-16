@@ -45,7 +45,7 @@ export interface Note {
     updatedAt: number;
 }
 
-export type MarkupType = 'pen' | 'highlight' | 'rect' | 'circle' | 'arrow' | 'text' | 'eraser';
+export type MarkupType = 'pen' | 'highlight' | 'rect' | 'circle' | 'arrow' | 'text' | 'sticker' | 'star' | 'heart' | 'triangle' | 'chat' | 'lightning' | 'diamond' | 'pentagon' | 'hexagon' | 'cross' | 'cloud' | 'banner' | 'burst1' | 'burst2' | 'eraser';
 
 export interface MarkupObject {
     id: string;
@@ -70,6 +70,7 @@ export interface MarkupObject {
         fontSize?: number;    // For 'text' type
     };
 
+    anchor?: Note['anchor'];
     content?: string;     // For 'text' type
     linkedNoteId?: string; // Optional link to a Note
 

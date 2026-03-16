@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { type Note } from '../db';
 import { useNoteStore } from '../store/useNoteStore';
+import { captureAnchor, restoreElement } from '../utils/anchoring';
 import {
     Pin,
     CheckCircle,
@@ -25,12 +26,31 @@ const COLORS = [
 ];
 
 export const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
-    const { updateNote, deleteNote, settings, loadSettings, activeNoteId } = useNoteStore();
+    const { updateNote, updateNoteState, deleteNote, settings, loadSettings, activeNoteId, setActiveNoteId } = useNoteStore();
     const [isEditing, setIsEditing] = useState(false);
 
     useEffect(() => {
         loadSettings();
     }, [loadSettings]);
+
+    // --- Smart Anchoring Restoration ---
+    useEffect(() => {
+        if (note.anchor) {
+            const el = restoreElement(note.anchor);
+            if (el) {
+                const rect = el.getBoundingClientRect();
+                const newX = rect.left + window.scrollX + (note.anchor.position.x * rect.width);
+                const newY = rect.top + window.scrollY + (note.anchor.position.y * rect.height);
+
+                // Only update if shifted significantly to avoid jitter
+                if (Math.abs(newX - note.notePosition.x) > 1 || Math.abs(newY - note.notePosition.y) > 1) {
+                    updateNote(note.id, {
+                        notePosition: { x: newX, y: newY }
+                    });
+                }
+            }
+        }
+    }, [note.id]); // Run once per note or on ID change
     const [showColors, setShowColors] = useState(false);
     const [localContent, setLocalContent] = useState(note.content);
 
@@ -47,6 +67,9 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
     });
 
     const handleDragStart = (e: React.MouseEvent) => {
+        e.preventDefault();
+        setActiveNoteId(note.id);
+
         interactionRef.current = {
             ...interactionRef.current,
             isDragging: true,
@@ -62,7 +85,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
             const dy = ev.clientY - interactionRef.current.startY;
 
             try {
-                updateNote(note.id, {
+                updateNoteState(note.id, {
                     notePosition: {
                         x: interactionRef.current.initialX + dx,
                         y: interactionRef.current.initialY + dy
@@ -76,10 +99,29 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
             }
         };
 
-        const handleMouseUp = () => {
+        const handleMouseUp = (ev: MouseEvent) => {
             interactionRef.current.isDragging = false;
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
+
+            const finalX = interactionRef.current.initialX + (ev.clientX - interactionRef.current.startX);
+            const finalY = interactionRef.current.initialY + (ev.clientY - interactionRef.current.startY);
+
+            // Re-anchor after move
+            if (cardRef.current) cardRef.current.style.pointerEvents = 'none';
+            const element = document.elementFromPoint(finalX - window.scrollX, finalY - window.scrollY) as HTMLElement;
+            if (cardRef.current) cardRef.current.style.pointerEvents = 'auto';
+
+            let newAnchor = undefined;
+            if (element && element !== document.body && element !== document.documentElement) {
+                newAnchor = captureAnchor(element, finalX, finalY);
+            }
+
+            // Persistence: update storage exactly ONCE with all data to prevent flickering
+            updateNote(note.id, {
+                notePosition: { x: finalX, y: finalY },
+                anchor: newAnchor
+            });
         };
 
         window.addEventListener('mousemove', handleMouseMove);
@@ -134,7 +176,8 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
     return (
         <div
             ref={cardRef}
-            className={`absolute transition-all duration-200 rounded-lg shadow-lg border border-black/5 overflow-hidden flex flex-col pointer-events-auto ${currentColorClass} ${note.isCollapsed ? 'w-10 h-10' : ''} ${activeNoteId === note.id ? 'ring-2 ring-brand-primary' : ''}`}
+            onClick={() => setActiveNoteId(note.id)}
+            className={`absolute rounded-lg shadow-lg border border-black/5 overflow-hidden flex flex-col pointer-events-auto ${currentColorClass} ${note.isCollapsed ? 'w-10 h-10' : ''} ${activeNoteId === note.id ? 'ring-2 ring-brand-primary' : ''}`}
             style={{
                 left: note.notePosition.x,
                 top: note.notePosition.y,

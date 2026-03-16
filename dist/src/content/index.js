@@ -12707,6 +12707,11 @@
           console.error("Failed to update note:", error);
         }
       },
+      updateNoteState: (id, updates) => {
+        set((state) => ({
+          notes: state.notes.map((n) => n.id === id ? { ...n, ...updates } : n)
+        }));
+      },
       deleteNote: async (id) => {
         if (!isContextValid()) throw new Error("Extension context invalidated");
         try {
@@ -12757,14 +12762,14 @@
         try {
           const normalizedUrl = normalizeUrl(markup.url);
           const markupWithUrl = { ...markup, url: normalizedUrl };
-          const { currentUrl, markups } = get();
-          if (currentUrl && normalizeUrl(currentUrl) === normalizedUrl) {
-            set({ markups: [...markups, markupWithUrl] });
-          }
           const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
           const allMarkups = result[MARKUP_STORAGE_KEY] || [];
           const updatedAllMarkups = [...allMarkups, markupWithUrl];
           await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
+          const { currentUrl, markups } = get();
+          if (currentUrl && normalizeUrl(currentUrl) === normalizedUrl) {
+            set({ markups: [...markups, markupWithUrl] });
+          }
         } catch (error) {
           console.error("Failed to add markup:", error);
         }
@@ -12796,6 +12801,27 @@
           console.error("Failed to delete markup:", error);
         }
       },
+      undoMarkup: async () => {
+        if (!isContextValid()) return;
+        const { markups, currentUrl } = get();
+        if (markups.length === 0 || !currentUrl) return;
+        try {
+          const normalizedUrl = normalizeUrl(currentUrl);
+          const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+          const allMarkups = result[MARKUP_STORAGE_KEY] || [];
+          const urlMarkups = allMarkups.filter((m) => normalizeUrl(m.url) === normalizedUrl);
+          if (urlMarkups.length === 0) return;
+          const lastMarkupId = urlMarkups[urlMarkups.length - 1].id;
+          const updatedAllMarkups = allMarkups.filter((m) => m.id !== lastMarkupId);
+          await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
+          set({ markups: markups.filter((m) => m.id !== lastMarkupId) });
+        } catch (error) {
+          console.error("Failed to undo markup:", error);
+        }
+      },
+      redoMarkup: async () => {
+        console.log("Redo not yet implemented for persistent storage");
+      },
       clearAllMarkups: async () => {
         if (!isContextValid()) throw new Error("Extension context invalidated");
         try {
@@ -12813,6 +12839,123 @@
       }
     };
   });
+  function getCssSelector(el) {
+    if (el.id) return `#${CSS.escape(el.id)}`;
+    const path = [];
+    let current = el;
+    while (current && current.nodeType === Node.ELEMENT_NODE) {
+      let selector = current.nodeName.toLowerCase();
+      if (current.id) {
+        selector += `#${CSS.escape(current.id)}`;
+        path.unshift(selector);
+        break;
+      } else {
+        let sibling = current.previousElementSibling;
+        let nth = 1;
+        while (sibling) {
+          if (sibling.nodeName === current.nodeName) nth++;
+          sibling = sibling.previousElementSibling;
+        }
+        selector += `:nth-of-type(${nth})`;
+      }
+      path.unshift(selector);
+      current = current.parentElement;
+    }
+    return path.join(" > ");
+  }
+  function getXPath(el) {
+    if (el.id) return `//*[@id="${el.id}"]`;
+    if (el === document.body) return "/html/body";
+    let ix = 0;
+    const siblings = el.parentNode ? Array.from(el.parentNode.childNodes) : [];
+    for (let i = 0; i < siblings.length; i++) {
+      const sibling = siblings[i];
+      if (sibling === el) {
+        const parentXPath = el.parentNode ? getXPath(el.parentNode) : "";
+        return `${parentXPath}/${el.tagName.toLowerCase()}[${ix + 1}]`;
+      }
+      if (sibling.nodeType === 1 && sibling.tagName === el.tagName) ix++;
+    }
+    return "";
+  }
+  function captureAnchor(el, x, y) {
+    const rect = el.getBoundingClientRect();
+    const text = el.innerText || "";
+    const fullText = document.body.innerText;
+    const elementIndex = fullText.indexOf(text);
+    const beforeText = fullText.substring(Math.max(0, elementIndex - 50), elementIndex);
+    const afterText = fullText.substring(elementIndex + text.length, elementIndex + text.length + 50);
+    return {
+      dom: {
+        selector: getCssSelector(el),
+        xpath: getXPath(el)
+      },
+      context: {
+        beforeText,
+        afterText,
+        elementText: text.substring(0, 200)
+      },
+      position: {
+        x: (x - (rect.left + window.scrollX)) / rect.width,
+        y: (y - (rect.top + window.scrollY)) / rect.height,
+        scrollY: window.scrollY
+      }
+    };
+  }
+  function restoreElement(anchor) {
+    try {
+      const el = document.querySelector(anchor.dom.selector);
+      if (el) return el;
+    } catch (e) {
+    }
+    try {
+      const result = document.evaluate(anchor.dom.xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+      const el = result.singleNodeValue;
+      if (el) return el;
+    } catch (e) {
+    }
+    const allElements = document.querySelectorAll("p, h1, h2, h3, h4, h5, h6, span, div, li, td, a");
+    let bestMatch = null;
+    let bestScore = 0;
+    const targetText = anchor.context.elementText.trim();
+    if (!targetText) return null;
+    for (const el of Array.from(allElements)) {
+      const htmlEl = el;
+      if (htmlEl.children.length > 5) continue;
+      const elText = htmlEl.innerText || "";
+      if (elText.includes(targetText)) {
+        let score = 0;
+        const fullText = document.body.innerText;
+        const idx = fullText.indexOf(elText);
+        if (idx !== -1) {
+          const actualBefore = fullText.substring(Math.max(0, idx - 50), idx);
+          const actualAfter = fullText.substring(idx + elText.length, idx + elText.length + 50);
+          if (actualBefore.includes(anchor.context.beforeText.substring(30))) score += 0.4;
+          if (actualAfter.includes(anchor.context.afterText.substring(0, 20))) score += 0.4;
+        }
+        if (elText === targetText) score += 0.2;
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = htmlEl;
+        }
+      }
+    }
+    return bestScore > 0.3 ? bestMatch : null;
+  }
+  function getRelativePoint(el, x, y) {
+    const rect = el.getBoundingClientRect();
+    return {
+      x: (x - (rect.left + window.scrollX)) / rect.width,
+      y: (y - (rect.top + window.scrollY)) / rect.height
+    };
+  }
+  function getAbsolutePoint(el, relX, relY) {
+    const rect = el.getBoundingClientRect();
+    return {
+      x: rect.left + window.scrollX + relX * rect.width,
+      y: rect.top + window.scrollY + relY * rect.height
+    };
+  }
   const mergeClasses = (...classes) => classes.filter((className, index, array) => {
     return Boolean(className) && className.trim() !== "" && array.indexOf(className) === index;
   }).join(" ").trim();
@@ -12889,7 +13032,12 @@
     Component.displayName = toPascalCase(iconName);
     return Component;
   };
-  const __iconNode$i = [
+  const __iconNode$A = [
+    ["path", { d: "M5 12h14", key: "1ays0h" }],
+    ["path", { d: "m12 5 7 7-7 7", key: "xquz4c" }]
+  ];
+  const ArrowRight = createLucideIcon("arrow-right", __iconNode$A);
+  const __iconNode$z = [
     [
       "path",
       {
@@ -12899,27 +13047,43 @@
     ],
     ["circle", { cx: "12", cy: "13", r: "3", key: "1vg3eu" }]
   ];
-  const Camera = createLucideIcon("camera", __iconNode$i);
-  const __iconNode$h = [["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]];
-  const ChevronDown = createLucideIcon("chevron-down", __iconNode$h);
-  const __iconNode$g = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
-  const ChevronLeft = createLucideIcon("chevron-left", __iconNode$g);
-  const __iconNode$f = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
-  const ChevronRight = createLucideIcon("chevron-right", __iconNode$f);
-  const __iconNode$e = [["path", { d: "m18 15-6-6-6 6", key: "153udz" }]];
-  const ChevronUp = createLucideIcon("chevron-up", __iconNode$e);
-  const __iconNode$d = [
+  const Camera = createLucideIcon("camera", __iconNode$z);
+  const __iconNode$y = [["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]];
+  const ChevronDown = createLucideIcon("chevron-down", __iconNode$y);
+  const __iconNode$x = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
+  const ChevronLeft = createLucideIcon("chevron-left", __iconNode$x);
+  const __iconNode$w = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
+  const ChevronRight = createLucideIcon("chevron-right", __iconNode$w);
+  const __iconNode$v = [["path", { d: "m18 15-6-6-6 6", key: "153udz" }]];
+  const ChevronUp = createLucideIcon("chevron-up", __iconNode$v);
+  const __iconNode$u = [
     ["path", { d: "M21.801 10A10 10 0 1 1 17 3.335", key: "yps3ct" }],
     ["path", { d: "m9 11 3 3L22 4", key: "1pflzl" }]
   ];
-  const CircleCheckBig = createLucideIcon("circle-check-big", __iconNode$d);
-  const __iconNode$c = [
+  const CircleCheckBig = createLucideIcon("circle-check-big", __iconNode$u);
+  const __iconNode$t = [["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }]];
+  const Circle = createLucideIcon("circle", __iconNode$t);
+  const __iconNode$s = [
+    ["path", { d: "M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z", key: "p7xjir" }]
+  ];
+  const Cloud = createLucideIcon("cloud", __iconNode$s);
+  const __iconNode$r = [
+    [
+      "path",
+      {
+        d: "M2.7 10.3a2.41 2.41 0 0 0 0 3.41l7.59 7.59a2.41 2.41 0 0 0 3.41 0l7.59-7.59a2.41 2.41 0 0 0 0-3.41l-7.59-7.59a2.41 2.41 0 0 0-3.41 0Z",
+        key: "1f1r0c"
+      }
+    ]
+  ];
+  const Diamond = createLucideIcon("diamond", __iconNode$r);
+  const __iconNode$q = [
     ["path", { d: "M12 15V3", key: "m9g1x1" }],
     ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", key: "ih7n3h" }],
     ["path", { d: "m7 10 5 5 5-5", key: "brsn70" }]
   ];
-  const Download = createLucideIcon("download", __iconNode$c);
-  const __iconNode$b = [
+  const Download = createLucideIcon("download", __iconNode$q);
+  const __iconNode$p = [
     [
       "path",
       {
@@ -12929,8 +13093,28 @@
     ],
     ["path", { d: "m5.082 11.09 8.828 8.828", key: "1wx5vj" }]
   ];
-  const Eraser = createLucideIcon("eraser", __iconNode$b);
-  const __iconNode$a = [
+  const Eraser = createLucideIcon("eraser", __iconNode$p);
+  const __iconNode$o = [
+    [
+      "path",
+      {
+        d: "M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528",
+        key: "1jaruq"
+      }
+    ]
+  ];
+  const Flag = createLucideIcon("flag", __iconNode$o);
+  const __iconNode$n = [
+    [
+      "path",
+      {
+        d: "M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4",
+        key: "1slcih"
+      }
+    ]
+  ];
+  const Flame = createLucideIcon("flame", __iconNode$n);
+  const __iconNode$m = [
     ["circle", { cx: "12", cy: "9", r: "1", key: "124mty" }],
     ["circle", { cx: "19", cy: "9", r: "1", key: "1ruzo2" }],
     ["circle", { cx: "5", cy: "9", r: "1", key: "1a8b28" }],
@@ -12938,22 +13122,52 @@
     ["circle", { cx: "19", cy: "15", r: "1", key: "1a92ep" }],
     ["circle", { cx: "5", cy: "15", r: "1", key: "5r1jwy" }]
   ];
-  const GripHorizontal = createLucideIcon("grip-horizontal", __iconNode$a);
-  const __iconNode$9 = [
+  const GripHorizontal = createLucideIcon("grip-horizontal", __iconNode$m);
+  const __iconNode$l = [
+    [
+      "path",
+      {
+        d: "M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5",
+        key: "mvr1a0"
+      }
+    ]
+  ];
+  const Heart = createLucideIcon("heart", __iconNode$l);
+  const __iconNode$k = [
+    [
+      "path",
+      {
+        d: "M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z",
+        key: "yt0hxn"
+      }
+    ]
+  ];
+  const Hexagon = createLucideIcon("hexagon", __iconNode$k);
+  const __iconNode$j = [
     ["path", { d: "m9 11-6 6v3h9l3-3", key: "1a3l36" }],
     ["path", { d: "m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4", key: "14a9rk" }]
   ];
-  const Highlighter = createLucideIcon("highlighter", __iconNode$9);
-  const __iconNode$8 = [
+  const Highlighter = createLucideIcon("highlighter", __iconNode$j);
+  const __iconNode$i = [
     ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
     ["path", { d: "m21 3-7 7", key: "1l2asr" }],
     ["path", { d: "m3 21 7-7", key: "tjx5ai" }],
     ["path", { d: "M9 21H3v-6", key: "wtvkvv" }]
   ];
-  const Maximize2 = createLucideIcon("maximize-2", __iconNode$8);
-  const __iconNode$7 = [["path", { d: "M5 12h14", key: "1ays0h" }]];
-  const Minus = createLucideIcon("minus", __iconNode$7);
-  const __iconNode$6 = [
+  const Maximize2 = createLucideIcon("maximize-2", __iconNode$i);
+  const __iconNode$h = [
+    [
+      "path",
+      {
+        d: "M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z",
+        key: "18887p"
+      }
+    ]
+  ];
+  const MessageSquare = createLucideIcon("message-square", __iconNode$h);
+  const __iconNode$g = [["path", { d: "M5 12h14", key: "1ays0h" }]];
+  const Minus = createLucideIcon("minus", __iconNode$g);
+  const __iconNode$f = [
     [
       "path",
       {
@@ -12966,8 +13180,8 @@
     ["circle", { cx: "6.5", cy: "12.5", r: ".5", fill: "currentColor", key: "qy21gx" }],
     ["circle", { cx: "8.5", cy: "7.5", r: ".5", fill: "currentColor", key: "fotxhn" }]
   ];
-  const Palette = createLucideIcon("palette", __iconNode$6);
-  const __iconNode$5 = [
+  const Palette = createLucideIcon("palette", __iconNode$f);
+  const __iconNode$e = [
     [
       "path",
       {
@@ -12985,8 +13199,18 @@
     ["path", { d: "m2.3 2.3 7.286 7.286", key: "1wuzzi" }],
     ["circle", { cx: "11", cy: "11", r: "2", key: "xmgehs" }]
   ];
-  const PenTool = createLucideIcon("pen-tool", __iconNode$5);
-  const __iconNode$4 = [
+  const PenTool = createLucideIcon("pen-tool", __iconNode$e);
+  const __iconNode$d = [
+    [
+      "path",
+      {
+        d: "M10.83 2.38a2 2 0 0 1 2.34 0l8 5.74a2 2 0 0 1 .73 2.25l-3.04 9.26a2 2 0 0 1-1.9 1.37H7.04a2 2 0 0 1-1.9-1.37L2.1 10.37a2 2 0 0 1 .73-2.25z",
+        key: "2hea0t"
+      }
+    ]
+  ];
+  const Pentagon = createLucideIcon("pentagon", __iconNode$d);
+  const __iconNode$c = [
     ["path", { d: "M12 17v5", key: "bb1du9" }],
     [
       "path",
@@ -12996,8 +13220,47 @@
       }
     ]
   ];
-  const Pin = createLucideIcon("pin", __iconNode$4);
-  const __iconNode$3 = [
+  const Pin = createLucideIcon("pin", __iconNode$c);
+  const __iconNode$b = [
+    ["path", { d: "M5 12h14", key: "1ays0h" }],
+    ["path", { d: "M12 5v14", key: "s699le" }]
+  ];
+  const Plus = createLucideIcon("plus", __iconNode$b);
+  const __iconNode$a = [
+    ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
+    ["path", { d: "M8 14s1.5 2 4 2 4-2 4-2", key: "1y1vjs" }],
+    ["line", { x1: "9", x2: "9.01", y1: "9", y2: "9", key: "yxxnd0" }],
+    ["line", { x1: "15", x2: "15.01", y1: "9", y2: "9", key: "1p4y9e" }]
+  ];
+  const Smile = createLucideIcon("smile", __iconNode$a);
+  const __iconNode$9 = [
+    [
+      "path",
+      {
+        d: "M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z",
+        key: "1s2grr"
+      }
+    ],
+    ["path", { d: "M20 2v4", key: "1rf3ol" }],
+    ["path", { d: "M22 4h-4", key: "gwowj6" }],
+    ["circle", { cx: "4", cy: "20", r: "2", key: "6kqj1y" }]
+  ];
+  const Sparkles = createLucideIcon("sparkles", __iconNode$9);
+  const __iconNode$8 = [
+    ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", key: "afitv7" }]
+  ];
+  const Square = createLucideIcon("square", __iconNode$8);
+  const __iconNode$7 = [
+    [
+      "path",
+      {
+        d: "M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z",
+        key: "r04s7s"
+      }
+    ]
+  ];
+  const Star = createLucideIcon("star", __iconNode$7);
+  const __iconNode$6 = [
     [
       "path",
       {
@@ -13007,26 +13270,48 @@
     ],
     ["path", { d: "M15 3v5a1 1 0 0 0 1 1h5", key: "6s6qgf" }]
   ];
-  const StickyNote = createLucideIcon("sticky-note", __iconNode$3);
-  const __iconNode$2 = [
+  const StickyNote = createLucideIcon("sticky-note", __iconNode$6);
+  const __iconNode$5 = [
     ["path", { d: "M10 11v6", key: "nco0om" }],
     ["path", { d: "M14 11v6", key: "outv1u" }],
     ["path", { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6", key: "miytrc" }],
     ["path", { d: "M3 6h18", key: "d0wm0j" }],
     ["path", { d: "M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2", key: "e791ji" }]
   ];
-  const Trash2 = createLucideIcon("trash-2", __iconNode$2);
-  const __iconNode$1 = [
+  const Trash2 = createLucideIcon("trash-2", __iconNode$5);
+  const __iconNode$4 = [
+    [
+      "path",
+      { d: "M13.73 4a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z", key: "14u9p9" }
+    ]
+  ];
+  const Triangle = createLucideIcon("triangle", __iconNode$4);
+  const __iconNode$3 = [
     ["path", { d: "M12 4v16", key: "1654pz" }],
     ["path", { d: "M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2", key: "e0r10z" }],
     ["path", { d: "M9 20h6", key: "s66wpe" }]
   ];
-  const Type = createLucideIcon("type", __iconNode$1);
-  const __iconNode = [
+  const Type = createLucideIcon("type", __iconNode$3);
+  const __iconNode$2 = [
+    ["path", { d: "M9 14 4 9l5-5", key: "102s5s" }],
+    ["path", { d: "M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11", key: "f3b9sd" }]
+  ];
+  const Undo2 = createLucideIcon("undo-2", __iconNode$2);
+  const __iconNode$1 = [
     ["path", { d: "M18 6 6 18", key: "1bl5f8" }],
     ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
   ];
-  const X = createLucideIcon("x", __iconNode);
+  const X = createLucideIcon("x", __iconNode$1);
+  const __iconNode = [
+    [
+      "path",
+      {
+        d: "M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z",
+        key: "1xq2db"
+      }
+    ]
+  ];
+  const Zap = createLucideIcon("zap", __iconNode);
   const COLORS = [
     { name: "Yellow", hex: "#FFF9C4", class: "bg-note-yellow" },
     { name: "Mint", hex: "#B2DFDB", class: "bg-note-green" },
@@ -13035,11 +13320,26 @@
     { name: "Sky", hex: "#BBDEFB", class: "bg-note-blue" }
   ];
   const NoteCard = ({ note }) => {
-    const { updateNote, deleteNote, settings, loadSettings, activeNoteId } = useNoteStore();
+    const { updateNote, updateNoteState, deleteNote, settings, loadSettings, activeNoteId, setActiveNoteId } = useNoteStore();
     const [isEditing, setIsEditing] = reactExports.useState(false);
     reactExports.useEffect(() => {
       loadSettings();
     }, [loadSettings]);
+    reactExports.useEffect(() => {
+      if (note.anchor) {
+        const el = restoreElement(note.anchor);
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          const newX = rect.left + window.scrollX + note.anchor.position.x * rect.width;
+          const newY = rect.top + window.scrollY + note.anchor.position.y * rect.height;
+          if (Math.abs(newX - note.notePosition.x) > 1 || Math.abs(newY - note.notePosition.y) > 1) {
+            updateNote(note.id, {
+              notePosition: { x: newX, y: newY }
+            });
+          }
+        }
+      }
+    }, [note.id]);
     const [showColors, setShowColors] = reactExports.useState(false);
     const [localContent, setLocalContent] = reactExports.useState(note.content);
     const cardRef = reactExports.useRef(null);
@@ -13054,6 +13354,8 @@
       initialH: 0
     });
     const handleDragStart = (e) => {
+      e.preventDefault();
+      setActiveNoteId(note.id);
       interactionRef.current = {
         ...interactionRef.current,
         isDragging: true,
@@ -13067,7 +13369,7 @@
         const dx = ev.clientX - interactionRef.current.startX;
         const dy = ev.clientY - interactionRef.current.startY;
         try {
-          updateNote(note.id, {
+          updateNoteState(note.id, {
             notePosition: {
               x: interactionRef.current.initialX + dx,
               y: interactionRef.current.initialY + dy
@@ -13079,10 +13381,23 @@
           interactionRef.current.isDragging = false;
         }
       };
-      const handleMouseUp = () => {
+      const handleMouseUp = (ev) => {
         interactionRef.current.isDragging = false;
         window.removeEventListener("mousemove", handleMouseMove);
         window.removeEventListener("mouseup", handleMouseUp);
+        const finalX = interactionRef.current.initialX + (ev.clientX - interactionRef.current.startX);
+        const finalY = interactionRef.current.initialY + (ev.clientY - interactionRef.current.startY);
+        if (cardRef.current) cardRef.current.style.pointerEvents = "none";
+        const element = document.elementFromPoint(finalX - window.scrollX, finalY - window.scrollY);
+        if (cardRef.current) cardRef.current.style.pointerEvents = "auto";
+        let newAnchor = void 0;
+        if (element && element !== document.body && element !== document.documentElement) {
+          newAnchor = captureAnchor(element, finalX, finalY);
+        }
+        updateNote(note.id, {
+          notePosition: { x: finalX, y: finalY },
+          anchor: newAnchor
+        });
       };
       window.addEventListener("mousemove", handleMouseMove);
       window.addEventListener("mouseup", handleMouseUp);
@@ -13128,7 +13443,8 @@
       "div",
       {
         ref: cardRef,
-        className: `absolute transition-all duration-200 rounded-lg shadow-lg border border-black/5 overflow-hidden flex flex-col pointer-events-auto ${currentColorClass} ${note.isCollapsed ? "w-10 h-10" : ""} ${activeNoteId === note.id ? "ring-2 ring-brand-primary" : ""}`,
+        onClick: () => setActiveNoteId(note.id),
+        className: `absolute rounded-lg shadow-lg border border-black/5 overflow-hidden flex flex-col pointer-events-auto ${currentColorClass} ${note.isCollapsed ? "w-10 h-10" : ""} ${activeNoteId === note.id ? "ring-2 ring-brand-primary" : ""}`,
         style: {
           left: note.notePosition.x,
           top: note.notePosition.y,
@@ -13271,7 +13587,7 @@
     );
   };
   const MarkupLayer = () => {
-    const { mode, markups, addMarkup, deleteMarkup, currentTool, currentColor, settings } = useNoteStore();
+    const { mode, notes, markups, addMarkup, deleteMarkup, currentTool, currentColor, settings, activeNoteId } = useNoteStore();
     const canvasRef = reactExports.useRef(null);
     const drawingRef = reactExports.useRef(false);
     const [isDrawing, setIsDrawing] = reactExports.useState(false);
@@ -13284,20 +13600,202 @@
       if (!ctx) return;
       const render = () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const drawArrow = (fromX, fromY, toX, toY) => {
+          const headlen = 10;
+          const angle = Math.atan2(toY - fromY, toX - fromX);
+          ctx.beginPath();
+          ctx.moveTo(fromX, fromY);
+          ctx.lineTo(toX, toY);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(toX, toY);
+          ctx.lineTo(toX - headlen * Math.cos(angle - Math.PI / 6), toY - headlen * Math.sin(angle - Math.PI / 6));
+          ctx.moveTo(toX, toY);
+          ctx.lineTo(toX - headlen * Math.cos(angle + Math.PI / 6), toY - headlen * Math.sin(angle + Math.PI / 6));
+          ctx.stroke();
+        };
         markups.forEach((markup) => {
-          if ((markup.type === "pen" || markup.type === "highlight") && markup.points) {
+          ctx.beginPath();
+          ctx.strokeStyle = markup.style.strokeColor;
+          ctx.lineWidth = markup.style.strokeWidth;
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+          const isActive = markup.linkedNoteId === activeNoteId;
+          ctx.globalAlpha = isActive ? 1 : markup.style.opacity;
+          if (isActive) {
+            ctx.shadowColor = markup.style.strokeColor;
+            ctx.shadowBlur = 10;
+          } else {
+            ctx.shadowBlur = 0;
+          }
+          let points = markup.points || [];
+          if (points.length < 1) return;
+          if (markup.linkedNoteId) {
+            const linkedNote = notes.find((n) => n.id === markup.linkedNoteId);
+            if (linkedNote) {
+              points = points.map((p) => ({
+                x: linkedNote.notePosition.x + p.x - window.scrollX,
+                y: linkedNote.notePosition.y + p.y - window.scrollY
+              }));
+            } else {
+              return;
+            }
+          } else if (markup.anchor) {
+            const el = restoreElement(markup.anchor);
+            if (el) {
+              points = points.map((p) => {
+                const abs = getAbsolutePoint(el, p.x, p.y);
+                return { x: abs.x, y: abs.y - window.scrollY };
+              });
+            } else {
+              return;
+            }
+          }
+          if (markup.type === "pen" || markup.type === "highlight") {
             ctx.beginPath();
-            ctx.strokeStyle = markup.style.strokeColor;
-            ctx.lineWidth = markup.style.strokeWidth;
-            ctx.lineCap = "round";
-            ctx.lineJoin = "round";
-            ctx.globalAlpha = markup.style.opacity;
-            const points = markup.points;
-            if (points.length > 0) {
-              ctx.moveTo(points[0].x, points[0].y);
-              for (let i = 1; i < points.length; i++) {
-                ctx.lineTo(points[i].x, points[i].y);
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) {
+              ctx.lineTo(points[i].x, points[i].y);
+            }
+            ctx.stroke();
+          } else if (markup.type === "rect" && points.length >= 2) {
+            const x = Math.min(points[0].x, points[1].x);
+            const y = Math.min(points[0].y, points[1].y);
+            const w = Math.abs(points[0].x - points[1].x);
+            const h = Math.abs(points[0].y - points[1].y);
+            ctx.strokeRect(x, y, w, h);
+          } else if (markup.type === "circle" && points.length >= 2) {
+            const centerX = (points[0].x + points[1].x) / 2;
+            const centerY = (points[0].y + points[1].y) / 2;
+            const radiusX = Math.abs(points[0].x - points[1].x) / 2;
+            const radiusY = Math.abs(points[0].y - points[1].y) / 2;
+            ctx.beginPath();
+            ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+            ctx.stroke();
+          } else if (markup.type === "arrow" && points.length >= 2) {
+            drawArrow(points[0].x, points[0].y, points[1].x, points[1].y);
+          } else if (markup.type === "sticker" && points.length >= 1) {
+            ctx.font = "32px apple-system, sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(markup.content || "✅", points[0].x, points[0].y);
+          } else if (points.length >= 2) {
+            const [p1, p2] = points;
+            const x = Math.min(p1.x, p2.x);
+            const y = Math.min(p1.y, p2.y);
+            const w = Math.abs(p1.x - p2.x);
+            const h = Math.abs(p1.y - p2.y);
+            const centerX = x + w / 2;
+            const centerY = y + h / 2;
+            ctx.beginPath();
+            if (markup.type === "star") {
+              const spikes = 5;
+              const outerRadius = Math.min(w, h) / 2;
+              const innerRadius = outerRadius / 2.5;
+              let rot = Math.PI / 2 * 3;
+              let cx = centerX;
+              let cy = centerY;
+              let step = Math.PI / spikes;
+              ctx.moveTo(centerX, centerY - outerRadius);
+              for (let i = 0; i < spikes; i++) {
+                cx = centerX + Math.cos(rot) * outerRadius;
+                cy = centerY + Math.sin(rot) * outerRadius;
+                ctx.lineTo(cx, cy);
+                rot += step;
+                cx = centerX + Math.cos(rot) * innerRadius;
+                cy = centerY + Math.sin(rot) * innerRadius;
+                ctx.lineTo(cx, cy);
+                rot += step;
               }
+              ctx.lineTo(centerX, centerY - outerRadius);
+            } else if (markup.type === "heart") {
+              const topCurveHeight = h * 0.3;
+              ctx.moveTo(centerX, y + h);
+              ctx.bezierCurveTo(x, centerY, x, y, centerX, y + topCurveHeight);
+              ctx.bezierCurveTo(x + w, y, x + w, centerY, centerX, y + h);
+            } else if (markup.type === "triangle") {
+              ctx.moveTo(centerX, y);
+              ctx.lineTo(x + w, y + h);
+              ctx.lineTo(x, y + h);
+              ctx.closePath();
+            } else if (markup.type === "chat") {
+              const r = Math.min(w, h) * 0.2;
+              ctx.moveTo(x + r, y);
+              ctx.lineTo(x + w - r, y);
+              ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+              ctx.lineTo(x + w, y + h - r * 2);
+              ctx.quadraticCurveTo(x + w, y + h - r, x + w - r, y + h - r);
+              ctx.lineTo(centerX + r, y + h - r);
+              ctx.lineTo(centerX, y + h);
+              ctx.lineTo(centerX - r, y + h - r);
+              ctx.lineTo(x + r, y + h - r);
+              ctx.quadraticCurveTo(x, y + h - r, x, y + h - r * 2);
+              ctx.lineTo(x, y + r);
+              ctx.quadraticCurveTo(x, y, x + r, y);
+            } else if (markup.type === "lightning") {
+              ctx.moveTo(x + w * 0.6, y);
+              ctx.lineTo(x, centerY);
+              ctx.lineTo(x + w * 0.4, centerY);
+              ctx.lineTo(x + w * 0.3, y + h);
+              ctx.lineTo(x + w, centerY);
+              ctx.lineTo(x + w * 0.6, centerY);
+              ctx.closePath();
+            } else if (markup.type === "diamond") {
+              ctx.moveTo(centerX, y);
+              ctx.lineTo(x + w, centerY);
+              ctx.lineTo(centerX, y + h);
+              ctx.lineTo(x, centerY);
+              ctx.closePath();
+            } else if (markup.type === "pentagon") {
+              for (let i = 0; i < 5; i++) {
+                const angle = i * 2 * Math.PI / 5 - Math.PI / 2;
+                ctx.lineTo(centerX + w / 2 * Math.cos(angle), centerY + h / 2 * Math.sin(angle));
+              }
+              ctx.closePath();
+            } else if (markup.type === "hexagon") {
+              for (let i = 0; i < 6; i++) {
+                const angle = i * 2 * Math.PI / 6 - Math.PI / 2;
+                ctx.lineTo(centerX + w / 2 * Math.cos(angle), centerY + h / 2 * Math.sin(angle));
+              }
+              ctx.closePath();
+            } else if (markup.type === "cross") {
+              const thickness = 0.3;
+              ctx.moveTo(x + w * (0.5 - thickness / 2), y);
+              ctx.lineTo(x + w * (0.5 + thickness / 2), y);
+              ctx.lineTo(x + w * (0.5 + thickness / 2), y + h * (0.5 - thickness / 2));
+              ctx.lineTo(x + w, y + h * (0.5 - thickness / 2));
+              ctx.lineTo(x + w, y + h * (0.5 + thickness / 2));
+              ctx.lineTo(x + w * (0.5 + thickness / 2), y + h * (0.5 + thickness / 2));
+              ctx.lineTo(x + w * (0.5 + thickness / 2), y + h);
+              ctx.lineTo(x + w * (0.5 - thickness / 2), y + h);
+              ctx.lineTo(x + w * (0.5 - thickness / 2), y + h * (0.5 + thickness / 2));
+              ctx.lineTo(x, y + h * (0.5 + thickness / 2));
+              ctx.lineTo(x, y + h * (0.5 - thickness / 2));
+              ctx.lineTo(x + w * (0.5 - thickness / 2), y + h * (0.5 - thickness / 2));
+              ctx.closePath();
+            } else if (markup.type === "cloud") {
+              ctx.moveTo(x + w * 0.2, y + h * 0.7);
+              ctx.bezierCurveTo(x, y + h * 0.7, x, y + h * 0.2, x + w * 0.35, y + h * 0.3);
+              ctx.bezierCurveTo(x + w * 0.3, y, x + w * 0.7, y, x + w * 0.75, y + h * 0.2);
+              ctx.bezierCurveTo(x + w, y + h * 0.2, x + w, y + h * 0.7, x + w * 0.8, y + h * 0.7);
+              ctx.closePath();
+            } else if (markup.type === "banner") {
+              ctx.moveTo(x, y);
+              ctx.lineTo(x + w, y);
+              ctx.lineTo(x + w, y + h);
+              ctx.lineTo(centerX, y + h * 0.8);
+              ctx.lineTo(x, y + h);
+              ctx.closePath();
+            } else if (markup.type === "burst1" || markup.type === "burst2") {
+              const spikes = markup.type === "burst1" ? 12 : 8;
+              const outerRadius = Math.min(w, h) / 2;
+              const innerRadius = outerRadius * 0.6;
+              for (let i = 0; i < spikes * 2; i++) {
+                const radius = i % 2 === 0 ? outerRadius : innerRadius;
+                const angle = i * Math.PI / spikes - Math.PI / 2;
+                ctx.lineTo(centerX + radius * Math.cos(angle), centerY + radius * Math.sin(angle));
+              }
+              ctx.closePath();
             }
             ctx.stroke();
           }
@@ -13309,11 +13807,156 @@
           ctx.lineCap = "round";
           ctx.lineJoin = "round";
           ctx.globalAlpha = currentTool === "highlight" ? 0.4 : 1;
-          ctx.moveTo(currentPoints[0].x, currentPoints[0].y);
-          for (let i = 1; i < currentPoints.length; i++) {
-            ctx.lineTo(currentPoints[i].x, currentPoints[i].y);
+          if (currentTool === "pen" || currentTool === "highlight") {
+            ctx.moveTo(currentPoints[0].x, currentPoints[0].y);
+            for (let i = 1; i < currentPoints.length; i++) {
+              ctx.lineTo(currentPoints[i].x, currentPoints[i].y);
+            }
+            ctx.stroke();
+          } else if (currentTool === "rect" && currentPoints.length >= 2) {
+            const start = currentPoints[0];
+            const end = currentPoints[currentPoints.length - 1];
+            ctx.strokeRect(
+              Math.min(start.x, end.x),
+              Math.min(start.y, end.y),
+              Math.abs(start.x - end.x),
+              Math.abs(start.y - end.y)
+            );
+          } else if (currentTool === "circle" && currentPoints.length >= 2) {
+            const start = currentPoints[0];
+            const end = currentPoints[currentPoints.length - 1];
+            const centerX = (start.x + end.x) / 2;
+            const centerY = (start.y + end.y) / 2;
+            const radiusX = Math.abs(start.x - end.x) / 2;
+            const radiusY = Math.abs(start.y - end.y) / 2;
+            ctx.beginPath();
+            ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+            ctx.stroke();
+          } else if (currentTool === "arrow" && currentPoints.length >= 2) {
+            const start = currentPoints[0];
+            const end = currentPoints[currentPoints.length - 1];
+            drawArrow(start.x, start.y, end.x, end.y);
+          } else if (currentPoints.length >= 2) {
+            const start = currentPoints[0];
+            const end = currentPoints[currentPoints.length - 1];
+            const x = Math.min(start.x, end.x);
+            const y = Math.min(start.y, end.y);
+            const w = Math.abs(start.x - end.x);
+            const h = Math.abs(start.y - end.y);
+            const centerX = x + w / 2;
+            const centerY = y + h / 2;
+            ctx.beginPath();
+            if (currentTool === "star") {
+              const spikes = 5;
+              const outerRadius = Math.min(w, h) / 2;
+              const innerRadius = outerRadius / 2.5;
+              let rot = Math.PI / 2 * 3;
+              let cx = centerX;
+              let cy = centerY;
+              let step = Math.PI / spikes;
+              ctx.moveTo(centerX, centerY - outerRadius);
+              for (let i = 0; i < spikes; i++) {
+                cx = centerX + Math.cos(rot) * outerRadius;
+                cy = centerY + Math.sin(rot) * outerRadius;
+                ctx.lineTo(cx, cy);
+                rot += step;
+                cx = centerX + Math.cos(rot) * innerRadius;
+                cy = centerY + Math.sin(rot) * innerRadius;
+                ctx.lineTo(cx, cy);
+                rot += step;
+              }
+              ctx.lineTo(centerX, centerY - outerRadius);
+            } else if (currentTool === "heart") {
+              const topCurveHeight = h * 0.3;
+              ctx.moveTo(centerX, y + h);
+              ctx.bezierCurveTo(x, centerY, x, y, centerX, y + topCurveHeight);
+              ctx.bezierCurveTo(x + w, y, x + w, centerY, centerX, y + h);
+            } else if (currentTool === "triangle") {
+              ctx.moveTo(centerX, y);
+              ctx.lineTo(x + w, y + h);
+              ctx.lineTo(x, y + h);
+              ctx.closePath();
+            } else if (currentTool === "chat") {
+              const r = Math.min(w, h) * 0.2;
+              ctx.moveTo(x + r, y);
+              ctx.lineTo(x + w - r, y);
+              ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+              ctx.lineTo(x + w, y + h - r * 2);
+              ctx.quadraticCurveTo(x + w, y + h - r, x + w - r, y + h - r);
+              ctx.lineTo(centerX + r, y + h - r);
+              ctx.lineTo(centerX, y + h);
+              ctx.lineTo(centerX - r, y + h - r);
+              ctx.lineTo(x + r, y + h - r);
+              ctx.quadraticCurveTo(x, y + h - r, x, y + h - r * 2);
+              ctx.lineTo(x, y + r);
+              ctx.quadraticCurveTo(x, y, x + r, y);
+            } else if (currentTool === "lightning") {
+              ctx.moveTo(x + w * 0.6, y);
+              ctx.lineTo(x, centerY);
+              ctx.lineTo(x + w * 0.4, centerY);
+              ctx.lineTo(x + w * 0.3, y + h);
+              ctx.lineTo(x + w, centerY);
+              ctx.lineTo(x + w * 0.6, centerY);
+              ctx.closePath();
+            } else if (currentTool === "diamond") {
+              ctx.moveTo(centerX, y);
+              ctx.lineTo(x + w, centerY);
+              ctx.lineTo(centerX, y + h);
+              ctx.lineTo(x, centerY);
+              ctx.closePath();
+            } else if (currentTool === "pentagon") {
+              for (let i = 0; i < 5; i++) {
+                const angle = i * 2 * Math.PI / 5 - Math.PI / 2;
+                ctx.lineTo(centerX + w / 2 * Math.cos(angle), centerY + h / 2 * Math.sin(angle));
+              }
+              ctx.closePath();
+            } else if (currentTool === "hexagon") {
+              for (let i = 0; i < 6; i++) {
+                const angle = i * 2 * Math.PI / 6 - Math.PI / 2;
+                ctx.lineTo(centerX + w / 2 * Math.cos(angle), centerY + h / 2 * Math.sin(angle));
+              }
+              ctx.closePath();
+            } else if (currentTool === "cross") {
+              const thickness = 0.3;
+              ctx.moveTo(x + w * (0.5 - thickness / 2), y);
+              ctx.lineTo(x + w * (0.5 + thickness / 2), y);
+              ctx.lineTo(x + w * (0.5 + thickness / 2), y + h * (0.5 - thickness / 2));
+              ctx.lineTo(x + w, y + h * (0.5 - thickness / 2));
+              ctx.lineTo(x + w, y + h * (0.5 + thickness / 2));
+              ctx.lineTo(x + w * (0.5 + thickness / 2), y + h * (0.5 + thickness / 2));
+              ctx.lineTo(x + w * (0.5 + thickness / 2), y + h);
+              ctx.lineTo(x + w * (0.5 - thickness / 2), y + h);
+              ctx.lineTo(x + w * (0.5 - thickness / 2), y + h * (0.5 + thickness / 2));
+              ctx.lineTo(x, y + h * (0.5 + thickness / 2));
+              ctx.lineTo(x, y + h * (0.5 - thickness / 2));
+              ctx.lineTo(x + w * (0.5 - thickness / 2), y + h * (0.5 - thickness / 2));
+              ctx.closePath();
+            } else if (currentTool === "cloud") {
+              ctx.moveTo(x + w * 0.2, y + h * 0.7);
+              ctx.bezierCurveTo(x, y + h * 0.7, x, y + h * 0.2, x + w * 0.35, y + h * 0.3);
+              ctx.bezierCurveTo(x + w * 0.3, y, x + w * 0.7, y, x + w * 0.75, y + h * 0.2);
+              ctx.bezierCurveTo(x + w, y + h * 0.2, x + w, y + h * 0.7, x + w * 0.8, y + h * 0.7);
+              ctx.closePath();
+            } else if (currentTool === "banner") {
+              ctx.moveTo(x, y);
+              ctx.lineTo(x + w, y);
+              ctx.lineTo(x + w, y + h);
+              ctx.lineTo(centerX, y + h * 0.8);
+              ctx.lineTo(x, y + h);
+              ctx.closePath();
+            } else if (currentTool === "burst1" || currentTool === "burst2") {
+              const spikes = currentTool === "burst1" ? 12 : 8;
+              const outerRadius = Math.min(w, h) / 2;
+              const innerRadius = outerRadius * 0.6;
+              for (let i = 0; i < spikes * 2; i++) {
+                const radius = i % 2 === 0 ? outerRadius : innerRadius;
+                const angle = i * Math.PI / spikes - Math.PI / 2;
+                ctx.lineTo(centerX + radius * Math.cos(angle), centerY + radius * Math.sin(angle));
+              }
+              ctx.closePath();
+            }
+            ctx.stroke();
           }
-          ctx.stroke();
         }
       };
       render();
@@ -13346,11 +13989,37 @@
       e.preventDefault();
       drawingRef.current = true;
       setIsDrawing(true);
+      const x = e.clientX + window.scrollX;
       const y = e.clientY + window.scrollY;
       if (currentTool === "eraser") {
-        checkAndErase(e.clientX, y);
+        checkAndErase(x, y);
+      } else if (currentTool === "sticker") {
+        const sticker = window.__pagepost_selected_sticker || "✅";
+        const element = document.elementFromPoint(e.clientX, e.clientY);
+        let anchor = void 0;
+        if (element && element !== document.body && element !== document.documentElement) {
+          anchor = captureAnchor(element, x, y);
+        }
+        addMarkup({
+          id: crypto.randomUUID(),
+          url: window.location.href,
+          type: "sticker",
+          points: [{ x, y }],
+          content: sticker,
+          anchor,
+          linkedNoteId: activeNoteId || void 0,
+          style: {
+            strokeColor: currentColor,
+            strokeWidth: 1,
+            opacity: 1
+          },
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        });
+        drawingRef.current = false;
+        setIsDrawing(false);
       } else {
-        setCurrentPoints([{ x: e.clientX, y }]);
+        setCurrentPoints([{ x, y }]);
       }
     };
     const checkAndErase = (x, y) => {
@@ -13367,12 +14036,13 @@
       }
     };
     const handleMouseMove = (e) => {
-      if (!drawingRef.current) return;
+      if (!drawingRef.current || mode !== "markup") return;
+      const x = e.clientX + window.scrollX;
       const y = e.clientY + window.scrollY;
       if (currentTool === "eraser") {
-        checkAndErase(e.clientX, y);
+        checkAndErase(x, y);
       } else {
-        setCurrentPoints((prev) => [...prev, { x: e.clientX, y }]);
+        setCurrentPoints((prev) => [...prev, { x, y }]);
       }
     };
     const handleMouseUp = () => {
@@ -13380,15 +14050,36 @@
       drawingRef.current = false;
       setIsDrawing(false);
       if (currentPoints.length > 1) {
+        const isShape = ["rect", "circle", "arrow", "star", "heart", "triangle", "chat", "lightning", "diamond", "pentagon", "hexagon", "cross", "cloud", "banner", "burst1", "burst2"].includes(currentTool);
+        const rawPoints = isShape ? [currentPoints[0], currentPoints[currentPoints.length - 1]] : currentPoints;
+        const startPoint = rawPoints[0];
+        const element = document.elementFromPoint(startPoint.x, startPoint.y - window.scrollY);
+        let anchor = void 0;
+        let finalPoints = rawPoints;
+        if (activeNoteId) {
+          const activeNote = notes.find((n) => n.id === activeNoteId);
+          if (activeNote) {
+            finalPoints = rawPoints.map((p) => ({
+              x: p.x - activeNote.notePosition.x,
+              y: p.y - activeNote.notePosition.y
+            }));
+          }
+        } else if (element && element !== document.body && element !== document.documentElement) {
+          anchor = captureAnchor(element, startPoint.x, startPoint.y);
+          finalPoints = rawPoints.map((p) => getRelativePoint(element, p.x, p.y));
+        }
         addMarkup({
           id: crypto.randomUUID(),
           url: window.location.href,
           type: currentTool,
-          points: currentPoints,
+          points: finalPoints,
+          anchor,
+          // Store anchor info
+          linkedNoteId: activeNoteId || void 0,
           style: {
             strokeColor: currentColor,
-            strokeWidth: currentTool === "highlight" ? settings.highlightWidth : settings.penWidth,
-            opacity: currentTool === "highlight" ? 0.4 : 1
+            strokeWidth: settings[`${currentTool}Width`] || settings.penWidth || 2,
+            opacity: currentTool === "highlight" ? 0.3 : 1
           },
           createdAt: Date.now(),
           updatedAt: Date.now()
@@ -13419,7 +14110,7 @@
     );
   };
   const FloatingToolbar = () => {
-    const { mode, setMode, currentTool, setTool, currentColor, setColor, clearAllMarkups, settings, updateSettings } = useNoteStore();
+    const { mode, setMode, currentTool, setTool, currentColor, setColor, clearAllMarkups, undoMarkup, settings, updateSettings } = useNoteStore();
     const [isExpanded, setIsExpanded] = reactExports.useState(true);
     const [isVisible, setIsVisible] = reactExports.useState(false);
     React.useEffect(() => {
@@ -13429,6 +14120,29 @@
       }
     }, [isExpanded]);
     const [isFontPickerOpen, setIsFontPickerOpen] = reactExports.useState(false);
+    const [isStickerPickerOpen, setIsStickerPickerOpen] = reactExports.useState(false);
+    const [isShapePickerOpen, setIsShapePickerOpen] = reactExports.useState(false);
+    const [selectedSticker, setSelectedSticker] = reactExports.useState("✅");
+    const [selectedShape, setSelectedShape] = reactExports.useState("rect");
+    const stickers = ["✅", "❌", "⚠️", "💡", "📌", "❤️", "⭐", "🔥", "👍", "👎", "👏", "🚀"];
+    const shapes = [
+      { id: "rect", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Square, { size: 20 }), label: "사각형" },
+      { id: "circle", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Circle, { size: 20 }), label: "원형" },
+      { id: "arrow", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(ArrowRight, { size: 20 }), label: "화살표" },
+      { id: "star", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Star, { size: 20 }), label: "별" },
+      { id: "heart", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Heart, { size: 20 }), label: "하트" },
+      { id: "triangle", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Triangle, { size: 20 }), label: "삼각형" },
+      { id: "chat", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(MessageSquare, { size: 20 }), label: "말풍선" },
+      { id: "lightning", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Zap, { size: 20 }), label: "번개" },
+      { id: "diamond", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Diamond, { size: 20 }), label: "다이아몬드" },
+      { id: "pentagon", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Pentagon, { size: 20 }), label: "오각형" },
+      { id: "hexagon", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Hexagon, { size: 20 }), label: "육각형" },
+      { id: "cross", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Plus, { size: 20 }), label: "십자가" },
+      { id: "cloud", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Cloud, { size: 20 }), label: "구름" },
+      { id: "banner", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Flag, { size: 20 }), label: "배너" },
+      { id: "burst1", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Sparkles, { size: 20 }), label: "폭발1" },
+      { id: "burst2", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Flame, { size: 20 }), label: "폭발2" }
+    ];
     const fonts = [
       { name: "기본 (Pretendard)", value: "Pretendard, -apple-system, sans-serif" },
       { name: "나눔고딕", value: '"Nanum Gothic", sans-serif' },
@@ -13608,6 +14322,67 @@
                 }
               ),
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-px h-8 bg-white/10 mx-1" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    onClick: () => setIsShapePickerOpen(!isShapePickerOpen),
+                    className: `p-2 rounded-lg transition-all ${["rect", "circle", "arrow"].includes(currentTool) ? "bg-brand-primary text-gray-900" : "text-gray-400 hover:bg-white/5 hover:text-white"}`,
+                    title: "도형",
+                    children: shapes.find((s) => s.id === selectedShape)?.icon || /* @__PURE__ */ jsxRuntimeExports.jsx(Square, { size: 20 })
+                  }
+                ),
+                isShapePickerOpen && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute bottom-full left-1/2 -translate-x-1/2 mb-4 bg-gray-800 shadow-2xl border border-white/10 rounded-2xl p-2 grid grid-cols-4 gap-1 backdrop-blur-xl z-[100] w-48", children: shapes.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    onClick: () => {
+                      setSelectedShape(s.id);
+                      setTool(s.id);
+                      setIsShapePickerOpen(false);
+                    },
+                    className: `p-2 rounded-xl transition-all ${currentTool === s.id ? "bg-brand-primary text-gray-900" : "text-gray-400 hover:bg-white/10 hover:text-white"}`,
+                    title: s.label,
+                    children: s.icon
+                  },
+                  s.id
+                )) })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-px h-8 bg-white/10 mx-1" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    onClick: () => setIsStickerPickerOpen(!isStickerPickerOpen),
+                    className: `p-2 rounded-lg transition-all ${currentTool === "sticker" ? "bg-brand-primary text-gray-900" : "text-gray-400 hover:bg-white/5 hover:text-white"}`,
+                    title: "스티커",
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xl leading-none", children: currentTool === "sticker" ? selectedSticker : /* @__PURE__ */ jsxRuntimeExports.jsx(Smile, { size: 20 }) })
+                  }
+                ),
+                isStickerPickerOpen && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute bottom-full left-1/2 -translate-x-1/2 mb-4 bg-gray-800 shadow-2xl border border-white/10 rounded-2xl p-3 grid grid-cols-4 gap-2 w-48 backdrop-blur-xl z-[100]", children: stickers.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    onClick: () => {
+                      setSelectedSticker(s);
+                      setTool("sticker");
+                      setIsStickerPickerOpen(false);
+                      window.__pagepost_selected_sticker = s;
+                    },
+                    className: "text-2xl hover:bg-white/10 p-2 rounded-xl transition-all hover:scale-125",
+                    children: s
+                  },
+                  s
+                )) })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-px h-8 bg-white/10 mx-1" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  onClick: () => undoMarkup(),
+                  className: "p-2 text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-all",
+                  title: "실행 취소 (Undo)",
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(Undo2, { size: 20 })
+                }
+              ),
               currentTool !== "eraser" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1 bg-white/5 rounded-xl p-1 border border-white/5", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
                   "button",
@@ -13689,13 +14464,20 @@
     ) }) });
   };
   const NoteContainer = () => {
-    const { notes, fetchNotesForUrl, fetchMarkupsForUrl, settings, loadSettings, mode } = useNoteStore();
+    const { notes, fetchNotesForUrl, fetchMarkupsForUrl, settings, loadSettings, mode, setActiveNoteId } = useNoteStore();
     reactExports.useEffect(() => {
       const url = window.location.href;
       loadSettings();
       fetchNotesForUrl(url);
       fetchMarkupsForUrl(url);
-    }, [fetchNotesForUrl, fetchMarkupsForUrl, loadSettings]);
+      const handleBackgroundClick = (e) => {
+        if (e.target === document.body || e.target.id === "pagepost-notes-root") {
+          setActiveNoteId(null);
+        }
+      };
+      window.addEventListener("mousedown", handleBackgroundClick);
+      return () => window.removeEventListener("mousedown", handleBackgroundClick);
+    }, [fetchNotesForUrl, fetchMarkupsForUrl, loadSettings, setActiveNoteId]);
     const isExtensionPage = window.location.protocol === "chrome-extension:";
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { id: "pagepost-notes-root", className: "pointer-events-none", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(MarkupLayer, {}),
@@ -13912,71 +14694,7 @@
       }
     );
   };
-  function getCssSelector(el) {
-    if (el.id) return `#${CSS.escape(el.id)}`;
-    const path = [];
-    let current = el;
-    while (current && current.nodeType === Node.ELEMENT_NODE) {
-      let selector = current.nodeName.toLowerCase();
-      if (current.id) {
-        selector += `#${CSS.escape(current.id)}`;
-        path.unshift(selector);
-        break;
-      } else {
-        let sibling = current.previousElementSibling;
-        let nth = 1;
-        while (sibling) {
-          if (sibling.nodeName === current.nodeName) nth++;
-          sibling = sibling.previousElementSibling;
-        }
-        selector += `:nth-of-type(${nth})`;
-      }
-      path.unshift(selector);
-      current = current.parentElement;
-    }
-    return path.join(" > ");
-  }
-  function getXPath(el) {
-    if (el.id) return `//*[@id="${el.id}"]`;
-    if (el === document.body) return "/html/body";
-    let ix = 0;
-    const siblings = el.parentNode ? Array.from(el.parentNode.childNodes) : [];
-    for (let i = 0; i < siblings.length; i++) {
-      const sibling = siblings[i];
-      if (sibling === el) {
-        const parentXPath = el.parentNode ? getXPath(el.parentNode) : "";
-        return `${parentXPath}/${el.tagName.toLowerCase()}[${ix + 1}]`;
-      }
-      if (sibling.nodeType === 1 && sibling.tagName === el.tagName) ix++;
-    }
-    return "";
-  }
-  function captureAnchor(el, x, y) {
-    const rect = el.getBoundingClientRect();
-    const text = el.innerText || "";
-    const fullText = document.body.innerText;
-    const elementIndex = fullText.indexOf(text);
-    const beforeText = fullText.substring(Math.max(0, elementIndex - 50), elementIndex);
-    const afterText = fullText.substring(elementIndex + text.length, elementIndex + text.length + 50);
-    return {
-      dom: {
-        selector: getCssSelector(el),
-        xpath: getXPath(el)
-      },
-      context: {
-        beforeText,
-        afterText,
-        elementText: text.substring(0, 200)
-      },
-      position: {
-        x: (x - rect.left) / rect.width,
-        // Relative % inside element
-        y: (y - rect.top) / rect.height,
-        scrollY: window.scrollY
-      }
-    };
-  }
-  const tailwindStyles = '/*! tailwindcss v4.2.1 | MIT License | https://tailwindcss.com */\n@layer properties {\n  @supports (((-webkit-hyphens: none)) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color: rgb(from red r g b)))) {\n    *, :before, :after, ::backdrop {\n      --tw-translate-x: 0;\n      --tw-translate-y: 0;\n      --tw-translate-z: 0;\n      --tw-scale-x: 1;\n      --tw-scale-y: 1;\n      --tw-scale-z: 1;\n      --tw-rotate-x: initial;\n      --tw-rotate-y: initial;\n      --tw-rotate-z: initial;\n      --tw-skew-x: initial;\n      --tw-skew-y: initial;\n      --tw-space-y-reverse: 0;\n      --tw-border-style: solid;\n      --tw-leading: initial;\n      --tw-font-weight: initial;\n      --tw-tracking: initial;\n      --tw-shadow: 0 0 #0000;\n      --tw-shadow-color: initial;\n      --tw-shadow-alpha: 100%;\n      --tw-inset-shadow: 0 0 #0000;\n      --tw-inset-shadow-color: initial;\n      --tw-inset-shadow-alpha: 100%;\n      --tw-ring-color: initial;\n      --tw-ring-shadow: 0 0 #0000;\n      --tw-inset-ring-color: initial;\n      --tw-inset-ring-shadow: 0 0 #0000;\n      --tw-ring-inset: initial;\n      --tw-ring-offset-width: 0px;\n      --tw-ring-offset-color: #fff;\n      --tw-ring-offset-shadow: 0 0 #0000;\n      --tw-outline-style: solid;\n      --tw-blur: initial;\n      --tw-brightness: initial;\n      --tw-contrast: initial;\n      --tw-grayscale: initial;\n      --tw-hue-rotate: initial;\n      --tw-invert: initial;\n      --tw-opacity: initial;\n      --tw-saturate: initial;\n      --tw-sepia: initial;\n      --tw-drop-shadow: initial;\n      --tw-drop-shadow-color: initial;\n      --tw-drop-shadow-alpha: 100%;\n      --tw-drop-shadow-size: initial;\n      --tw-backdrop-blur: initial;\n      --tw-backdrop-brightness: initial;\n      --tw-backdrop-contrast: initial;\n      --tw-backdrop-grayscale: initial;\n      --tw-backdrop-hue-rotate: initial;\n      --tw-backdrop-invert: initial;\n      --tw-backdrop-opacity: initial;\n      --tw-backdrop-saturate: initial;\n      --tw-backdrop-sepia: initial;\n      --tw-duration: initial;\n      --tw-ease: initial;\n    }\n  }\n}\n\n@layer theme {\n  :root, :host {\n    --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",\n      "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";\n    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",\n      "Courier New", monospace;\n    --color-red-50: oklch(97.1% .013 17.38);\n    --color-red-100: oklch(93.6% .032 17.717);\n    --color-red-400: oklch(70.4% .191 22.216);\n    --color-red-500: oklch(63.7% .237 25.331);\n    --color-red-600: oklch(57.7% .245 27.325);\n    --color-green-600: oklch(62.7% .194 149.214);\n    --color-gray-50: oklch(98.5% .002 247.839);\n    --color-gray-100: oklch(96.7% .003 264.542);\n    --color-gray-200: oklch(92.8% .006 264.531);\n    --color-gray-300: oklch(87.2% .01 258.338);\n    --color-gray-400: oklch(70.7% .022 261.325);\n    --color-gray-500: oklch(55.1% .027 264.364);\n    --color-gray-600: oklch(44.6% .03 256.802);\n    --color-gray-700: oklch(37.3% .034 259.733);\n    --color-gray-800: oklch(27.8% .033 256.848);\n    --color-gray-900: oklch(21% .034 264.665);\n    --color-black: #000;\n    --color-white: #fff;\n    --spacing: .25rem;\n    --text-xs: .75rem;\n    --text-xs--line-height: calc(1 / .75);\n    --text-sm: .875rem;\n    --text-sm--line-height: calc(1.25 / .875);\n    --text-lg: 1.125rem;\n    --text-lg--line-height: calc(1.75 / 1.125);\n    --font-weight-medium: 500;\n    --font-weight-semibold: 600;\n    --font-weight-bold: 700;\n    --font-weight-black: 900;\n    --tracking-wider: .05em;\n    --leading-relaxed: 1.625;\n    --radius-md: .375rem;\n    --radius-lg: .5rem;\n    --radius-xl: .75rem;\n    --radius-2xl: 1rem;\n    --radius-3xl: 1.5rem;\n    --ease-in-out: cubic-bezier(.4, 0, .2, 1);\n    --animate-pulse: pulse 2s cubic-bezier(.4, 0, .6, 1) infinite;\n    --animate-bounce: bounce 1s infinite;\n    --blur-md: 12px;\n    --blur-xl: 24px;\n    --default-transition-duration: .15s;\n    --default-transition-timing-function: cubic-bezier(.4, 0, .2, 1);\n    --default-font-family: var(--font-sans);\n    --default-mono-font-family: var(--font-mono);\n    --color-brand-primary: #ffd54f;\n    --color-brand-accent: #ff6f61;\n    --color-note-yellow: #fff9c4;\n    --color-note-green: #b2dfdb;\n    --color-note-pink: #f8bbd0;\n    --color-note-lavender: #e1bee7;\n    --color-note-blue: #bbdefb;\n  }\n}\n\n@layer base {\n  *, :after, :before, ::backdrop {\n    box-sizing: border-box;\n    border: 0 solid;\n    margin: 0;\n    padding: 0;\n  }\n\n  ::file-selector-button {\n    box-sizing: border-box;\n    border: 0 solid;\n    margin: 0;\n    padding: 0;\n  }\n\n  html, :host {\n    -webkit-text-size-adjust: 100%;\n    tab-size: 4;\n    line-height: 1.5;\n    font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");\n    font-feature-settings: var(--default-font-feature-settings, normal);\n    font-variation-settings: var(--default-font-variation-settings, normal);\n    -webkit-tap-highlight-color: transparent;\n  }\n\n  hr {\n    height: 0;\n    color: inherit;\n    border-top-width: 1px;\n  }\n\n  abbr:where([title]) {\n    -webkit-text-decoration: underline dotted;\n    text-decoration: underline dotted;\n  }\n\n  h1, h2, h3, h4, h5, h6 {\n    font-size: inherit;\n    font-weight: inherit;\n  }\n\n  a {\n    color: inherit;\n    -webkit-text-decoration: inherit;\n    -webkit-text-decoration: inherit;\n    -webkit-text-decoration: inherit;\n    text-decoration: inherit;\n  }\n\n  b, strong {\n    font-weight: bolder;\n  }\n\n  code, kbd, samp, pre {\n    font-family: var(--default-mono-font-family, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);\n    font-feature-settings: var(--default-mono-font-feature-settings, normal);\n    font-variation-settings: var(--default-mono-font-variation-settings, normal);\n    font-size: 1em;\n  }\n\n  small {\n    font-size: 80%;\n  }\n\n  sub, sup {\n    vertical-align: baseline;\n    font-size: 75%;\n    line-height: 0;\n    position: relative;\n  }\n\n  sub {\n    bottom: -.25em;\n  }\n\n  sup {\n    top: -.5em;\n  }\n\n  table {\n    text-indent: 0;\n    border-color: inherit;\n    border-collapse: collapse;\n  }\n\n  :-moz-focusring {\n    outline: auto;\n  }\n\n  progress {\n    vertical-align: baseline;\n  }\n\n  summary {\n    display: list-item;\n  }\n\n  ol, ul, menu {\n    list-style: none;\n  }\n\n  img, svg, video, canvas, audio, iframe, embed, object {\n    vertical-align: middle;\n    display: block;\n  }\n\n  img, video {\n    max-width: 100%;\n    height: auto;\n  }\n\n  button, input, select, optgroup, textarea {\n    font: inherit;\n    font-feature-settings: inherit;\n    font-variation-settings: inherit;\n    letter-spacing: inherit;\n    color: inherit;\n    opacity: 1;\n    background-color: #0000;\n    border-radius: 0;\n  }\n\n  ::file-selector-button {\n    font: inherit;\n    font-feature-settings: inherit;\n    font-variation-settings: inherit;\n    letter-spacing: inherit;\n    color: inherit;\n    opacity: 1;\n    background-color: #0000;\n    border-radius: 0;\n  }\n\n  :where(select:is([multiple], [size])) optgroup {\n    font-weight: bolder;\n  }\n\n  :where(select:is([multiple], [size])) optgroup option {\n    padding-inline-start: 20px;\n  }\n\n  ::file-selector-button {\n    margin-inline-end: 4px;\n  }\n\n  ::placeholder {\n    opacity: 1;\n  }\n\n  @supports (not ((-webkit-appearance: -apple-pay-button))) or (contain-intrinsic-size: 1px) {\n    ::placeholder {\n      color: currentColor;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      ::placeholder {\n        color: color-mix(in oklab, currentcolor 50%, transparent);\n      }\n    }\n  }\n\n  textarea {\n    resize: vertical;\n  }\n\n  ::-webkit-search-decoration {\n    -webkit-appearance: none;\n  }\n\n  ::-webkit-date-and-time-value {\n    min-height: 1lh;\n    text-align: inherit;\n  }\n\n  ::-webkit-datetime-edit {\n    display: inline-flex;\n  }\n\n  ::-webkit-datetime-edit-fields-wrapper {\n    padding: 0;\n  }\n\n  ::-webkit-datetime-edit {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-year-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-month-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-day-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-hour-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-minute-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-second-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-millisecond-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-meridiem-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-calendar-picker-indicator {\n    line-height: 1;\n  }\n\n  :-moz-ui-invalid {\n    box-shadow: none;\n  }\n\n  button, input:where([type="button"], [type="reset"], [type="submit"]) {\n    appearance: button;\n  }\n\n  ::file-selector-button {\n    appearance: button;\n  }\n\n  ::-webkit-inner-spin-button {\n    height: auto;\n  }\n\n  ::-webkit-outer-spin-button {\n    height: auto;\n  }\n\n  [hidden]:where(:not([hidden="until-found"])) {\n    display: none !important;\n  }\n}\n\n@layer components;\n\n@layer utilities {\n  .pointer-events-auto {\n    pointer-events: auto;\n  }\n\n  .pointer-events-none {\n    pointer-events: none;\n  }\n\n  .visible {\n    visibility: visible;\n  }\n\n  .absolute {\n    position: absolute;\n  }\n\n  .fixed {\n    position: fixed;\n  }\n\n  .relative {\n    position: relative;\n  }\n\n  .sticky {\n    position: sticky;\n  }\n\n  .inset-0 {\n    inset: calc(var(--spacing) * 0);\n  }\n\n  .inset-x-0 {\n    inset-inline: calc(var(--spacing) * 0);\n  }\n\n  .start {\n    inset-inline-start: var(--spacing);\n  }\n\n  .end {\n    inset-inline-end: var(--spacing);\n  }\n\n  .-top-4 {\n    top: calc(var(--spacing) * -4);\n  }\n\n  .top-1 {\n    top: calc(var(--spacing) * 1);\n  }\n\n  .top-1\\/2 {\n    top: 50%;\n  }\n\n  .top-10 {\n    top: calc(var(--spacing) * 10);\n  }\n\n  .-right-4 {\n    right: calc(var(--spacing) * -4);\n  }\n\n  .right-0 {\n    right: calc(var(--spacing) * 0);\n  }\n\n  .bottom-10 {\n    bottom: calc(var(--spacing) * 10);\n  }\n\n  .bottom-full {\n    bottom: 100%;\n  }\n\n  .left-0 {\n    left: calc(var(--spacing) * 0);\n  }\n\n  .left-1 {\n    left: calc(var(--spacing) * 1);\n  }\n\n  .left-1\\/2 {\n    left: 50%;\n  }\n\n  .left-2 {\n    left: calc(var(--spacing) * 2);\n  }\n\n  .left-2\\.5 {\n    left: calc(var(--spacing) * 2.5);\n  }\n\n  .z-20 {\n    z-index: 20;\n  }\n\n  .z-50 {\n    z-index: 50;\n  }\n\n  .z-\\[2147483640\\] {\n    z-index: 2147483640;\n  }\n\n  .container {\n    width: 100%;\n  }\n\n  @media (min-width: 40rem) {\n    .container {\n      max-width: 40rem;\n    }\n  }\n\n  @media (min-width: 48rem) {\n    .container {\n      max-width: 48rem;\n    }\n  }\n\n  @media (min-width: 64rem) {\n    .container {\n      max-width: 64rem;\n    }\n  }\n\n  @media (min-width: 80rem) {\n    .container {\n      max-width: 80rem;\n    }\n  }\n\n  @media (min-width: 96rem) {\n    .container {\n      max-width: 96rem;\n    }\n  }\n\n  .mx-0 {\n    margin-inline: calc(var(--spacing) * 0);\n  }\n\n  .mx-1 {\n    margin-inline: calc(var(--spacing) * 1);\n  }\n\n  .mt-2 {\n    margin-top: calc(var(--spacing) * 2);\n  }\n\n  .mr-1 {\n    margin-right: calc(var(--spacing) * 1);\n  }\n\n  .mb-1 {\n    margin-bottom: calc(var(--spacing) * 1);\n  }\n\n  .mb-2 {\n    margin-bottom: calc(var(--spacing) * 2);\n  }\n\n  .mb-3 {\n    margin-bottom: calc(var(--spacing) * 3);\n  }\n\n  .mb-4 {\n    margin-bottom: calc(var(--spacing) * 4);\n  }\n\n  .ml-1 {\n    margin-left: calc(var(--spacing) * 1);\n  }\n\n  .box-border {\n    box-sizing: border-box;\n  }\n\n  .line-clamp-3 {\n    -webkit-line-clamp: 3;\n    -webkit-box-orient: vertical;\n    display: -webkit-box;\n    overflow: hidden;\n  }\n\n  .block {\n    display: block;\n  }\n\n  .flex {\n    display: flex;\n  }\n\n  .grid {\n    display: grid;\n  }\n\n  .hidden {\n    display: none;\n  }\n\n  .inline {\n    display: inline;\n  }\n\n  .table {\n    display: table;\n  }\n\n  .h-1 {\n    height: calc(var(--spacing) * 1);\n  }\n\n  .h-1\\.5 {\n    height: calc(var(--spacing) * 1.5);\n  }\n\n  .h-3 {\n    height: calc(var(--spacing) * 3);\n  }\n\n  .h-4 {\n    height: calc(var(--spacing) * 4);\n  }\n\n  .h-5 {\n    height: calc(var(--spacing) * 5);\n  }\n\n  .h-6 {\n    height: calc(var(--spacing) * 6);\n  }\n\n  .h-7 {\n    height: calc(var(--spacing) * 7);\n  }\n\n  .h-8 {\n    height: calc(var(--spacing) * 8);\n  }\n\n  .h-10 {\n    height: calc(var(--spacing) * 10);\n  }\n\n  .h-16 {\n    height: calc(var(--spacing) * 16);\n  }\n\n  .h-18 {\n    height: calc(var(--spacing) * 18);\n  }\n\n  .h-\\[480px\\] {\n    height: 480px;\n  }\n\n  .h-full {\n    height: 100%;\n  }\n\n  .max-h-\\[70vh\\] {\n    max-height: 70vh;\n  }\n\n  .w-1 {\n    width: calc(var(--spacing) * 1);\n  }\n\n  .w-1\\.5 {\n    width: calc(var(--spacing) * 1.5);\n  }\n\n  .w-2 {\n    width: calc(var(--spacing) * 2);\n  }\n\n  .w-3 {\n    width: calc(var(--spacing) * 3);\n  }\n\n  .w-4 {\n    width: calc(var(--spacing) * 4);\n  }\n\n  .w-6 {\n    width: calc(var(--spacing) * 6);\n  }\n\n  .w-7 {\n    width: calc(var(--spacing) * 7);\n  }\n\n  .w-8 {\n    width: calc(var(--spacing) * 8);\n  }\n\n  .w-10 {\n    width: calc(var(--spacing) * 10);\n  }\n\n  .w-16 {\n    width: calc(var(--spacing) * 16);\n  }\n\n  .w-40 {\n    width: calc(var(--spacing) * 40);\n  }\n\n  .w-\\[320px\\] {\n    width: 320px;\n  }\n\n  .w-full {\n    width: 100%;\n  }\n\n  .w-px {\n    width: 1px;\n  }\n\n  .max-w-\\[64px\\] {\n    max-width: 64px;\n  }\n\n  .max-w-\\[120px\\] {\n    max-width: 120px;\n  }\n\n  .max-w-\\[min\\(800px\\,94vw\\)\\] {\n    max-width: min(800px, 94vw);\n  }\n\n  .max-w-full {\n    max-width: 100%;\n  }\n\n  .flex-1 {\n    flex: 1;\n  }\n\n  .flex-shrink {\n    flex-shrink: 1;\n  }\n\n  .flex-shrink-0, .shrink-0 {\n    flex-shrink: 0;\n  }\n\n  .border-collapse {\n    border-collapse: collapse;\n  }\n\n  .-translate-x-1 {\n    --tw-translate-x: calc(var(--spacing) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .-translate-x-1\\/2 {\n    --tw-translate-x: calc(calc(1 / 2 * 100%) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .translate-x-0 {\n    --tw-translate-x: calc(var(--spacing) * 0);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .translate-x-5 {\n    --tw-translate-x: calc(var(--spacing) * 5);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .-translate-y-1 {\n    --tw-translate-y: calc(var(--spacing) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .-translate-y-1\\/2 {\n    --tw-translate-y: calc(calc(1 / 2 * 100%) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .translate-y-4 {\n    --tw-translate-y: calc(var(--spacing) * 4);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .scale-110 {\n    --tw-scale-x: 110%;\n    --tw-scale-y: 110%;\n    --tw-scale-z: 110%;\n    scale: var(--tw-scale-x) var(--tw-scale-y);\n  }\n\n  .rotate-90 {\n    rotate: 90deg;\n  }\n\n  .transform {\n    transform: var(--tw-rotate-x,  ) var(--tw-rotate-y,  ) var(--tw-rotate-z,  ) var(--tw-skew-x,  ) var(--tw-skew-y,  );\n  }\n\n  .animate-bounce {\n    animation: var(--animate-bounce);\n  }\n\n  .animate-pulse {\n    animation: var(--animate-pulse);\n  }\n\n  .cursor-crosshair {\n    cursor: crosshair;\n  }\n\n  .cursor-grab {\n    cursor: grab;\n  }\n\n  .cursor-nwse-resize {\n    cursor: nwse-resize;\n  }\n\n  .cursor-pointer {\n    cursor: pointer;\n  }\n\n  .cursor-text {\n    cursor: text;\n  }\n\n  .resize {\n    resize: both;\n  }\n\n  .resize-none {\n    resize: none;\n  }\n\n  .appearance-none {\n    appearance: none;\n  }\n\n  .grid-cols-1 {\n    grid-template-columns: repeat(1, minmax(0, 1fr));\n  }\n\n  .grid-cols-4 {\n    grid-template-columns: repeat(4, minmax(0, 1fr));\n  }\n\n  .flex-col {\n    flex-direction: column;\n  }\n\n  .flex-wrap {\n    flex-wrap: wrap;\n  }\n\n  .items-center {\n    align-items: center;\n  }\n\n  .items-start {\n    align-items: flex-start;\n  }\n\n  .justify-between {\n    justify-content: space-between;\n  }\n\n  .justify-center {\n    justify-content: center;\n  }\n\n  .gap-0 {\n    gap: calc(var(--spacing) * 0);\n  }\n\n  .gap-0\\.5 {\n    gap: calc(var(--spacing) * .5);\n  }\n\n  .gap-1 {\n    gap: calc(var(--spacing) * 1);\n  }\n\n  .gap-1\\.5 {\n    gap: calc(var(--spacing) * 1.5);\n  }\n\n  .gap-2 {\n    gap: calc(var(--spacing) * 2);\n  }\n\n  .gap-3 {\n    gap: calc(var(--spacing) * 3);\n  }\n\n  .gap-4 {\n    gap: calc(var(--spacing) * 4);\n  }\n\n  .gap-6 {\n    gap: calc(var(--spacing) * 6);\n  }\n\n  :where(.space-y-2 > :not(:last-child)) {\n    --tw-space-y-reverse: 0;\n    margin-block-start: calc(calc(var(--spacing) * 2) * var(--tw-space-y-reverse));\n    margin-block-end: calc(calc(var(--spacing) * 2) * calc(1 - var(--tw-space-y-reverse)));\n  }\n\n  :where(.space-y-6 > :not(:last-child)) {\n    --tw-space-y-reverse: 0;\n    margin-block-start: calc(calc(var(--spacing) * 6) * var(--tw-space-y-reverse));\n    margin-block-end: calc(calc(var(--spacing) * 6) * calc(1 - var(--tw-space-y-reverse)));\n  }\n\n  .truncate {\n    text-overflow: ellipsis;\n    white-space: nowrap;\n    overflow: hidden;\n  }\n\n  .overflow-hidden {\n    overflow: hidden;\n  }\n\n  .overflow-visible {\n    overflow: visible;\n  }\n\n  .overflow-y-auto {\n    overflow-y: auto;\n  }\n\n  .rounded {\n    border-radius: .25rem;\n  }\n\n  .rounded-2xl {\n    border-radius: var(--radius-2xl);\n  }\n\n  .rounded-3xl {\n    border-radius: var(--radius-3xl);\n  }\n\n  .rounded-full {\n    border-radius: 3.40282e38px;\n  }\n\n  .rounded-lg {\n    border-radius: var(--radius-lg);\n  }\n\n  .rounded-md {\n    border-radius: var(--radius-md);\n  }\n\n  .rounded-xl {\n    border-radius: var(--radius-xl);\n  }\n\n  .border {\n    border-style: var(--tw-border-style);\n    border-width: 1px;\n  }\n\n  .border-2 {\n    border-style: var(--tw-border-style);\n    border-width: 2px;\n  }\n\n  .border-4 {\n    border-style: var(--tw-border-style);\n    border-width: 4px;\n  }\n\n  .border-t {\n    border-top-style: var(--tw-border-style);\n    border-top-width: 1px;\n  }\n\n  .border-b {\n    border-bottom-style: var(--tw-border-style);\n    border-bottom-width: 1px;\n  }\n\n  .border-none {\n    --tw-border-style: none;\n    border-style: none;\n  }\n\n  .border-black {\n    border-color: var(--color-black);\n  }\n\n  .border-black\\/5 {\n    border-color: #0000000d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-black\\/5 {\n      border-color: color-mix(in oklab, var(--color-black) 5%, transparent);\n    }\n  }\n\n  .border-black\\/10 {\n    border-color: #0000001a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-black\\/10 {\n      border-color: color-mix(in oklab, var(--color-black) 10%, transparent);\n    }\n  }\n\n  .border-brand-primary {\n    border-color: var(--color-brand-primary);\n  }\n\n  .border-brand-primary\\/50 {\n    border-color: #ffd54f80;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-brand-primary\\/50 {\n      border-color: color-mix(in oklab, var(--color-brand-primary) 50%, transparent);\n    }\n  }\n\n  .border-gray-100 {\n    border-color: var(--color-gray-100);\n  }\n\n  .border-gray-200 {\n    border-color: var(--color-gray-200);\n  }\n\n  .border-red-100 {\n    border-color: var(--color-red-100);\n  }\n\n  .border-white {\n    border-color: var(--color-white);\n  }\n\n  .border-white\\/5 {\n    border-color: #ffffff0d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-white\\/5 {\n      border-color: color-mix(in oklab, var(--color-white) 5%, transparent);\n    }\n  }\n\n  .border-white\\/10 {\n    border-color: #ffffff1a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-white\\/10 {\n      border-color: color-mix(in oklab, var(--color-white) 10%, transparent);\n    }\n  }\n\n  .border-white\\/20 {\n    border-color: #fff3;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-white\\/20 {\n      border-color: color-mix(in oklab, var(--color-white) 20%, transparent);\n    }\n  }\n\n  .bg-black {\n    background-color: var(--color-black);\n  }\n\n  .bg-black\\/5 {\n    background-color: #0000000d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-black\\/5 {\n      background-color: color-mix(in oklab, var(--color-black) 5%, transparent);\n    }\n  }\n\n  .bg-black\\/10 {\n    background-color: #0000001a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-black\\/10 {\n      background-color: color-mix(in oklab, var(--color-black) 10%, transparent);\n    }\n  }\n\n  .bg-black\\/80 {\n    background-color: #000c;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-black\\/80 {\n      background-color: color-mix(in oklab, var(--color-black) 80%, transparent);\n    }\n  }\n\n  .bg-brand-primary {\n    background-color: var(--color-brand-primary);\n  }\n\n  .bg-brand-primary\\/5 {\n    background-color: #ffd54f0d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-brand-primary\\/5 {\n      background-color: color-mix(in oklab, var(--color-brand-primary) 5%, transparent);\n    }\n  }\n\n  .bg-gray-50 {\n    background-color: var(--color-gray-50);\n  }\n\n  .bg-gray-100 {\n    background-color: var(--color-gray-100);\n  }\n\n  .bg-gray-200 {\n    background-color: var(--color-gray-200);\n  }\n\n  .bg-gray-300 {\n    background-color: var(--color-gray-300);\n  }\n\n  .bg-gray-800 {\n    background-color: var(--color-gray-800);\n  }\n\n  .bg-gray-900 {\n    background-color: var(--color-gray-900);\n  }\n\n  .bg-note-blue {\n    background-color: var(--color-note-blue);\n  }\n\n  .bg-note-green {\n    background-color: var(--color-note-green);\n  }\n\n  .bg-note-lavender {\n    background-color: var(--color-note-lavender);\n  }\n\n  .bg-note-pink {\n    background-color: var(--color-note-pink);\n  }\n\n  .bg-note-yellow {\n    background-color: var(--color-note-yellow);\n  }\n\n  .bg-red-50 {\n    background-color: var(--color-red-50);\n  }\n\n  .bg-red-500 {\n    background-color: var(--color-red-500);\n  }\n\n  .bg-transparent {\n    background-color: #0000;\n  }\n\n  .bg-white {\n    background-color: var(--color-white);\n  }\n\n  .bg-white\\/5 {\n    background-color: #ffffff0d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-white\\/5 {\n      background-color: color-mix(in oklab, var(--color-white) 5%, transparent);\n    }\n  }\n\n  .bg-white\\/10 {\n    background-color: #ffffff1a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-white\\/10 {\n      background-color: color-mix(in oklab, var(--color-white) 10%, transparent);\n    }\n  }\n\n  .fill-current {\n    fill: currentColor;\n  }\n\n  .p-0 {\n    padding: calc(var(--spacing) * 0);\n  }\n\n  .p-0\\.5 {\n    padding: calc(var(--spacing) * .5);\n  }\n\n  .p-1 {\n    padding: calc(var(--spacing) * 1);\n  }\n\n  .p-2 {\n    padding: calc(var(--spacing) * 2);\n  }\n\n  .p-3 {\n    padding: calc(var(--spacing) * 3);\n  }\n\n  .p-4 {\n    padding: calc(var(--spacing) * 4);\n  }\n\n  .p-10 {\n    padding: calc(var(--spacing) * 10);\n  }\n\n  .px-1 {\n    padding-inline: calc(var(--spacing) * 1);\n  }\n\n  .px-1\\.5 {\n    padding-inline: calc(var(--spacing) * 1.5);\n  }\n\n  .px-2 {\n    padding-inline: calc(var(--spacing) * 2);\n  }\n\n  .px-3 {\n    padding-inline: calc(var(--spacing) * 3);\n  }\n\n  .px-4 {\n    padding-inline: calc(var(--spacing) * 4);\n  }\n\n  .px-6 {\n    padding-inline: calc(var(--spacing) * 6);\n  }\n\n  .px-8 {\n    padding-inline: calc(var(--spacing) * 8);\n  }\n\n  .py-0 {\n    padding-block: calc(var(--spacing) * 0);\n  }\n\n  .py-0\\.5 {\n    padding-block: calc(var(--spacing) * .5);\n  }\n\n  .py-1 {\n    padding-block: calc(var(--spacing) * 1);\n  }\n\n  .py-1\\.5 {\n    padding-block: calc(var(--spacing) * 1.5);\n  }\n\n  .py-2 {\n    padding-block: calc(var(--spacing) * 2);\n  }\n\n  .py-3 {\n    padding-block: calc(var(--spacing) * 3);\n  }\n\n  .py-4 {\n    padding-block: calc(var(--spacing) * 4);\n  }\n\n  .pr-3 {\n    padding-right: calc(var(--spacing) * 3);\n  }\n\n  .pl-8 {\n    padding-left: calc(var(--spacing) * 8);\n  }\n\n  .text-center {\n    text-align: center;\n  }\n\n  .text-left {\n    text-align: left;\n  }\n\n  .font-sans {\n    font-family: var(--font-sans);\n  }\n\n  .text-lg {\n    font-size: var(--text-lg);\n    line-height: var(--tw-leading, var(--text-lg--line-height));\n  }\n\n  .text-sm {\n    font-size: var(--text-sm);\n    line-height: var(--tw-leading, var(--text-sm--line-height));\n  }\n\n  .text-xs {\n    font-size: var(--text-xs);\n    line-height: var(--tw-leading, var(--text-xs--line-height));\n  }\n\n  .text-\\[9px\\] {\n    font-size: 9px;\n  }\n\n  .text-\\[10px\\] {\n    font-size: 10px;\n  }\n\n  .text-\\[11px\\] {\n    font-size: 11px;\n  }\n\n  .leading-none {\n    --tw-leading: 1;\n    line-height: 1;\n  }\n\n  .leading-relaxed {\n    --tw-leading: var(--leading-relaxed);\n    line-height: var(--leading-relaxed);\n  }\n\n  .font-black {\n    --tw-font-weight: var(--font-weight-black);\n    font-weight: var(--font-weight-black);\n  }\n\n  .font-bold {\n    --tw-font-weight: var(--font-weight-bold);\n    font-weight: var(--font-weight-bold);\n  }\n\n  .font-medium {\n    --tw-font-weight: var(--font-weight-medium);\n    font-weight: var(--font-weight-medium);\n  }\n\n  .font-semibold {\n    --tw-font-weight: var(--font-weight-semibold);\n    font-weight: var(--font-weight-semibold);\n  }\n\n  .tracking-wider {\n    --tw-tracking: var(--tracking-wider);\n    letter-spacing: var(--tracking-wider);\n  }\n\n  .whitespace-nowrap {\n    white-space: nowrap;\n  }\n\n  .whitespace-pre-wrap {\n    white-space: pre-wrap;\n  }\n\n  .text-black {\n    color: var(--color-black);\n  }\n\n  .text-black\\/30 {\n    color: #0000004d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .text-black\\/30 {\n      color: color-mix(in oklab, var(--color-black) 30%, transparent);\n    }\n  }\n\n  .text-black\\/50 {\n    color: #00000080;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .text-black\\/50 {\n      color: color-mix(in oklab, var(--color-black) 50%, transparent);\n    }\n  }\n\n  .text-brand-primary {\n    color: var(--color-brand-primary);\n  }\n\n  .text-gray-300 {\n    color: var(--color-gray-300);\n  }\n\n  .text-gray-400 {\n    color: var(--color-gray-400);\n  }\n\n  .text-gray-500 {\n    color: var(--color-gray-500);\n  }\n\n  .text-gray-700 {\n    color: var(--color-gray-700);\n  }\n\n  .text-gray-800 {\n    color: var(--color-gray-800);\n  }\n\n  .text-gray-900 {\n    color: var(--color-gray-900);\n  }\n\n  .text-green-600 {\n    color: var(--color-green-600);\n  }\n\n  .text-red-400 {\n    color: var(--color-red-400);\n  }\n\n  .text-red-500 {\n    color: var(--color-red-500);\n  }\n\n  .text-red-600 {\n    color: var(--color-red-600);\n  }\n\n  .text-white {\n    color: var(--color-white);\n  }\n\n  .uppercase {\n    text-transform: uppercase;\n  }\n\n  .italic {\n    font-style: italic;\n  }\n\n  .underline {\n    text-decoration-line: underline;\n  }\n\n  .accent-brand-primary {\n    accent-color: var(--color-brand-primary);\n  }\n\n  .opacity-0 {\n    opacity: 0;\n  }\n\n  .opacity-50 {\n    opacity: .5;\n  }\n\n  .opacity-80 {\n    opacity: .8;\n  }\n\n  .opacity-100 {\n    opacity: 1;\n  }\n\n  .mix-blend-difference {\n    mix-blend-mode: difference;\n  }\n\n  .shadow {\n    --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, #0000001a), 0 1px 2px -1px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-2xl {\n    --tw-shadow: 0 25px 50px -12px var(--tw-shadow-color, #00000040);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-\\[0_0_10px_rgba\\(255\\,213\\,79\\,0\\.2\\)\\] {\n    --tw-shadow: 0 0 10px var(--tw-shadow-color, #ffd54f33);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-\\[0_0_30px_rgba\\(255\\,213\\,79\\,0\\.5\\)\\] {\n    --tw-shadow: 0 0 30px var(--tw-shadow-color, #ffd54f80);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-\\[0_20px_60px_rgba\\(0\\,0\\,0\\,0\\.6\\)\\,0_0_25px_rgba\\(255\\,213\\,79\\,0\\.2\\)\\] {\n    --tw-shadow: 0 20px 60px var(--tw-shadow-color, #0009), 0 0 25px var(--tw-shadow-color, #ffd54f33);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-lg {\n    --tw-shadow: 0 10px 15px -3px var(--tw-shadow-color, #0000001a), 0 4px 6px -4px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-md {\n    --tw-shadow: 0 4px 6px -1px var(--tw-shadow-color, #0000001a), 0 2px 4px -2px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-sm {\n    --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, #0000001a), 0 1px 2px -1px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-xl {\n    --tw-shadow: 0 20px 25px -5px var(--tw-shadow-color, #0000001a), 0 8px 10px -6px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-1 {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-2 {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-4 {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(4px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-brand-primary {\n    --tw-ring-color: var(--color-brand-primary);\n  }\n\n  .outline {\n    outline-style: var(--tw-outline-style);\n    outline-width: 1px;\n  }\n\n  .blur {\n    --tw-blur: blur(8px);\n    filter: var(--tw-blur,  ) var(--tw-brightness,  ) var(--tw-contrast,  ) var(--tw-grayscale,  ) var(--tw-hue-rotate,  ) var(--tw-invert,  ) var(--tw-saturate,  ) var(--tw-sepia,  ) var(--tw-drop-shadow,  );\n  }\n\n  .filter {\n    filter: var(--tw-blur,  ) var(--tw-brightness,  ) var(--tw-contrast,  ) var(--tw-grayscale,  ) var(--tw-hue-rotate,  ) var(--tw-invert,  ) var(--tw-saturate,  ) var(--tw-sepia,  ) var(--tw-drop-shadow,  );\n  }\n\n  .backdrop-blur-md {\n    --tw-backdrop-blur: blur(var(--blur-md));\n    -webkit-backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n    backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n  }\n\n  .backdrop-blur-xl {\n    --tw-backdrop-blur: blur(var(--blur-xl));\n    -webkit-backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n    backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n  }\n\n  .backdrop-filter {\n    -webkit-backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n    backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n  }\n\n  .transition {\n    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-all {\n    transition-property: all;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-colors {\n    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-opacity {\n    transition-property: opacity;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-transform {\n    transition-property: transform, translate, scale, rotate;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .duration-200 {\n    --tw-duration: .2s;\n    transition-duration: .2s;\n  }\n\n  .duration-300 {\n    --tw-duration: .3s;\n    transition-duration: .3s;\n  }\n\n  .duration-500 {\n    --tw-duration: .5s;\n    transition-duration: .5s;\n  }\n\n  .ease-in-out {\n    --tw-ease: var(--ease-in-out);\n    transition-timing-function: var(--ease-in-out);\n  }\n\n  .outline-none {\n    --tw-outline-style: none;\n    outline-style: none;\n  }\n\n  @media (hover: hover) {\n    .group-hover\\:scale-125:is(:where(.group):hover *) {\n      --tw-scale-x: 125%;\n      --tw-scale-y: 125%;\n      --tw-scale-z: 125%;\n      scale: var(--tw-scale-x) var(--tw-scale-y);\n    }\n\n    .group-hover\\:opacity-100:is(:where(.group):hover *) {\n      opacity: 1;\n    }\n\n    .hover\\:scale-105:hover {\n      --tw-scale-x: 105%;\n      --tw-scale-y: 105%;\n      --tw-scale-z: 105%;\n      scale: var(--tw-scale-x) var(--tw-scale-y);\n    }\n\n    .hover\\:scale-110:hover {\n      --tw-scale-x: 110%;\n      --tw-scale-y: 110%;\n      --tw-scale-z: 110%;\n      scale: var(--tw-scale-x) var(--tw-scale-y);\n    }\n\n    .hover\\:border-brand-primary:hover {\n      border-color: var(--color-brand-primary);\n    }\n\n    .hover\\:border-gray-300:hover {\n      border-color: var(--color-gray-300);\n    }\n\n    .hover\\:bg-black\\/5:hover {\n      background-color: #0000000d;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-black\\/5:hover {\n        background-color: color-mix(in oklab, var(--color-black) 5%, transparent);\n      }\n    }\n\n    .hover\\:bg-black\\/10:hover {\n      background-color: #0000001a;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-black\\/10:hover {\n        background-color: color-mix(in oklab, var(--color-black) 10%, transparent);\n      }\n    }\n\n    .hover\\:bg-gray-100:hover {\n      background-color: var(--color-gray-100);\n    }\n\n    .hover\\:bg-gray-700:hover {\n      background-color: var(--color-gray-700);\n    }\n\n    .hover\\:bg-red-100:hover {\n      background-color: var(--color-red-100);\n    }\n\n    .hover\\:bg-red-500\\/10:hover {\n      background-color: #fb2c361a;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-red-500\\/10:hover {\n        background-color: color-mix(in oklab, var(--color-red-500) 10%, transparent);\n      }\n    }\n\n    .hover\\:bg-white\\/5:hover {\n      background-color: #ffffff0d;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-white\\/5:hover {\n        background-color: color-mix(in oklab, var(--color-white) 5%, transparent);\n      }\n    }\n\n    .hover\\:bg-white\\/10:hover {\n      background-color: #ffffff1a;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-white\\/10:hover {\n        background-color: color-mix(in oklab, var(--color-white) 10%, transparent);\n      }\n    }\n\n    .hover\\:bg-white\\/20:hover {\n      background-color: #fff3;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-white\\/20:hover {\n        background-color: color-mix(in oklab, var(--color-white) 20%, transparent);\n      }\n    }\n\n    .hover\\:text-brand-accent:hover {\n      color: var(--color-brand-accent);\n    }\n\n    .hover\\:text-gray-300:hover {\n      color: var(--color-gray-300);\n    }\n\n    .hover\\:text-gray-600:hover {\n      color: var(--color-gray-600);\n    }\n\n    .hover\\:text-gray-700:hover {\n      color: var(--color-gray-700);\n    }\n\n    .hover\\:text-red-400:hover {\n      color: var(--color-red-400);\n    }\n\n    .hover\\:text-red-600:hover {\n      color: var(--color-red-600);\n    }\n\n    .hover\\:text-white:hover {\n      color: var(--color-white);\n    }\n  }\n\n  .focus\\:ring-1:focus {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .focus\\:ring-brand-primary:focus {\n    --tw-ring-color: var(--color-brand-primary);\n  }\n\n  .active\\:scale-95:active {\n    --tw-scale-x: 95%;\n    --tw-scale-y: 95%;\n    --tw-scale-z: 95%;\n    scale: var(--tw-scale-x) var(--tw-scale-y);\n  }\n\n  .active\\:cursor-grabbing:active {\n    cursor: grabbing;\n  }\n\n  .\\[\\&\\:\\:-webkit-color-swatch\\]\\:rounded-full::-webkit-color-swatch {\n    border-radius: 3.40282e38px;\n  }\n\n  .\\[\\&\\:\\:-webkit-color-swatch\\]\\:border-none::-webkit-color-swatch {\n    --tw-border-style: none;\n    border-style: none;\n  }\n\n  .\\[\\&\\:\\:-webkit-color-swatch-wrapper\\]\\:p-0::-webkit-color-swatch-wrapper {\n    padding: calc(var(--spacing) * 0);\n  }\n}\n\n:root {\n  font-family: Pretendard Variable, system-ui, -apple-system, sans-serif;\n}\n\nbody {\n  margin: 0;\n  overflow-x: hidden;\n}\n\n@property --tw-translate-x {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-translate-y {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-translate-z {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-scale-x {\n  syntax: "*";\n  inherits: false;\n  initial-value: 1;\n}\n\n@property --tw-scale-y {\n  syntax: "*";\n  inherits: false;\n  initial-value: 1;\n}\n\n@property --tw-scale-z {\n  syntax: "*";\n  inherits: false;\n  initial-value: 1;\n}\n\n@property --tw-rotate-x {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-rotate-y {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-rotate-z {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-skew-x {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-skew-y {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-space-y-reverse {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-border-style {\n  syntax: "*";\n  inherits: false;\n  initial-value: solid;\n}\n\n@property --tw-leading {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-font-weight {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-tracking {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-shadow-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-shadow-alpha {\n  syntax: "<percentage>";\n  inherits: false;\n  initial-value: 100%;\n}\n\n@property --tw-inset-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-inset-shadow-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-inset-shadow-alpha {\n  syntax: "<percentage>";\n  inherits: false;\n  initial-value: 100%;\n}\n\n@property --tw-ring-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-ring-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-inset-ring-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-inset-ring-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-ring-inset {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-ring-offset-width {\n  syntax: "<length>";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-ring-offset-color {\n  syntax: "*";\n  inherits: false;\n  initial-value: #fff;\n}\n\n@property --tw-ring-offset-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-outline-style {\n  syntax: "*";\n  inherits: false;\n  initial-value: solid;\n}\n\n@property --tw-blur {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-brightness {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-contrast {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-grayscale {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-hue-rotate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-invert {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-opacity {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-saturate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-sepia {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-drop-shadow {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-drop-shadow-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-drop-shadow-alpha {\n  syntax: "<percentage>";\n  inherits: false;\n  initial-value: 100%;\n}\n\n@property --tw-drop-shadow-size {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-blur {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-brightness {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-contrast {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-grayscale {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-hue-rotate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-invert {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-opacity {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-saturate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-sepia {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-duration {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-ease {\n  syntax: "*";\n  inherits: false\n}\n\n@keyframes pulse {\n  50% {\n    opacity: .5;\n  }\n}\n\n@keyframes bounce {\n  0%, 100% {\n    animation-timing-function: cubic-bezier(.8, 0, 1, 1);\n    transform: translateY(-25%);\n  }\n\n  50% {\n    animation-timing-function: cubic-bezier(0, 0, .2, 1);\n    transform: none;\n  }\n}\n';
+  const tailwindStyles = '/*! tailwindcss v4.2.1 | MIT License | https://tailwindcss.com */\n@layer properties {\n  @supports (((-webkit-hyphens: none)) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color: rgb(from red r g b)))) {\n    *, :before, :after, ::backdrop {\n      --tw-translate-x: 0;\n      --tw-translate-y: 0;\n      --tw-translate-z: 0;\n      --tw-scale-x: 1;\n      --tw-scale-y: 1;\n      --tw-scale-z: 1;\n      --tw-rotate-x: initial;\n      --tw-rotate-y: initial;\n      --tw-rotate-z: initial;\n      --tw-skew-x: initial;\n      --tw-skew-y: initial;\n      --tw-space-y-reverse: 0;\n      --tw-border-style: solid;\n      --tw-leading: initial;\n      --tw-font-weight: initial;\n      --tw-tracking: initial;\n      --tw-shadow: 0 0 #0000;\n      --tw-shadow-color: initial;\n      --tw-shadow-alpha: 100%;\n      --tw-inset-shadow: 0 0 #0000;\n      --tw-inset-shadow-color: initial;\n      --tw-inset-shadow-alpha: 100%;\n      --tw-ring-color: initial;\n      --tw-ring-shadow: 0 0 #0000;\n      --tw-inset-ring-color: initial;\n      --tw-inset-ring-shadow: 0 0 #0000;\n      --tw-ring-inset: initial;\n      --tw-ring-offset-width: 0px;\n      --tw-ring-offset-color: #fff;\n      --tw-ring-offset-shadow: 0 0 #0000;\n      --tw-outline-style: solid;\n      --tw-blur: initial;\n      --tw-brightness: initial;\n      --tw-contrast: initial;\n      --tw-grayscale: initial;\n      --tw-hue-rotate: initial;\n      --tw-invert: initial;\n      --tw-opacity: initial;\n      --tw-saturate: initial;\n      --tw-sepia: initial;\n      --tw-drop-shadow: initial;\n      --tw-drop-shadow-color: initial;\n      --tw-drop-shadow-alpha: 100%;\n      --tw-drop-shadow-size: initial;\n      --tw-backdrop-blur: initial;\n      --tw-backdrop-brightness: initial;\n      --tw-backdrop-contrast: initial;\n      --tw-backdrop-grayscale: initial;\n      --tw-backdrop-hue-rotate: initial;\n      --tw-backdrop-invert: initial;\n      --tw-backdrop-opacity: initial;\n      --tw-backdrop-saturate: initial;\n      --tw-backdrop-sepia: initial;\n      --tw-duration: initial;\n      --tw-ease: initial;\n    }\n  }\n}\n\n@layer theme {\n  :root, :host {\n    --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",\n      "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";\n    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",\n      "Courier New", monospace;\n    --color-red-50: oklch(97.1% .013 17.38);\n    --color-red-100: oklch(93.6% .032 17.717);\n    --color-red-400: oklch(70.4% .191 22.216);\n    --color-red-500: oklch(63.7% .237 25.331);\n    --color-red-600: oklch(57.7% .245 27.325);\n    --color-green-600: oklch(62.7% .194 149.214);\n    --color-gray-50: oklch(98.5% .002 247.839);\n    --color-gray-100: oklch(96.7% .003 264.542);\n    --color-gray-200: oklch(92.8% .006 264.531);\n    --color-gray-300: oklch(87.2% .01 258.338);\n    --color-gray-400: oklch(70.7% .022 261.325);\n    --color-gray-500: oklch(55.1% .027 264.364);\n    --color-gray-600: oklch(44.6% .03 256.802);\n    --color-gray-700: oklch(37.3% .034 259.733);\n    --color-gray-800: oklch(27.8% .033 256.848);\n    --color-gray-900: oklch(21% .034 264.665);\n    --color-black: #000;\n    --color-white: #fff;\n    --spacing: .25rem;\n    --text-xs: .75rem;\n    --text-xs--line-height: calc(1 / .75);\n    --text-sm: .875rem;\n    --text-sm--line-height: calc(1.25 / .875);\n    --text-lg: 1.125rem;\n    --text-lg--line-height: calc(1.75 / 1.125);\n    --text-xl: 1.25rem;\n    --text-xl--line-height: calc(1.75 / 1.25);\n    --text-2xl: 1.5rem;\n    --text-2xl--line-height: calc(2 / 1.5);\n    --font-weight-medium: 500;\n    --font-weight-semibold: 600;\n    --font-weight-bold: 700;\n    --font-weight-black: 900;\n    --tracking-wider: .05em;\n    --leading-relaxed: 1.625;\n    --radius-md: .375rem;\n    --radius-lg: .5rem;\n    --radius-xl: .75rem;\n    --radius-2xl: 1rem;\n    --radius-3xl: 1.5rem;\n    --ease-in-out: cubic-bezier(.4, 0, .2, 1);\n    --animate-pulse: pulse 2s cubic-bezier(.4, 0, .6, 1) infinite;\n    --animate-bounce: bounce 1s infinite;\n    --blur-md: 12px;\n    --blur-xl: 24px;\n    --default-transition-duration: .15s;\n    --default-transition-timing-function: cubic-bezier(.4, 0, .2, 1);\n    --default-font-family: var(--font-sans);\n    --default-mono-font-family: var(--font-mono);\n    --color-brand-primary: #ffd54f;\n    --color-brand-accent: #ff6f61;\n    --color-note-yellow: #fff9c4;\n    --color-note-green: #b2dfdb;\n    --color-note-pink: #f8bbd0;\n    --color-note-lavender: #e1bee7;\n    --color-note-blue: #bbdefb;\n  }\n}\n\n@layer base {\n  *, :after, :before, ::backdrop {\n    box-sizing: border-box;\n    border: 0 solid;\n    margin: 0;\n    padding: 0;\n  }\n\n  ::file-selector-button {\n    box-sizing: border-box;\n    border: 0 solid;\n    margin: 0;\n    padding: 0;\n  }\n\n  html, :host {\n    -webkit-text-size-adjust: 100%;\n    tab-size: 4;\n    line-height: 1.5;\n    font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");\n    font-feature-settings: var(--default-font-feature-settings, normal);\n    font-variation-settings: var(--default-font-variation-settings, normal);\n    -webkit-tap-highlight-color: transparent;\n  }\n\n  hr {\n    height: 0;\n    color: inherit;\n    border-top-width: 1px;\n  }\n\n  abbr:where([title]) {\n    -webkit-text-decoration: underline dotted;\n    text-decoration: underline dotted;\n  }\n\n  h1, h2, h3, h4, h5, h6 {\n    font-size: inherit;\n    font-weight: inherit;\n  }\n\n  a {\n    color: inherit;\n    -webkit-text-decoration: inherit;\n    -webkit-text-decoration: inherit;\n    -webkit-text-decoration: inherit;\n    text-decoration: inherit;\n  }\n\n  b, strong {\n    font-weight: bolder;\n  }\n\n  code, kbd, samp, pre {\n    font-family: var(--default-mono-font-family, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);\n    font-feature-settings: var(--default-mono-font-feature-settings, normal);\n    font-variation-settings: var(--default-mono-font-variation-settings, normal);\n    font-size: 1em;\n  }\n\n  small {\n    font-size: 80%;\n  }\n\n  sub, sup {\n    vertical-align: baseline;\n    font-size: 75%;\n    line-height: 0;\n    position: relative;\n  }\n\n  sub {\n    bottom: -.25em;\n  }\n\n  sup {\n    top: -.5em;\n  }\n\n  table {\n    text-indent: 0;\n    border-color: inherit;\n    border-collapse: collapse;\n  }\n\n  :-moz-focusring {\n    outline: auto;\n  }\n\n  progress {\n    vertical-align: baseline;\n  }\n\n  summary {\n    display: list-item;\n  }\n\n  ol, ul, menu {\n    list-style: none;\n  }\n\n  img, svg, video, canvas, audio, iframe, embed, object {\n    vertical-align: middle;\n    display: block;\n  }\n\n  img, video {\n    max-width: 100%;\n    height: auto;\n  }\n\n  button, input, select, optgroup, textarea {\n    font: inherit;\n    font-feature-settings: inherit;\n    font-variation-settings: inherit;\n    letter-spacing: inherit;\n    color: inherit;\n    opacity: 1;\n    background-color: #0000;\n    border-radius: 0;\n  }\n\n  ::file-selector-button {\n    font: inherit;\n    font-feature-settings: inherit;\n    font-variation-settings: inherit;\n    letter-spacing: inherit;\n    color: inherit;\n    opacity: 1;\n    background-color: #0000;\n    border-radius: 0;\n  }\n\n  :where(select:is([multiple], [size])) optgroup {\n    font-weight: bolder;\n  }\n\n  :where(select:is([multiple], [size])) optgroup option {\n    padding-inline-start: 20px;\n  }\n\n  ::file-selector-button {\n    margin-inline-end: 4px;\n  }\n\n  ::placeholder {\n    opacity: 1;\n  }\n\n  @supports (not ((-webkit-appearance: -apple-pay-button))) or (contain-intrinsic-size: 1px) {\n    ::placeholder {\n      color: currentColor;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      ::placeholder {\n        color: color-mix(in oklab, currentcolor 50%, transparent);\n      }\n    }\n  }\n\n  textarea {\n    resize: vertical;\n  }\n\n  ::-webkit-search-decoration {\n    -webkit-appearance: none;\n  }\n\n  ::-webkit-date-and-time-value {\n    min-height: 1lh;\n    text-align: inherit;\n  }\n\n  ::-webkit-datetime-edit {\n    display: inline-flex;\n  }\n\n  ::-webkit-datetime-edit-fields-wrapper {\n    padding: 0;\n  }\n\n  ::-webkit-datetime-edit {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-year-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-month-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-day-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-hour-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-minute-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-second-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-millisecond-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-meridiem-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-calendar-picker-indicator {\n    line-height: 1;\n  }\n\n  :-moz-ui-invalid {\n    box-shadow: none;\n  }\n\n  button, input:where([type="button"], [type="reset"], [type="submit"]) {\n    appearance: button;\n  }\n\n  ::file-selector-button {\n    appearance: button;\n  }\n\n  ::-webkit-inner-spin-button {\n    height: auto;\n  }\n\n  ::-webkit-outer-spin-button {\n    height: auto;\n  }\n\n  [hidden]:where(:not([hidden="until-found"])) {\n    display: none !important;\n  }\n}\n\n@layer components;\n\n@layer utilities {\n  .pointer-events-auto {\n    pointer-events: auto;\n  }\n\n  .pointer-events-none {\n    pointer-events: none;\n  }\n\n  .visible {\n    visibility: visible;\n  }\n\n  .absolute {\n    position: absolute;\n  }\n\n  .fixed {\n    position: fixed;\n  }\n\n  .relative {\n    position: relative;\n  }\n\n  .sticky {\n    position: sticky;\n  }\n\n  .inset-0 {\n    inset: calc(var(--spacing) * 0);\n  }\n\n  .inset-x-0 {\n    inset-inline: calc(var(--spacing) * 0);\n  }\n\n  .start {\n    inset-inline-start: var(--spacing);\n  }\n\n  .end {\n    inset-inline-end: var(--spacing);\n  }\n\n  .-top-4 {\n    top: calc(var(--spacing) * -4);\n  }\n\n  .top-1 {\n    top: calc(var(--spacing) * 1);\n  }\n\n  .top-1\\/2 {\n    top: 50%;\n  }\n\n  .top-10 {\n    top: calc(var(--spacing) * 10);\n  }\n\n  .-right-4 {\n    right: calc(var(--spacing) * -4);\n  }\n\n  .right-0 {\n    right: calc(var(--spacing) * 0);\n  }\n\n  .bottom-10 {\n    bottom: calc(var(--spacing) * 10);\n  }\n\n  .bottom-full {\n    bottom: 100%;\n  }\n\n  .left-0 {\n    left: calc(var(--spacing) * 0);\n  }\n\n  .left-1 {\n    left: calc(var(--spacing) * 1);\n  }\n\n  .left-1\\/2 {\n    left: 50%;\n  }\n\n  .left-2 {\n    left: calc(var(--spacing) * 2);\n  }\n\n  .left-2\\.5 {\n    left: calc(var(--spacing) * 2.5);\n  }\n\n  .z-20 {\n    z-index: 20;\n  }\n\n  .z-50 {\n    z-index: 50;\n  }\n\n  .z-\\[100\\] {\n    z-index: 100;\n  }\n\n  .z-\\[2147483640\\] {\n    z-index: 2147483640;\n  }\n\n  .container {\n    width: 100%;\n  }\n\n  @media (min-width: 40rem) {\n    .container {\n      max-width: 40rem;\n    }\n  }\n\n  @media (min-width: 48rem) {\n    .container {\n      max-width: 48rem;\n    }\n  }\n\n  @media (min-width: 64rem) {\n    .container {\n      max-width: 64rem;\n    }\n  }\n\n  @media (min-width: 80rem) {\n    .container {\n      max-width: 80rem;\n    }\n  }\n\n  @media (min-width: 96rem) {\n    .container {\n      max-width: 96rem;\n    }\n  }\n\n  .mx-0 {\n    margin-inline: calc(var(--spacing) * 0);\n  }\n\n  .mx-1 {\n    margin-inline: calc(var(--spacing) * 1);\n  }\n\n  .mt-2 {\n    margin-top: calc(var(--spacing) * 2);\n  }\n\n  .mr-1 {\n    margin-right: calc(var(--spacing) * 1);\n  }\n\n  .mb-1 {\n    margin-bottom: calc(var(--spacing) * 1);\n  }\n\n  .mb-2 {\n    margin-bottom: calc(var(--spacing) * 2);\n  }\n\n  .mb-3 {\n    margin-bottom: calc(var(--spacing) * 3);\n  }\n\n  .mb-4 {\n    margin-bottom: calc(var(--spacing) * 4);\n  }\n\n  .ml-1 {\n    margin-left: calc(var(--spacing) * 1);\n  }\n\n  .box-border {\n    box-sizing: border-box;\n  }\n\n  .line-clamp-3 {\n    -webkit-line-clamp: 3;\n    -webkit-box-orient: vertical;\n    display: -webkit-box;\n    overflow: hidden;\n  }\n\n  .block {\n    display: block;\n  }\n\n  .flex {\n    display: flex;\n  }\n\n  .grid {\n    display: grid;\n  }\n\n  .hidden {\n    display: none;\n  }\n\n  .inline {\n    display: inline;\n  }\n\n  .table {\n    display: table;\n  }\n\n  .h-1 {\n    height: calc(var(--spacing) * 1);\n  }\n\n  .h-1\\.5 {\n    height: calc(var(--spacing) * 1.5);\n  }\n\n  .h-3 {\n    height: calc(var(--spacing) * 3);\n  }\n\n  .h-4 {\n    height: calc(var(--spacing) * 4);\n  }\n\n  .h-5 {\n    height: calc(var(--spacing) * 5);\n  }\n\n  .h-6 {\n    height: calc(var(--spacing) * 6);\n  }\n\n  .h-7 {\n    height: calc(var(--spacing) * 7);\n  }\n\n  .h-8 {\n    height: calc(var(--spacing) * 8);\n  }\n\n  .h-10 {\n    height: calc(var(--spacing) * 10);\n  }\n\n  .h-16 {\n    height: calc(var(--spacing) * 16);\n  }\n\n  .h-18 {\n    height: calc(var(--spacing) * 18);\n  }\n\n  .h-\\[480px\\] {\n    height: 480px;\n  }\n\n  .h-full {\n    height: 100%;\n  }\n\n  .max-h-\\[70vh\\] {\n    max-height: 70vh;\n  }\n\n  .w-1 {\n    width: calc(var(--spacing) * 1);\n  }\n\n  .w-1\\.5 {\n    width: calc(var(--spacing) * 1.5);\n  }\n\n  .w-2 {\n    width: calc(var(--spacing) * 2);\n  }\n\n  .w-3 {\n    width: calc(var(--spacing) * 3);\n  }\n\n  .w-4 {\n    width: calc(var(--spacing) * 4);\n  }\n\n  .w-6 {\n    width: calc(var(--spacing) * 6);\n  }\n\n  .w-7 {\n    width: calc(var(--spacing) * 7);\n  }\n\n  .w-8 {\n    width: calc(var(--spacing) * 8);\n  }\n\n  .w-10 {\n    width: calc(var(--spacing) * 10);\n  }\n\n  .w-16 {\n    width: calc(var(--spacing) * 16);\n  }\n\n  .w-40 {\n    width: calc(var(--spacing) * 40);\n  }\n\n  .w-48 {\n    width: calc(var(--spacing) * 48);\n  }\n\n  .w-\\[320px\\] {\n    width: 320px;\n  }\n\n  .w-full {\n    width: 100%;\n  }\n\n  .w-px {\n    width: 1px;\n  }\n\n  .max-w-\\[64px\\] {\n    max-width: 64px;\n  }\n\n  .max-w-\\[120px\\] {\n    max-width: 120px;\n  }\n\n  .max-w-\\[min\\(800px\\,94vw\\)\\] {\n    max-width: min(800px, 94vw);\n  }\n\n  .max-w-full {\n    max-width: 100%;\n  }\n\n  .flex-1 {\n    flex: 1;\n  }\n\n  .flex-shrink {\n    flex-shrink: 1;\n  }\n\n  .flex-shrink-0, .shrink-0 {\n    flex-shrink: 0;\n  }\n\n  .border-collapse {\n    border-collapse: collapse;\n  }\n\n  .-translate-x-1 {\n    --tw-translate-x: calc(var(--spacing) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .-translate-x-1\\/2 {\n    --tw-translate-x: calc(calc(1 / 2 * 100%) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .translate-x-0 {\n    --tw-translate-x: calc(var(--spacing) * 0);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .translate-x-5 {\n    --tw-translate-x: calc(var(--spacing) * 5);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .-translate-y-1 {\n    --tw-translate-y: calc(var(--spacing) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .-translate-y-1\\/2 {\n    --tw-translate-y: calc(calc(1 / 2 * 100%) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .translate-y-4 {\n    --tw-translate-y: calc(var(--spacing) * 4);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .scale-110 {\n    --tw-scale-x: 110%;\n    --tw-scale-y: 110%;\n    --tw-scale-z: 110%;\n    scale: var(--tw-scale-x) var(--tw-scale-y);\n  }\n\n  .rotate-90 {\n    rotate: 90deg;\n  }\n\n  .transform {\n    transform: var(--tw-rotate-x,  ) var(--tw-rotate-y,  ) var(--tw-rotate-z,  ) var(--tw-skew-x,  ) var(--tw-skew-y,  );\n  }\n\n  .animate-bounce {\n    animation: var(--animate-bounce);\n  }\n\n  .animate-pulse {\n    animation: var(--animate-pulse);\n  }\n\n  .cursor-crosshair {\n    cursor: crosshair;\n  }\n\n  .cursor-grab {\n    cursor: grab;\n  }\n\n  .cursor-nwse-resize {\n    cursor: nwse-resize;\n  }\n\n  .cursor-pointer {\n    cursor: pointer;\n  }\n\n  .cursor-text {\n    cursor: text;\n  }\n\n  .resize {\n    resize: both;\n  }\n\n  .resize-none {\n    resize: none;\n  }\n\n  .appearance-none {\n    appearance: none;\n  }\n\n  .grid-cols-1 {\n    grid-template-columns: repeat(1, minmax(0, 1fr));\n  }\n\n  .grid-cols-4 {\n    grid-template-columns: repeat(4, minmax(0, 1fr));\n  }\n\n  .flex-col {\n    flex-direction: column;\n  }\n\n  .flex-wrap {\n    flex-wrap: wrap;\n  }\n\n  .items-center {\n    align-items: center;\n  }\n\n  .items-start {\n    align-items: flex-start;\n  }\n\n  .justify-between {\n    justify-content: space-between;\n  }\n\n  .justify-center {\n    justify-content: center;\n  }\n\n  .gap-0 {\n    gap: calc(var(--spacing) * 0);\n  }\n\n  .gap-0\\.5 {\n    gap: calc(var(--spacing) * .5);\n  }\n\n  .gap-1 {\n    gap: calc(var(--spacing) * 1);\n  }\n\n  .gap-1\\.5 {\n    gap: calc(var(--spacing) * 1.5);\n  }\n\n  .gap-2 {\n    gap: calc(var(--spacing) * 2);\n  }\n\n  .gap-3 {\n    gap: calc(var(--spacing) * 3);\n  }\n\n  .gap-4 {\n    gap: calc(var(--spacing) * 4);\n  }\n\n  .gap-6 {\n    gap: calc(var(--spacing) * 6);\n  }\n\n  :where(.space-y-2 > :not(:last-child)) {\n    --tw-space-y-reverse: 0;\n    margin-block-start: calc(calc(var(--spacing) * 2) * var(--tw-space-y-reverse));\n    margin-block-end: calc(calc(var(--spacing) * 2) * calc(1 - var(--tw-space-y-reverse)));\n  }\n\n  :where(.space-y-6 > :not(:last-child)) {\n    --tw-space-y-reverse: 0;\n    margin-block-start: calc(calc(var(--spacing) * 6) * var(--tw-space-y-reverse));\n    margin-block-end: calc(calc(var(--spacing) * 6) * calc(1 - var(--tw-space-y-reverse)));\n  }\n\n  .truncate {\n    text-overflow: ellipsis;\n    white-space: nowrap;\n    overflow: hidden;\n  }\n\n  .overflow-hidden {\n    overflow: hidden;\n  }\n\n  .overflow-visible {\n    overflow: visible;\n  }\n\n  .overflow-y-auto {\n    overflow-y: auto;\n  }\n\n  .rounded {\n    border-radius: .25rem;\n  }\n\n  .rounded-2xl {\n    border-radius: var(--radius-2xl);\n  }\n\n  .rounded-3xl {\n    border-radius: var(--radius-3xl);\n  }\n\n  .rounded-full {\n    border-radius: 3.40282e38px;\n  }\n\n  .rounded-lg {\n    border-radius: var(--radius-lg);\n  }\n\n  .rounded-md {\n    border-radius: var(--radius-md);\n  }\n\n  .rounded-xl {\n    border-radius: var(--radius-xl);\n  }\n\n  .border {\n    border-style: var(--tw-border-style);\n    border-width: 1px;\n  }\n\n  .border-2 {\n    border-style: var(--tw-border-style);\n    border-width: 2px;\n  }\n\n  .border-4 {\n    border-style: var(--tw-border-style);\n    border-width: 4px;\n  }\n\n  .border-t {\n    border-top-style: var(--tw-border-style);\n    border-top-width: 1px;\n  }\n\n  .border-b {\n    border-bottom-style: var(--tw-border-style);\n    border-bottom-width: 1px;\n  }\n\n  .border-none {\n    --tw-border-style: none;\n    border-style: none;\n  }\n\n  .border-black {\n    border-color: var(--color-black);\n  }\n\n  .border-black\\/5 {\n    border-color: #0000000d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-black\\/5 {\n      border-color: color-mix(in oklab, var(--color-black) 5%, transparent);\n    }\n  }\n\n  .border-black\\/10 {\n    border-color: #0000001a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-black\\/10 {\n      border-color: color-mix(in oklab, var(--color-black) 10%, transparent);\n    }\n  }\n\n  .border-brand-primary {\n    border-color: var(--color-brand-primary);\n  }\n\n  .border-brand-primary\\/50 {\n    border-color: #ffd54f80;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-brand-primary\\/50 {\n      border-color: color-mix(in oklab, var(--color-brand-primary) 50%, transparent);\n    }\n  }\n\n  .border-gray-100 {\n    border-color: var(--color-gray-100);\n  }\n\n  .border-gray-200 {\n    border-color: var(--color-gray-200);\n  }\n\n  .border-red-100 {\n    border-color: var(--color-red-100);\n  }\n\n  .border-white {\n    border-color: var(--color-white);\n  }\n\n  .border-white\\/5 {\n    border-color: #ffffff0d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-white\\/5 {\n      border-color: color-mix(in oklab, var(--color-white) 5%, transparent);\n    }\n  }\n\n  .border-white\\/10 {\n    border-color: #ffffff1a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-white\\/10 {\n      border-color: color-mix(in oklab, var(--color-white) 10%, transparent);\n    }\n  }\n\n  .border-white\\/20 {\n    border-color: #fff3;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-white\\/20 {\n      border-color: color-mix(in oklab, var(--color-white) 20%, transparent);\n    }\n  }\n\n  .bg-black {\n    background-color: var(--color-black);\n  }\n\n  .bg-black\\/5 {\n    background-color: #0000000d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-black\\/5 {\n      background-color: color-mix(in oklab, var(--color-black) 5%, transparent);\n    }\n  }\n\n  .bg-black\\/10 {\n    background-color: #0000001a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-black\\/10 {\n      background-color: color-mix(in oklab, var(--color-black) 10%, transparent);\n    }\n  }\n\n  .bg-black\\/80 {\n    background-color: #000c;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-black\\/80 {\n      background-color: color-mix(in oklab, var(--color-black) 80%, transparent);\n    }\n  }\n\n  .bg-brand-primary {\n    background-color: var(--color-brand-primary);\n  }\n\n  .bg-brand-primary\\/5 {\n    background-color: #ffd54f0d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-brand-primary\\/5 {\n      background-color: color-mix(in oklab, var(--color-brand-primary) 5%, transparent);\n    }\n  }\n\n  .bg-gray-50 {\n    background-color: var(--color-gray-50);\n  }\n\n  .bg-gray-100 {\n    background-color: var(--color-gray-100);\n  }\n\n  .bg-gray-200 {\n    background-color: var(--color-gray-200);\n  }\n\n  .bg-gray-300 {\n    background-color: var(--color-gray-300);\n  }\n\n  .bg-gray-800 {\n    background-color: var(--color-gray-800);\n  }\n\n  .bg-gray-900 {\n    background-color: var(--color-gray-900);\n  }\n\n  .bg-note-blue {\n    background-color: var(--color-note-blue);\n  }\n\n  .bg-note-green {\n    background-color: var(--color-note-green);\n  }\n\n  .bg-note-lavender {\n    background-color: var(--color-note-lavender);\n  }\n\n  .bg-note-pink {\n    background-color: var(--color-note-pink);\n  }\n\n  .bg-note-yellow {\n    background-color: var(--color-note-yellow);\n  }\n\n  .bg-red-50 {\n    background-color: var(--color-red-50);\n  }\n\n  .bg-red-500 {\n    background-color: var(--color-red-500);\n  }\n\n  .bg-transparent {\n    background-color: #0000;\n  }\n\n  .bg-white {\n    background-color: var(--color-white);\n  }\n\n  .bg-white\\/5 {\n    background-color: #ffffff0d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-white\\/5 {\n      background-color: color-mix(in oklab, var(--color-white) 5%, transparent);\n    }\n  }\n\n  .bg-white\\/10 {\n    background-color: #ffffff1a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-white\\/10 {\n      background-color: color-mix(in oklab, var(--color-white) 10%, transparent);\n    }\n  }\n\n  .fill-current {\n    fill: currentColor;\n  }\n\n  .p-0 {\n    padding: calc(var(--spacing) * 0);\n  }\n\n  .p-0\\.5 {\n    padding: calc(var(--spacing) * .5);\n  }\n\n  .p-1 {\n    padding: calc(var(--spacing) * 1);\n  }\n\n  .p-2 {\n    padding: calc(var(--spacing) * 2);\n  }\n\n  .p-3 {\n    padding: calc(var(--spacing) * 3);\n  }\n\n  .p-4 {\n    padding: calc(var(--spacing) * 4);\n  }\n\n  .p-10 {\n    padding: calc(var(--spacing) * 10);\n  }\n\n  .px-1 {\n    padding-inline: calc(var(--spacing) * 1);\n  }\n\n  .px-1\\.5 {\n    padding-inline: calc(var(--spacing) * 1.5);\n  }\n\n  .px-2 {\n    padding-inline: calc(var(--spacing) * 2);\n  }\n\n  .px-3 {\n    padding-inline: calc(var(--spacing) * 3);\n  }\n\n  .px-4 {\n    padding-inline: calc(var(--spacing) * 4);\n  }\n\n  .px-6 {\n    padding-inline: calc(var(--spacing) * 6);\n  }\n\n  .px-8 {\n    padding-inline: calc(var(--spacing) * 8);\n  }\n\n  .py-0 {\n    padding-block: calc(var(--spacing) * 0);\n  }\n\n  .py-0\\.5 {\n    padding-block: calc(var(--spacing) * .5);\n  }\n\n  .py-1 {\n    padding-block: calc(var(--spacing) * 1);\n  }\n\n  .py-1\\.5 {\n    padding-block: calc(var(--spacing) * 1.5);\n  }\n\n  .py-2 {\n    padding-block: calc(var(--spacing) * 2);\n  }\n\n  .py-3 {\n    padding-block: calc(var(--spacing) * 3);\n  }\n\n  .py-4 {\n    padding-block: calc(var(--spacing) * 4);\n  }\n\n  .pr-3 {\n    padding-right: calc(var(--spacing) * 3);\n  }\n\n  .pl-8 {\n    padding-left: calc(var(--spacing) * 8);\n  }\n\n  .text-center {\n    text-align: center;\n  }\n\n  .text-left {\n    text-align: left;\n  }\n\n  .font-sans {\n    font-family: var(--font-sans);\n  }\n\n  .text-2xl {\n    font-size: var(--text-2xl);\n    line-height: var(--tw-leading, var(--text-2xl--line-height));\n  }\n\n  .text-lg {\n    font-size: var(--text-lg);\n    line-height: var(--tw-leading, var(--text-lg--line-height));\n  }\n\n  .text-sm {\n    font-size: var(--text-sm);\n    line-height: var(--tw-leading, var(--text-sm--line-height));\n  }\n\n  .text-xl {\n    font-size: var(--text-xl);\n    line-height: var(--tw-leading, var(--text-xl--line-height));\n  }\n\n  .text-xs {\n    font-size: var(--text-xs);\n    line-height: var(--tw-leading, var(--text-xs--line-height));\n  }\n\n  .text-\\[9px\\] {\n    font-size: 9px;\n  }\n\n  .text-\\[10px\\] {\n    font-size: 10px;\n  }\n\n  .text-\\[11px\\] {\n    font-size: 11px;\n  }\n\n  .leading-none {\n    --tw-leading: 1;\n    line-height: 1;\n  }\n\n  .leading-relaxed {\n    --tw-leading: var(--leading-relaxed);\n    line-height: var(--leading-relaxed);\n  }\n\n  .font-black {\n    --tw-font-weight: var(--font-weight-black);\n    font-weight: var(--font-weight-black);\n  }\n\n  .font-bold {\n    --tw-font-weight: var(--font-weight-bold);\n    font-weight: var(--font-weight-bold);\n  }\n\n  .font-medium {\n    --tw-font-weight: var(--font-weight-medium);\n    font-weight: var(--font-weight-medium);\n  }\n\n  .font-semibold {\n    --tw-font-weight: var(--font-weight-semibold);\n    font-weight: var(--font-weight-semibold);\n  }\n\n  .tracking-wider {\n    --tw-tracking: var(--tracking-wider);\n    letter-spacing: var(--tracking-wider);\n  }\n\n  .whitespace-nowrap {\n    white-space: nowrap;\n  }\n\n  .whitespace-pre-wrap {\n    white-space: pre-wrap;\n  }\n\n  .text-black {\n    color: var(--color-black);\n  }\n\n  .text-black\\/30 {\n    color: #0000004d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .text-black\\/30 {\n      color: color-mix(in oklab, var(--color-black) 30%, transparent);\n    }\n  }\n\n  .text-black\\/50 {\n    color: #00000080;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .text-black\\/50 {\n      color: color-mix(in oklab, var(--color-black) 50%, transparent);\n    }\n  }\n\n  .text-brand-primary {\n    color: var(--color-brand-primary);\n  }\n\n  .text-gray-300 {\n    color: var(--color-gray-300);\n  }\n\n  .text-gray-400 {\n    color: var(--color-gray-400);\n  }\n\n  .text-gray-500 {\n    color: var(--color-gray-500);\n  }\n\n  .text-gray-700 {\n    color: var(--color-gray-700);\n  }\n\n  .text-gray-800 {\n    color: var(--color-gray-800);\n  }\n\n  .text-gray-900 {\n    color: var(--color-gray-900);\n  }\n\n  .text-green-600 {\n    color: var(--color-green-600);\n  }\n\n  .text-red-400 {\n    color: var(--color-red-400);\n  }\n\n  .text-red-500 {\n    color: var(--color-red-500);\n  }\n\n  .text-red-600 {\n    color: var(--color-red-600);\n  }\n\n  .text-white {\n    color: var(--color-white);\n  }\n\n  .uppercase {\n    text-transform: uppercase;\n  }\n\n  .italic {\n    font-style: italic;\n  }\n\n  .underline {\n    text-decoration-line: underline;\n  }\n\n  .accent-brand-primary {\n    accent-color: var(--color-brand-primary);\n  }\n\n  .opacity-0 {\n    opacity: 0;\n  }\n\n  .opacity-50 {\n    opacity: .5;\n  }\n\n  .opacity-80 {\n    opacity: .8;\n  }\n\n  .opacity-100 {\n    opacity: 1;\n  }\n\n  .mix-blend-difference {\n    mix-blend-mode: difference;\n  }\n\n  .shadow {\n    --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, #0000001a), 0 1px 2px -1px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-2xl {\n    --tw-shadow: 0 25px 50px -12px var(--tw-shadow-color, #00000040);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-\\[0_0_10px_rgba\\(255\\,213\\,79\\,0\\.2\\)\\] {\n    --tw-shadow: 0 0 10px var(--tw-shadow-color, #ffd54f33);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-\\[0_0_30px_rgba\\(255\\,213\\,79\\,0\\.5\\)\\] {\n    --tw-shadow: 0 0 30px var(--tw-shadow-color, #ffd54f80);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-\\[0_20px_60px_rgba\\(0\\,0\\,0\\,0\\.6\\)\\,0_0_25px_rgba\\(255\\,213\\,79\\,0\\.2\\)\\] {\n    --tw-shadow: 0 20px 60px var(--tw-shadow-color, #0009), 0 0 25px var(--tw-shadow-color, #ffd54f33);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-lg {\n    --tw-shadow: 0 10px 15px -3px var(--tw-shadow-color, #0000001a), 0 4px 6px -4px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-md {\n    --tw-shadow: 0 4px 6px -1px var(--tw-shadow-color, #0000001a), 0 2px 4px -2px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-sm {\n    --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, #0000001a), 0 1px 2px -1px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-xl {\n    --tw-shadow: 0 20px 25px -5px var(--tw-shadow-color, #0000001a), 0 8px 10px -6px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-1 {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-2 {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-4 {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(4px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-brand-primary {\n    --tw-ring-color: var(--color-brand-primary);\n  }\n\n  .outline {\n    outline-style: var(--tw-outline-style);\n    outline-width: 1px;\n  }\n\n  .blur {\n    --tw-blur: blur(8px);\n    filter: var(--tw-blur,  ) var(--tw-brightness,  ) var(--tw-contrast,  ) var(--tw-grayscale,  ) var(--tw-hue-rotate,  ) var(--tw-invert,  ) var(--tw-saturate,  ) var(--tw-sepia,  ) var(--tw-drop-shadow,  );\n  }\n\n  .filter {\n    filter: var(--tw-blur,  ) var(--tw-brightness,  ) var(--tw-contrast,  ) var(--tw-grayscale,  ) var(--tw-hue-rotate,  ) var(--tw-invert,  ) var(--tw-saturate,  ) var(--tw-sepia,  ) var(--tw-drop-shadow,  );\n  }\n\n  .backdrop-blur-md {\n    --tw-backdrop-blur: blur(var(--blur-md));\n    -webkit-backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n    backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n  }\n\n  .backdrop-blur-xl {\n    --tw-backdrop-blur: blur(var(--blur-xl));\n    -webkit-backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n    backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n  }\n\n  .backdrop-filter {\n    -webkit-backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n    backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n  }\n\n  .transition {\n    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-all {\n    transition-property: all;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-colors {\n    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-opacity {\n    transition-property: opacity;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-transform {\n    transition-property: transform, translate, scale, rotate;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .duration-200 {\n    --tw-duration: .2s;\n    transition-duration: .2s;\n  }\n\n  .duration-300 {\n    --tw-duration: .3s;\n    transition-duration: .3s;\n  }\n\n  .duration-500 {\n    --tw-duration: .5s;\n    transition-duration: .5s;\n  }\n\n  .ease-in-out {\n    --tw-ease: var(--ease-in-out);\n    transition-timing-function: var(--ease-in-out);\n  }\n\n  .outline-none {\n    --tw-outline-style: none;\n    outline-style: none;\n  }\n\n  @media (hover: hover) {\n    .group-hover\\:scale-125:is(:where(.group):hover *) {\n      --tw-scale-x: 125%;\n      --tw-scale-y: 125%;\n      --tw-scale-z: 125%;\n      scale: var(--tw-scale-x) var(--tw-scale-y);\n    }\n\n    .group-hover\\:opacity-100:is(:where(.group):hover *) {\n      opacity: 1;\n    }\n\n    .hover\\:scale-105:hover {\n      --tw-scale-x: 105%;\n      --tw-scale-y: 105%;\n      --tw-scale-z: 105%;\n      scale: var(--tw-scale-x) var(--tw-scale-y);\n    }\n\n    .hover\\:scale-110:hover {\n      --tw-scale-x: 110%;\n      --tw-scale-y: 110%;\n      --tw-scale-z: 110%;\n      scale: var(--tw-scale-x) var(--tw-scale-y);\n    }\n\n    .hover\\:scale-125:hover {\n      --tw-scale-x: 125%;\n      --tw-scale-y: 125%;\n      --tw-scale-z: 125%;\n      scale: var(--tw-scale-x) var(--tw-scale-y);\n    }\n\n    .hover\\:border-brand-primary:hover {\n      border-color: var(--color-brand-primary);\n    }\n\n    .hover\\:border-gray-300:hover {\n      border-color: var(--color-gray-300);\n    }\n\n    .hover\\:bg-black\\/5:hover {\n      background-color: #0000000d;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-black\\/5:hover {\n        background-color: color-mix(in oklab, var(--color-black) 5%, transparent);\n      }\n    }\n\n    .hover\\:bg-black\\/10:hover {\n      background-color: #0000001a;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-black\\/10:hover {\n        background-color: color-mix(in oklab, var(--color-black) 10%, transparent);\n      }\n    }\n\n    .hover\\:bg-gray-100:hover {\n      background-color: var(--color-gray-100);\n    }\n\n    .hover\\:bg-gray-700:hover {\n      background-color: var(--color-gray-700);\n    }\n\n    .hover\\:bg-red-100:hover {\n      background-color: var(--color-red-100);\n    }\n\n    .hover\\:bg-red-500\\/10:hover {\n      background-color: #fb2c361a;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-red-500\\/10:hover {\n        background-color: color-mix(in oklab, var(--color-red-500) 10%, transparent);\n      }\n    }\n\n    .hover\\:bg-white\\/5:hover {\n      background-color: #ffffff0d;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-white\\/5:hover {\n        background-color: color-mix(in oklab, var(--color-white) 5%, transparent);\n      }\n    }\n\n    .hover\\:bg-white\\/10:hover {\n      background-color: #ffffff1a;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-white\\/10:hover {\n        background-color: color-mix(in oklab, var(--color-white) 10%, transparent);\n      }\n    }\n\n    .hover\\:bg-white\\/20:hover {\n      background-color: #fff3;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-white\\/20:hover {\n        background-color: color-mix(in oklab, var(--color-white) 20%, transparent);\n      }\n    }\n\n    .hover\\:text-brand-accent:hover {\n      color: var(--color-brand-accent);\n    }\n\n    .hover\\:text-gray-300:hover {\n      color: var(--color-gray-300);\n    }\n\n    .hover\\:text-gray-600:hover {\n      color: var(--color-gray-600);\n    }\n\n    .hover\\:text-gray-700:hover {\n      color: var(--color-gray-700);\n    }\n\n    .hover\\:text-red-400:hover {\n      color: var(--color-red-400);\n    }\n\n    .hover\\:text-red-600:hover {\n      color: var(--color-red-600);\n    }\n\n    .hover\\:text-white:hover {\n      color: var(--color-white);\n    }\n  }\n\n  .focus\\:ring-1:focus {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .focus\\:ring-brand-primary:focus {\n    --tw-ring-color: var(--color-brand-primary);\n  }\n\n  .active\\:scale-95:active {\n    --tw-scale-x: 95%;\n    --tw-scale-y: 95%;\n    --tw-scale-z: 95%;\n    scale: var(--tw-scale-x) var(--tw-scale-y);\n  }\n\n  .active\\:cursor-grabbing:active {\n    cursor: grabbing;\n  }\n\n  .\\[\\&\\:\\:-webkit-color-swatch\\]\\:rounded-full::-webkit-color-swatch {\n    border-radius: 3.40282e38px;\n  }\n\n  .\\[\\&\\:\\:-webkit-color-swatch\\]\\:border-none::-webkit-color-swatch {\n    --tw-border-style: none;\n    border-style: none;\n  }\n\n  .\\[\\&\\:\\:-webkit-color-swatch-wrapper\\]\\:p-0::-webkit-color-swatch-wrapper {\n    padding: calc(var(--spacing) * 0);\n  }\n}\n\n:root {\n  font-family: Pretendard Variable, system-ui, -apple-system, sans-serif;\n}\n\nbody {\n  margin: 0;\n  overflow-x: hidden;\n}\n\n@property --tw-translate-x {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-translate-y {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-translate-z {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-scale-x {\n  syntax: "*";\n  inherits: false;\n  initial-value: 1;\n}\n\n@property --tw-scale-y {\n  syntax: "*";\n  inherits: false;\n  initial-value: 1;\n}\n\n@property --tw-scale-z {\n  syntax: "*";\n  inherits: false;\n  initial-value: 1;\n}\n\n@property --tw-rotate-x {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-rotate-y {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-rotate-z {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-skew-x {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-skew-y {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-space-y-reverse {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-border-style {\n  syntax: "*";\n  inherits: false;\n  initial-value: solid;\n}\n\n@property --tw-leading {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-font-weight {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-tracking {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-shadow-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-shadow-alpha {\n  syntax: "<percentage>";\n  inherits: false;\n  initial-value: 100%;\n}\n\n@property --tw-inset-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-inset-shadow-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-inset-shadow-alpha {\n  syntax: "<percentage>";\n  inherits: false;\n  initial-value: 100%;\n}\n\n@property --tw-ring-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-ring-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-inset-ring-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-inset-ring-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-ring-inset {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-ring-offset-width {\n  syntax: "<length>";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-ring-offset-color {\n  syntax: "*";\n  inherits: false;\n  initial-value: #fff;\n}\n\n@property --tw-ring-offset-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-outline-style {\n  syntax: "*";\n  inherits: false;\n  initial-value: solid;\n}\n\n@property --tw-blur {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-brightness {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-contrast {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-grayscale {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-hue-rotate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-invert {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-opacity {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-saturate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-sepia {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-drop-shadow {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-drop-shadow-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-drop-shadow-alpha {\n  syntax: "<percentage>";\n  inherits: false;\n  initial-value: 100%;\n}\n\n@property --tw-drop-shadow-size {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-blur {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-brightness {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-contrast {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-grayscale {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-hue-rotate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-invert {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-opacity {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-saturate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-sepia {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-duration {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-ease {\n  syntax: "*";\n  inherits: false\n}\n\n@keyframes pulse {\n  50% {\n    opacity: .5;\n  }\n}\n\n@keyframes bounce {\n  0%, 100% {\n    animation-timing-function: cubic-bezier(.8, 0, 1, 1);\n    transform: translateY(-25%);\n  }\n\n  50% {\n    animation-timing-function: cubic-bezier(0, 0, .2, 1);\n    transform: none;\n  }\n}\n';
   const contentStyles = "/* PagePost Content Styles */\r\n.pagepost-note-container {\r\n    all: initial;\r\n    position: absolute;\r\n    z-index: 2147483647;\r\n}";
   let lastElement = null;
   let lastClickInfo = { x: 0, y: 0 };
