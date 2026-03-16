@@ -2,10 +2,12 @@ import React, { useRef, useState, useEffect } from 'react';
 import { useNoteStore } from '../store/useNoteStore';
 
 export const MarkupLayer: React.FC = () => {
-    const { mode, markups, addMarkup, currentTool, currentColor } = useNoteStore();
+    const { mode, markups, addMarkup, deleteMarkup, currentTool, currentColor, settings } = useNoteStore();
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [isDrawing, setIsDrawing] = useState(false);
+    const drawingRef = useRef(false);
+    const [isDrawing, setIsDrawing] = useState(false); // Keep for UI/render cycle
     const [currentPoints, setCurrentPoints] = useState<{ x: number; y: number }[]>([]);
+    const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -40,10 +42,10 @@ export const MarkupLayer: React.FC = () => {
             });
 
             // Draw current path
-            if (isDrawing && currentPoints.length > 0) {
+            if (currentPoints.length > 0) {
                 ctx.beginPath();
                 ctx.strokeStyle = currentColor;
-                ctx.lineWidth = currentTool === 'highlight' ? 20 : 3;
+                ctx.lineWidth = currentTool === 'highlight' ? settings.highlightWidth : settings.penWidth;
                 ctx.lineCap = 'round';
                 ctx.lineJoin = 'round';
                 ctx.globalAlpha = currentTool === 'highlight' ? 0.4 : 1.0;
@@ -57,7 +59,7 @@ export const MarkupLayer: React.FC = () => {
         };
 
         render();
-    }, [markups, isDrawing, currentPoints, currentColor, currentTool]);
+    }, [markups, isDrawing, currentPoints, currentColor, currentTool, canvasSize]);
 
     // Handle canvas resizing to match document
     useEffect(() => {
@@ -65,10 +67,16 @@ export const MarkupLayer: React.FC = () => {
             if (canvasRef.current) {
                 const body = document.body;
                 const html = document.documentElement;
+                if (!body || !html) return;
                 const height = Math.max(body.scrollHeight, body.offsetHeight, html.clientHeight, html.scrollHeight, html.offsetHeight);
+                const width = html.clientWidth; // Use clientWidth to exclude scrollbar width
 
-                canvasRef.current.width = window.innerWidth;
-                canvasRef.current.height = height;
+                // Only update if size actually changed to avoid unnecessary canvas clears
+                if (canvasRef.current.width !== width || canvasRef.current.height !== height) {
+                    canvasRef.current.width = width;
+                    canvasRef.current.height = height;
+                    setCanvasSize({ width, height });
+                }
             }
         };
         updateSize();
@@ -81,23 +89,52 @@ export const MarkupLayer: React.FC = () => {
         };
     }, []);
 
-    if (mode !== 'markup') return null;
+    // We no longer return null here to keep markups visible in all modes
+    // if (mode !== 'markup') return null;
 
     const handleMouseDown = (e: React.MouseEvent) => {
-        if (currentTool === 'eraser') return;
+        if (mode !== 'markup') return; // Only allow interaction in markup mode
+        e.preventDefault(); // Prevent text selection/drag interference
+        drawingRef.current = true;
         setIsDrawing(true);
         const y = e.clientY + window.scrollY;
-        setCurrentPoints([{ x: e.clientX, y }]);
+
+        if (currentTool === 'eraser') {
+            checkAndErase(e.clientX, y);
+        } else {
+            setCurrentPoints([{ x: e.clientX, y }]);
+        }
+    };
+
+    const checkAndErase = (x: number, y: number) => {
+        const threshold = 15; // Detection radius
+        const markupToDelete = markups.find(markup => {
+            if (!markup.points) return false;
+            return markup.points.some(p => {
+                const distance = Math.sqrt(Math.pow(p.x - x, 2) + Math.pow(p.y - y, 2));
+                return distance < threshold;
+            });
+        });
+
+        if (markupToDelete) {
+            deleteMarkup(markupToDelete.id);
+        }
     };
 
     const handleMouseMove = (e: React.MouseEvent) => {
-        if (!isDrawing) return;
+        if (!drawingRef.current) return;
         const y = e.clientY + window.scrollY;
-        setCurrentPoints(prev => [...prev, { x: e.clientX, y }]);
+
+        if (currentTool === 'eraser') {
+            checkAndErase(e.clientX, y);
+        } else {
+            setCurrentPoints(prev => [...prev, { x: e.clientX, y }]);
+        }
     };
 
     const handleMouseUp = () => {
-        if (!isDrawing) return;
+        if (!drawingRef.current) return;
+        drawingRef.current = false;
         setIsDrawing(false);
 
         if (currentPoints.length > 1) {
@@ -108,7 +145,7 @@ export const MarkupLayer: React.FC = () => {
                 points: currentPoints,
                 style: {
                     strokeColor: currentColor,
-                    strokeWidth: currentTool === 'highlight' ? 20 : 3,
+                    strokeWidth: currentTool === 'highlight' ? settings.highlightWidth : settings.penWidth,
                     opacity: currentTool === 'highlight' ? 0.4 : 1.0
                 },
                 createdAt: Date.now(),
@@ -126,8 +163,13 @@ export const MarkupLayer: React.FC = () => {
                 position: 'absolute',
                 top: 0,
                 left: 0,
-                cursor: currentTool === 'highlight' ? 'cell' : 'crosshair',
-                zIndex: 10
+                cursor: mode === 'markup'
+                    ? (currentTool === 'highlight' ? 'cell' : currentTool === 'eraser' ? 'not-allowed' : 'crosshair')
+                    : 'default',
+                zIndex: 10,
+                maxWidth: '100%',
+                display: 'block',
+                pointerEvents: mode === 'markup' ? 'auto' : 'none'
             }}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}

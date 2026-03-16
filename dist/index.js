@@ -12601,7 +12601,9 @@ const useNoteStore = create((set, get) => {
       fontFamily: "Pretendard, -apple-system, sans-serif",
       fontSize: 14,
       textColor: "#1a1a1a",
-      showToolbar: true
+      showToolbar: true,
+      penWidth: 3,
+      highlightWidth: 20
     },
     markups: [],
     markupFetchRequestId: 0,
@@ -12780,16 +12782,16 @@ const useNoteStore = create((set, get) => {
     addMarkup: async (markup) => {
       if (!isContextValid()) throw new Error("Extension context invalidated");
       try {
-        const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
-        const allMarkups = result[MARKUP_STORAGE_KEY] || [];
         const normalizedUrl = normalizeUrl(markup.url);
         const markupWithUrl = { ...markup, url: normalizedUrl };
-        const updatedAllMarkups = [...allMarkups, markupWithUrl];
-        await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
         const { currentUrl, markups } = get();
         if (currentUrl && normalizeUrl(currentUrl) === normalizedUrl) {
           set({ markups: [...markups, markupWithUrl] });
         }
+        const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+        const allMarkups = result[MARKUP_STORAGE_KEY] || [];
+        const updatedAllMarkups = [...allMarkups, markupWithUrl];
+        await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
       } catch (error) {
         console.error("Failed to add markup:", error);
       }

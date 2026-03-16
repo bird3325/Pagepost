@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { useNoteStore } from '../store/useNoteStore';
-import { StickyNote, PenTool, Highlighter, Eraser, Trash2, ChevronLeft, ChevronRight, Palette, Type, Minus } from 'lucide-react';
+import { StickyNote, PenTool, Highlighter, Eraser, Trash2, ChevronLeft, ChevronRight, Palette, Type, Minus, Camera } from 'lucide-react';
 
 export const FloatingToolbar: React.FC = () => {
     const { mode, setMode, currentTool, setTool, currentColor, setColor, clearAllMarkups, settings, updateSettings } = useNoteStore();
     const [isExpanded, setIsExpanded] = useState(true);
     const [isVisible, setIsVisible] = useState(false);
-    const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
 
     React.useEffect(() => {
         if (isExpanded) {
@@ -17,16 +16,6 @@ export const FloatingToolbar: React.FC = () => {
     }, [isExpanded]);
 
     const [isFontPickerOpen, setIsFontPickerOpen] = useState(false);
-
-    const colors = [
-        { name: 'Blue', value: '#3b82f6' },
-        { name: 'Red', value: '#ef4444' },
-        { name: 'Green', value: '#10b981' },
-        { name: 'Yellow', value: '#f59e0b' },
-        { name: 'Purple', value: '#8b5cf6' },
-        { name: 'Pink', value: '#ec4899' },
-        { name: 'Black', value: '#1a1a1a' },
-    ];
 
     const fonts = [
         { name: '기본 (Pretendard)', value: 'Pretendard, -apple-system, sans-serif' },
@@ -77,6 +66,13 @@ export const FloatingToolbar: React.FC = () => {
                                     title="마크업 모드"
                                 >
                                     <PenTool size={20} />
+                                </button>
+                                <button
+                                    onClick={() => setMode('capture')}
+                                    className={`p-2 rounded-lg transition-all ${mode === 'capture' ? 'bg-brand-primary shadow-sm text-gray-900' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                                    title="캡쳐 모드"
+                                >
+                                    <Camera size={20} />
                                 </button>
                             </div>
 
@@ -170,28 +166,58 @@ export const FloatingToolbar: React.FC = () => {
 
                                     <div className="w-px h-8 bg-white/10 mx-1" />
 
-                                    {/* Color Picker */}
-                                    <div className="relative">
-                                        <button
-                                            onClick={() => setIsColorPickerOpen(!isColorPickerOpen)}
-                                            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-                                            style={{ color: currentColor }}
-                                        >
-                                            <Palette size={20} />
-                                        </button>
-                                        {isColorPickerOpen && (
-                                            <div className="absolute bottom-full right-0 mb-4 bg-gray-800 shadow-2xl border border-white/10 rounded-xl p-2.5 grid grid-cols-4 gap-2 backdrop-blur-xl">
-                                                {colors.map(color => (
-                                                    <button
-                                                        key={color.value}
-                                                        onClick={() => { setColor(color.value); setIsColorPickerOpen(false); }}
-                                                        className={`w-7 h-7 rounded-full border-2 transition-all hover:scale-125 ${currentColor === color.value ? 'border-white scale-110 shadow-lg' : 'border-white/20'}`}
-                                                        style={{ backgroundColor: color.value }}
-                                                        title={color.name}
-                                                    />
-                                                ))}
+                                    {/* Thickness Selector */}
+                                    {currentTool !== 'eraser' && (
+                                        <div className="flex items-center gap-1 bg-white/5 rounded-xl p-1 border border-white/5">
+                                            <button
+                                                onClick={() => {
+                                                    const key = currentTool === 'highlight' ? 'highlightWidth' : 'penWidth';
+                                                    const min = currentTool === 'highlight' ? 5 : 1;
+                                                    updateSettings({ [key]: Math.max(min, settings[key] - (currentTool === 'highlight' ? 5 : 1)) });
+                                                }}
+                                                className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-all shadow-sm"
+                                                title="두께 감소"
+                                            >
+                                                <Minus size={14} />
+                                            </button>
+                                            <div className="flex flex-col items-center justify-center w-6 gap-0.5">
+                                                <div
+                                                    className="bg-brand-primary rounded-full"
+                                                    style={{
+                                                        width: Math.min(10, (currentTool === 'highlight' ? settings.highlightWidth / 4 : settings.penWidth * 1.5)),
+                                                        height: Math.min(10, (currentTool === 'highlight' ? settings.highlightWidth / 4 : settings.penWidth * 1.5))
+                                                    }}
+                                                />
+                                                <span className="text-[9px] font-bold text-brand-primary leading-none">
+                                                    {currentTool === 'highlight' ? settings.highlightWidth : settings.penWidth}
+                                                </span>
                                             </div>
-                                        )}
+                                            <button
+                                                onClick={() => {
+                                                    const key = currentTool === 'highlight' ? 'highlightWidth' : 'penWidth';
+                                                    const max = currentTool === 'highlight' ? 100 : 20;
+                                                    updateSettings({ [key]: Math.min(max, settings[key] + (currentTool === 'highlight' ? 5 : 1)) });
+                                                }}
+                                                className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-all shadow-sm"
+                                                title="두께 증가"
+                                            >
+                                                <span className="text-sm font-bold">+</span>
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {/* Color Palette Picker (System Color Picker) */}
+                                    <div className="flex items-center ml-1">
+                                        <div className="relative w-8 h-8 rounded-full border-2 border-brand-primary/50 shadow-[0_0_10px_rgba(255,213,79,0.2)] flex items-center justify-center overflow-hidden transition-transform hover:scale-110" style={{ backgroundColor: currentColor }}>
+                                            <Palette size={14} className="text-white mix-blend-difference pointer-events-none" />
+                                            <input
+                                                type="color"
+                                                value={currentColor}
+                                                onChange={(e) => setColor(e.target.value)}
+                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                title="마크업 색상"
+                                            />
+                                        </div>
                                     </div>
 
                                     <button

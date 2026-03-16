@@ -2,6 +2,8 @@
 
 import { createRoot } from 'react-dom/client';
 import { NoteContainer } from '../components/NoteContainer';
+import { MarkupLayer } from '../components/MarkupLayer';
+import { CaptureLayer } from '../components/CaptureLayer';
 import { captureAnchor } from '../utils/anchoring';
 import { useNoteStore } from '../store/useNoteStore';
 import { normalizeUrl } from '../utils/url';
@@ -138,7 +140,13 @@ const init = () => {
         shadow.appendChild(styleTag);
 
         const root = createRoot(rootContainer);
-        root.render(<NoteContainer />);
+        root.render(
+            <>
+                <NoteContainer />
+                <MarkupLayer />
+                <CaptureLayer />
+            </>
+        );
         console.log('PagePost: UI Root rendered into Shadow DOM');
     } catch (err) {
         console.error('PagePost: Initialization failed:', err);
@@ -192,4 +200,3 @@ const observer = new MutationObserver((mutations) => {
 });
 
 observer.observe(document.documentElement, { childList: true, subtree: true });
-

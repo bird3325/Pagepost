@@ -9,7 +9,7 @@ interface NoteState {
     currentUrl: string;
     isGlobalView: boolean;
     searchQuery: string;
-    mode: 'note' | 'markup';
+    mode: 'note' | 'markup' | 'capture';
     currentTool: MarkupType;
     currentColor: string;
     settings: {
@@ -17,6 +17,8 @@ interface NoteState {
         fontSize: number;
         textColor: string;
         showToolbar: boolean;
+        penWidth: number;
+        highlightWidth: number;
     };
     markups: MarkupObject[];
     fetchRequestId: number;
@@ -118,7 +120,9 @@ export const useNoteStore = create<NoteState>((set, get) => {
             fontFamily: 'Pretendard, -apple-system, sans-serif',
             fontSize: 14,
             textColor: '#1a1a1a',
-            showToolbar: true
+            showToolbar: true,
+            penWidth: 3,
+            highlightWidth: 20
         },
         markups: [],
         markupFetchRequestId: 0,
@@ -159,7 +163,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
         },
 
         setSearchQuery: (query: string) => set({ searchQuery: query }),
-        setMode: async (mode: 'note' | 'markup') => {
+        setMode: async (mode: 'note' | 'markup' | 'capture') => {
             if (isContextValid()) {
                 await chrome.storage.local.set({ 'pagepost_mode': mode });
             }
@@ -348,20 +352,20 @@ export const useNoteStore = create<NoteState>((set, get) => {
         addMarkup: async (markup: MarkupObject) => {
             if (!isContextValid()) throw new Error('Extension context invalidated');
             try {
-                const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
-                const allMarkups = (result[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
-
                 const normalizedUrl = normalizeUrl(markup.url);
                 const markupWithUrl = { ...markup, url: normalizedUrl };
 
-                const updatedAllMarkups = [...allMarkups, markupWithUrl];
-                await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
-
-                // Update local state
+                // 1. Optimistic Update: Update local state immediately for instant feedback
                 const { currentUrl, markups } = get();
                 if (currentUrl && normalizeUrl(currentUrl) === normalizedUrl) {
                     set({ markups: [...markups, markupWithUrl] });
                 }
+
+                // 2. Persist to storage
+                const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+                const allMarkups = (result[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
+                const updatedAllMarkups = [...allMarkups, markupWithUrl];
+                await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
             } catch (error) {
                 console.error('Failed to add markup:', error);
             }
