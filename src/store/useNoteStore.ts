@@ -57,6 +57,10 @@ interface NoteState {
     undoMarkup: () => Promise<void>;
     redoMarkup: () => Promise<void>;
     clearAllMarkups: () => Promise<void>;
+
+    // Data Management
+    exportData: (domain?: string) => Promise<void>;
+    importData: (jsonData: string) => Promise<void>;
 }
 
 const STORAGE_KEY = 'pagepost_notes';
@@ -519,6 +523,93 @@ export const useNoteStore = create<NoteState>((set, get) => {
                 set({ markups: [] });
             } catch (error) {
                 console.error('Failed to clear markups:', error);
+            }
+        },
+
+        exportData: async (domain?: string) => {
+            if (!isContextValid()) return;
+            try {
+                const notesResult = await chrome.storage.local.get(STORAGE_KEY);
+                const markupsResult = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+
+                let notesToExport = (notesResult[STORAGE_KEY] || []) as Note[];
+                let markupsToExport = (markupsResult[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
+
+                if (domain) {
+                    notesToExport = notesToExport.filter(n => n.domain === domain);
+                    const urls = new Set(notesToExport.map(n => n.url));
+                    markupsToExport = markupsToExport.filter(m => urls.has(m.url));
+                }
+
+                const data = {
+                    version: '2.0',
+                    exportDate: Date.now(),
+                    notes: notesToExport,
+                    markups: markupsToExport
+                };
+
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                const filename = `pagepost_export_${domain || 'all'}_${timestamp}.json`;
+
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                console.error('Failed to export data:', error);
+            }
+        },
+
+        importData: async (jsonData: string) => {
+            if (!isContextValid()) return;
+            try {
+                const data = JSON.parse(jsonData);
+                if (!data.notes && !data.markups) throw new Error('Invalid data format');
+
+                const notesResult = await chrome.storage.local.get(STORAGE_KEY);
+                const markupsResult = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+
+                const existingNotes = (notesResult[STORAGE_KEY] || []) as Note[];
+                const existingMarkups = (markupsResult[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
+
+                // Merge notes by ID (incoming wins for same ID)
+                const incomingNotes = (data.notes || []) as Note[];
+                const noteMap = new Map<string, Note>();
+                existingNotes.forEach(n => noteMap.set(n.id, n));
+                incomingNotes.forEach(n => noteMap.set(n.id, n));
+
+                // Merge markups by ID
+                const incomingMarkups = (data.markups || []) as MarkupObject[];
+                const markupMap = new Map<string, MarkupObject>();
+                existingMarkups.forEach(m => markupMap.set(m.id, m));
+                incomingMarkups.forEach(m => markupMap.set(m.id, m));
+
+                const mergedNotes = Array.from(noteMap.values());
+                const mergedMarkups = Array.from(markupMap.values());
+
+                await chrome.storage.local.set({
+                    [STORAGE_KEY]: mergedNotes,
+                    [MARKUP_STORAGE_KEY]: mergedMarkups
+                });
+
+                // Refresh state
+                const { currentUrl, isGlobalView, fetchNotesForUrl, fetchMarkupsForUrl, fetchAllNotes, fetchAllMarkups } = get();
+                if (isGlobalView) {
+                    await fetchAllNotes();
+                    await fetchAllMarkups();
+                } else if (currentUrl) {
+                    await fetchNotesForUrl(currentUrl);
+                    await fetchMarkupsForUrl(currentUrl);
+                }
+                alert(`${incomingNotes.length}개의 메모와 ${incomingMarkups.length}개의 마크업을 성공적으로 가져왔습니다.`);
+            } catch (error) {
+                console.error('Failed to import data:', error);
+                alert('데이터를 가져오는데 실패했습니다: ' + (error instanceof Error ? error.message : '알 수 없는 오류'));
             }
         },
     };

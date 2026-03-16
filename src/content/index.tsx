@@ -43,7 +43,7 @@ const handleMessage = (message: any) => {
                 y: Math.max(0, lastClickInfo.y + window.scrollY)
             },
             tags: [],
-            status: 'active' as const,
+            status: 'pending' as const,
             isPinned: false,
             isCollapsed: false,
             fontFamily: currentSettings.fontFamily,

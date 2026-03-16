@@ -12903,6 +12903,76 @@ const useNoteStore = create((set, get) => {
       } catch (error) {
         console.error("Failed to clear markups:", error);
       }
+    },
+    exportData: async (domain) => {
+      if (!isContextValid()) return;
+      try {
+        const notesResult = await chrome.storage.local.get(STORAGE_KEY);
+        const markupsResult = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+        let notesToExport = notesResult[STORAGE_KEY] || [];
+        let markupsToExport = markupsResult[MARKUP_STORAGE_KEY] || [];
+        if (domain) {
+          notesToExport = notesToExport.filter((n) => n.domain === domain);
+          const urls = new Set(notesToExport.map((n) => n.url));
+          markupsToExport = markupsToExport.filter((m) => urls.has(m.url));
+        }
+        const data = {
+          version: "2.0",
+          exportDate: Date.now(),
+          notes: notesToExport,
+          markups: markupsToExport
+        };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").slice(0, 19);
+        const filename = `pagepost_export_${domain || "all"}_${timestamp}.json`;
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } catch (error) {
+        console.error("Failed to export data:", error);
+      }
+    },
+    importData: async (jsonData) => {
+      if (!isContextValid()) return;
+      try {
+        const data = JSON.parse(jsonData);
+        if (!data.notes && !data.markups) throw new Error("Invalid data format");
+        const notesResult = await chrome.storage.local.get(STORAGE_KEY);
+        const markupsResult = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+        const existingNotes = notesResult[STORAGE_KEY] || [];
+        const existingMarkups = markupsResult[MARKUP_STORAGE_KEY] || [];
+        const incomingNotes = data.notes || [];
+        const noteMap = /* @__PURE__ */ new Map();
+        existingNotes.forEach((n) => noteMap.set(n.id, n));
+        incomingNotes.forEach((n) => noteMap.set(n.id, n));
+        const incomingMarkups = data.markups || [];
+        const markupMap = /* @__PURE__ */ new Map();
+        existingMarkups.forEach((m) => markupMap.set(m.id, m));
+        incomingMarkups.forEach((m) => markupMap.set(m.id, m));
+        const mergedNotes = Array.from(noteMap.values());
+        const mergedMarkups = Array.from(markupMap.values());
+        await chrome.storage.local.set({
+          [STORAGE_KEY]: mergedNotes,
+          [MARKUP_STORAGE_KEY]: mergedMarkups
+        });
+        const { currentUrl, isGlobalView, fetchNotesForUrl, fetchMarkupsForUrl, fetchAllNotes, fetchAllMarkups } = get();
+        if (isGlobalView) {
+          await fetchAllNotes();
+          await fetchAllMarkups();
+        } else if (currentUrl) {
+          await fetchNotesForUrl(currentUrl);
+          await fetchMarkupsForUrl(currentUrl);
+        }
+        alert(`${incomingNotes.length}개의 메모와 ${incomingMarkups.length}개의 마크업을 성공적으로 가져왔습니다.`);
+      } catch (error) {
+        console.error("Failed to import data:", error);
+        alert("데이터를 가져오는데 실패했습니다: " + (error instanceof Error ? error.message : "알 수 없는 오류"));
+      }
     }
   };
 });
@@ -12982,31 +13052,47 @@ const createLucideIcon = (iconName, iconNode) => {
   Component.displayName = toPascalCase(iconName);
   return Component;
 };
-const __iconNode$k = [
+const __iconNode$r = [
   ["path", { d: "M8 2v4", key: "1cmpym" }],
   ["path", { d: "M16 2v4", key: "4m81vk" }],
   ["rect", { width: "18", height: "18", x: "3", y: "4", rx: "2", key: "1hopcy" }],
   ["path", { d: "M3 10h18", key: "8toen8" }]
 ];
-const Calendar = createLucideIcon("calendar", __iconNode$k);
-const __iconNode$j = [
+const Calendar = createLucideIcon("calendar", __iconNode$r);
+const __iconNode$q = [
   ["path", { d: "M3 3v16a2 2 0 0 0 2 2h16", key: "c24i48" }],
   ["path", { d: "M18 17V9", key: "2bz60n" }],
   ["path", { d: "M13 17V5", key: "1frdt8" }],
   ["path", { d: "M8 17v-3", key: "17ska0" }]
 ];
-const ChartColumn = createLucideIcon("chart-column", __iconNode$j);
-const __iconNode$i = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
-const ChevronLeft = createLucideIcon("chevron-left", __iconNode$i);
-const __iconNode$h = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
-const ChevronRight = createLucideIcon("chevron-right", __iconNode$h);
-const __iconNode$g = [
+const ChartColumn = createLucideIcon("chart-column", __iconNode$q);
+const __iconNode$p = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
+const ChevronLeft = createLucideIcon("chevron-left", __iconNode$p);
+const __iconNode$o = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
+const ChevronRight = createLucideIcon("chevron-right", __iconNode$o);
+const __iconNode$n = [
+  ["path", { d: "M21.801 10A10 10 0 1 1 17 3.335", key: "yps3ct" }],
+  ["path", { d: "m9 11 3 3L22 4", key: "1pflzl" }]
+];
+const CircleCheckBig = createLucideIcon("circle-check-big", __iconNode$n);
+const __iconNode$m = [
+  ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
+  ["path", { d: "M12 6v6l4 2", key: "mmk7yg" }]
+];
+const Clock = createLucideIcon("clock", __iconNode$m);
+const __iconNode$l = [
+  ["path", { d: "M12 15V3", key: "m9g1x1" }],
+  ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", key: "ih7n3h" }],
+  ["path", { d: "m7 10 5 5 5-5", key: "brsn70" }]
+];
+const Download = createLucideIcon("download", __iconNode$l);
+const __iconNode$k = [
   ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
   ["path", { d: "M10 14 21 3", key: "gplh6r" }],
   ["path", { d: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6", key: "a6xqqp" }]
 ];
-const ExternalLink = createLucideIcon("external-link", __iconNode$g);
-const __iconNode$f = [
+const ExternalLink = createLucideIcon("external-link", __iconNode$k);
+const __iconNode$j = [
   [
     "path",
     {
@@ -13024,8 +13110,8 @@ const __iconNode$f = [
   ],
   ["path", { d: "m2 2 20 20", key: "1ooewy" }]
 ];
-const EyeOff = createLucideIcon("eye-off", __iconNode$f);
-const __iconNode$e = [
+const EyeOff = createLucideIcon("eye-off", __iconNode$j);
+const __iconNode$i = [
   [
     "path",
     {
@@ -13035,8 +13121,8 @@ const __iconNode$e = [
   ],
   ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
 ];
-const Eye = createLucideIcon("eye", __iconNode$e);
-const __iconNode$d = [
+const Eye = createLucideIcon("eye", __iconNode$i);
+const __iconNode$h = [
   [
     "path",
     {
@@ -13045,14 +13131,14 @@ const __iconNode$d = [
     }
   ]
 ];
-const Funnel = createLucideIcon("funnel", __iconNode$d);
-const __iconNode$c = [
+const Funnel = createLucideIcon("funnel", __iconNode$h);
+const __iconNode$g = [
   ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
   ["path", { d: "M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20", key: "13o1zl" }],
   ["path", { d: "M2 12h20", key: "9i4pu4" }]
 ];
-const Globe = createLucideIcon("globe", __iconNode$c);
-const __iconNode$b = [
+const Globe = createLucideIcon("globe", __iconNode$g);
+const __iconNode$f = [
   [
     "path",
     {
@@ -13062,10 +13148,10 @@ const __iconNode$b = [
   ],
   ["circle", { cx: "12", cy: "10", r: "3", key: "ilqhr7" }]
 ];
-const MapPin = createLucideIcon("map-pin", __iconNode$b);
-const __iconNode$a = [["path", { d: "M5 12h14", key: "1ays0h" }]];
-const Minus = createLucideIcon("minus", __iconNode$a);
-const __iconNode$9 = [
+const MapPin = createLucideIcon("map-pin", __iconNode$f);
+const __iconNode$e = [["path", { d: "M5 12h14", key: "1ays0h" }]];
+const Minus = createLucideIcon("minus", __iconNode$e);
+const __iconNode$d = [
   [
     "path",
     {
@@ -13078,8 +13164,8 @@ const __iconNode$9 = [
   ["circle", { cx: "6.5", cy: "12.5", r: ".5", fill: "currentColor", key: "qy21gx" }],
   ["circle", { cx: "8.5", cy: "7.5", r: ".5", fill: "currentColor", key: "fotxhn" }]
 ];
-const Palette = createLucideIcon("palette", __iconNode$9);
-const __iconNode$8 = [
+const Palette = createLucideIcon("palette", __iconNode$d);
+const __iconNode$c = [
   [
     "path",
     {
@@ -13097,13 +13183,23 @@ const __iconNode$8 = [
   ["path", { d: "m2.3 2.3 7.286 7.286", key: "1wuzzi" }],
   ["circle", { cx: "11", cy: "11", r: "2", key: "xmgehs" }]
 ];
-const PenTool = createLucideIcon("pen-tool", __iconNode$8);
-const __iconNode$7 = [
+const PenTool = createLucideIcon("pen-tool", __iconNode$c);
+const __iconNode$b = [
+  [
+    "path",
+    {
+      d: "M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z",
+      key: "10ikf1"
+    }
+  ]
+];
+const Play = createLucideIcon("play", __iconNode$b);
+const __iconNode$a = [
   ["path", { d: "m21 21-4.34-4.34", key: "14j7rj" }],
   ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }]
 ];
-const Search = createLucideIcon("search", __iconNode$7);
-const __iconNode$6 = [
+const Search = createLucideIcon("search", __iconNode$a);
+const __iconNode$9 = [
   [
     "path",
     {
@@ -13113,8 +13209,16 @@ const __iconNode$6 = [
   ],
   ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
 ];
-const Settings = createLucideIcon("settings", __iconNode$6);
-const __iconNode$5 = [
+const Settings = createLucideIcon("settings", __iconNode$9);
+const __iconNode$8 = [
+  ["circle", { cx: "18", cy: "5", r: "3", key: "gq8acd" }],
+  ["circle", { cx: "6", cy: "12", r: "3", key: "w7nqdw" }],
+  ["circle", { cx: "18", cy: "19", r: "3", key: "1xt0gg" }],
+  ["line", { x1: "8.59", x2: "15.42", y1: "13.51", y2: "17.49", key: "47mynk" }],
+  ["line", { x1: "15.41", x2: "8.59", y1: "6.51", y2: "10.49", key: "1n3mei" }]
+];
+const Share2 = createLucideIcon("share-2", __iconNode$8);
+const __iconNode$7 = [
   [
     "path",
     {
@@ -13124,8 +13228,8 @@ const __iconNode$5 = [
   ],
   ["path", { d: "M15 3v5a1 1 0 0 0 1 1h5", key: "6s6qgf" }]
 ];
-const StickyNote = createLucideIcon("sticky-note", __iconNode$5);
-const __iconNode$4 = [
+const StickyNote = createLucideIcon("sticky-note", __iconNode$7);
+const __iconNode$6 = [
   [
     "path",
     {
@@ -13135,16 +13239,16 @@ const __iconNode$4 = [
   ],
   ["circle", { cx: "7.5", cy: "7.5", r: ".5", fill: "currentColor", key: "kqv944" }]
 ];
-const Tag = createLucideIcon("tag", __iconNode$4);
-const __iconNode$3 = [
+const Tag = createLucideIcon("tag", __iconNode$6);
+const __iconNode$5 = [
   ["path", { d: "M10 11v6", key: "nco0om" }],
   ["path", { d: "M14 11v6", key: "outv1u" }],
   ["path", { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6", key: "miytrc" }],
   ["path", { d: "M3 6h18", key: "d0wm0j" }],
   ["path", { d: "M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2", key: "e791ji" }]
 ];
-const Trash2 = createLucideIcon("trash-2", __iconNode$3);
-const __iconNode$2 = [
+const Trash2 = createLucideIcon("trash-2", __iconNode$5);
+const __iconNode$4 = [
   [
     "path",
     {
@@ -13155,13 +13259,24 @@ const __iconNode$2 = [
   ["path", { d: "M12 9v4", key: "juzpu7" }],
   ["path", { d: "M12 17h.01", key: "p32p05" }]
 ];
-const TriangleAlert = createLucideIcon("triangle-alert", __iconNode$2);
-const __iconNode$1 = [
+const TriangleAlert = createLucideIcon("triangle-alert", __iconNode$4);
+const __iconNode$3 = [
   ["path", { d: "M12 4v16", key: "1654pz" }],
   ["path", { d: "M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2", key: "e0r10z" }],
   ["path", { d: "M9 20h6", key: "s66wpe" }]
 ];
-const Type = createLucideIcon("type", __iconNode$1);
+const Type = createLucideIcon("type", __iconNode$3);
+const __iconNode$2 = [
+  ["path", { d: "M12 3v12", key: "1x0j5s" }],
+  ["path", { d: "m17 8-5-5-5 5", key: "7q97r8" }],
+  ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", key: "ih7n3h" }]
+];
+const Upload = createLucideIcon("upload", __iconNode$2);
+const __iconNode$1 = [
+  ["path", { d: "M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2", key: "975kel" }],
+  ["circle", { cx: "12", cy: "7", r: "4", key: "17ys0d" }]
+];
+const User = createLucideIcon("user", __iconNode$1);
 const __iconNode = [
   ["path", { d: "M18 6 6 18", key: "1bl5f8" }],
   ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
@@ -13176,9 +13291,13 @@ const Dashboard = () => {
     searchQuery,
     setSearchQuery,
     stats,
-    settings
+    settings,
+    exportData,
+    importData
   } = useNoteStore();
   const [selectedDomain, setSelectedDomain] = React.useState(null);
+  const [statusFilter, setStatusFilter] = React.useState(null);
+  const fileInputRef = React.useRef(null);
   reactExports.useEffect(() => {
     fetchAllNotes();
     fetchAllMarkups();
@@ -13192,9 +13311,11 @@ const Dashboard = () => {
     return groups;
   }, [notes]);
   const filteredNotes = reactExports.useMemo(() => {
-    if (!selectedDomain) return notes;
-    return notes.filter((n) => n.domain === selectedDomain);
-  }, [notes, selectedDomain]);
+    let result = notes;
+    if (selectedDomain) result = result.filter((n) => n.domain === selectedDomain);
+    if (statusFilter) result = result.filter((n) => n.status === statusFilter);
+    return result;
+  }, [notes, selectedDomain, statusFilter]);
   const sortedDomains = reactExports.useMemo(() => {
     return Object.keys(notesByDomain).sort(
       (a, b) => notesByDomain[b].length - notesByDomain[a].length
@@ -13227,6 +13348,63 @@ const Dashboard = () => {
         )
       ] }) })
     ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3 mb-8", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          onClick: () => exportData(),
+          className: "flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl shadow-sm text-sm font-bold text-slate-700 hover:border-brand-primary hover:text-brand-primary transition-all",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Download, { size: 16 }),
+            " 전체 내보내기"
+          ]
+        }
+      ),
+      selectedDomain && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          onClick: () => exportData(selectedDomain),
+          className: "flex items-center gap-2 px-4 py-2 bg-brand-primary/10 border border-brand-primary/20 rounded-xl shadow-sm text-sm font-bold text-brand-primary hover:bg-brand-primary hover:text-white transition-all",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Share2, { size: 16 }),
+            " ",
+            selectedDomain,
+            " 공유"
+          ]
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          onClick: () => fileInputRef.current?.click(),
+          className: "flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl shadow-sm text-sm font-bold text-slate-700 hover:border-brand-primary hover:text-brand-primary transition-all",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Upload, { size: 16 }),
+            " 데이터 가져오기"
+          ]
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "file",
+          ref: fileInputRef,
+          className: "hidden",
+          accept: ".json",
+          onChange: (e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = (event) => {
+                const content = event.target?.result;
+                importData(content);
+              };
+              reader.readAsText(file);
+            }
+          }
+        }
+      )
+    ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10", children: [
       { label: "전체 메모", value: stats.totalNotes, icon: StickyNote, color: "text-blue-500", bg: "bg-blue-50" },
       { label: "마크업 요소", value: stats.totalMarkups, icon: PenTool, color: "text-emerald-500", bg: "bg-emerald-50" },
@@ -13240,51 +13418,76 @@ const Dashboard = () => {
       ] })
     ] }, idx)) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 lg:grid-cols-12 gap-10", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("aside", { className: "lg:col-span-3 space-y-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "font-bold text-slate-700 flex items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Funnel, { size: 16 }),
-          " 사이트 리스트"
-        ] }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "divide-y divide-slate-50 max-h-[500px] overflow-y-auto font-sans", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "lg:col-span-3 space-y-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-4 border-b border-slate-50 bg-slate-50/50", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wider", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ChartColumn, { size: 16 }),
+            " 진행 상태"
+          ] }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-2 space-y-1", children: [
+            { id: null, label: "전체 보기", icon: Globe, color: "text-slate-400" },
+            { id: "pending", label: "보류 중 (Pending)", icon: Clock, color: "text-amber-500" },
+            { id: "in-progress", label: "진행 중 (In Progress)", icon: Play, color: "text-blue-500" },
+            { id: "done", label: "완료됨 (Done)", icon: CircleCheckBig, color: "text-emerald-500" }
+          ].map((status) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "button",
             {
-              onClick: () => setSelectedDomain(null),
-              className: `w-full px-4 py-3.5 text-left hover:bg-slate-50 transition-colors flex items-center justify-between group ${!selectedDomain ? "bg-brand-primary/5 border-l-4 border-brand-primary" : ""}`,
+              onClick: () => setStatusFilter(status.id),
+              className: `w-full px-3 py-2 rounded-lg text-left text-sm font-bold flex items-center gap-3 transition-colors ${statusFilter === status.id ? "bg-brand-primary text-white" : "text-slate-600 hover:bg-slate-50"}`,
               children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-sm font-bold ${!selectedDomain ? "text-brand-primary" : "text-slate-700"}`, children: "모든 사이트" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] text-slate-400 font-medium uppercase mt-0.5", children: [
-                    "전체 ",
-                    notes.length,
-                    "개의 주석"
-                  ] })
-                ] }),
-                !selectedDomain && /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronRight, { size: 14, className: "text-brand-primary" })
-              ]
-            }
-          ),
-          sortedDomains.map((domain) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              onClick: () => setSelectedDomain(domain),
-              className: `w-full px-4 py-3.5 text-left hover:bg-slate-50 transition-colors flex items-center justify-between group ${selectedDomain === domain ? "bg-brand-primary/5 border-l-4 border-brand-primary" : ""}`,
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col truncate pr-2", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-sm font-bold truncate group-hover:text-brand-primary ${selectedDomain === domain ? "text-brand-primary" : "text-slate-700"}`, children: domain }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] text-slate-400 font-medium uppercase mt-0.5", children: [
-                    notesByDomain[domain].length,
-                    "개의 주석"
-                  ] })
-                ] }),
-                selectedDomain === domain && /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronRight, { size: 14, className: "text-brand-primary" })
+                /* @__PURE__ */ jsxRuntimeExports.jsx(status.icon, { size: 16, className: statusFilter === status.id ? "text-white" : status.color }),
+                status.label
               ]
             },
-            domain
-          )),
-          sortedDomains.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-10 text-center text-slate-400 text-sm italic font-medium", children: "데이터가 없습니다." })
+            status.id || "all"
+          )) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wider", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Funnel, { size: 16 }),
+            " 사이트 리스트"
+          ] }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "divide-y divide-slate-50 max-h-[500px] overflow-y-auto font-sans", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                onClick: () => setSelectedDomain(null),
+                className: `w-full px-4 py-3.5 text-left hover:bg-slate-50 transition-colors flex items-center justify-between group ${!selectedDomain ? "bg-brand-primary/5 border-l-4 border-brand-primary" : ""}`,
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-sm font-bold ${!selectedDomain ? "text-brand-primary" : "text-slate-700"}`, children: "모든 사이트" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] text-slate-400 font-medium uppercase mt-0.5", children: [
+                      "전체 ",
+                      notes.length,
+                      "개의 주석"
+                    ] })
+                  ] }),
+                  !selectedDomain && /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronRight, { size: 14, className: "text-brand-primary" })
+                ]
+              }
+            ),
+            sortedDomains.map((domain) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                onClick: () => setSelectedDomain(domain),
+                className: `w-full px-4 py-3.5 text-left hover:bg-slate-50 transition-colors flex items-center justify-between group ${selectedDomain === domain ? "bg-brand-primary/5 border-l-4 border-brand-primary" : ""}`,
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col truncate pr-2", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-sm font-bold truncate group-hover:text-brand-primary ${selectedDomain === domain ? "text-brand-primary" : "text-slate-700"}`, children: domain }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] text-slate-400 font-medium uppercase mt-0.5", children: [
+                      notesByDomain[domain].length,
+                      "개의 주석"
+                    ] })
+                  ] }),
+                  selectedDomain === domain && /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronRight, { size: 14, className: "text-brand-primary" })
+                ]
+              },
+              domain
+            )),
+            sortedDomains.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-10 text-center text-slate-400 text-sm italic font-medium", children: "데이터가 없습니다." })
+          ] })
         ] })
-      ] }) }),
+      ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "lg:col-span-9 space-y-8", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center justify-between mb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-xl font-bold flex items-center gap-2 text-slate-800 uppercase tracking-tight", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(Calendar, { size: 20, className: "text-brand-primary" }),
@@ -13296,7 +13499,10 @@ const Dashboard = () => {
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-2.5 h-10 rounded-full", style: { backgroundColor: note.color } }),
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col max-w-[200px]", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-bold text-brand-primary truncate uppercase tracking-wide", children: note.domain }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-bold text-brand-primary truncate uppercase tracking-wide", children: note.domain }),
+                    note.status && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase ${note.status === "done" ? "bg-emerald-100 text-emerald-600" : note.status === "in-progress" ? "bg-blue-100 text-blue-600" : "bg-amber-100 text-amber-600"}`, children: note.status })
+                  ] }),
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("time", { className: "text-[10px] text-slate-400 font-medium mt-0.5", children: [
                     new Date(note.updatedAt).toLocaleDateString(),
                     " · ",
@@ -13307,6 +13513,13 @@ const Dashboard = () => {
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-1.5 translate-x-2 -translate-y-2 opacity-0 group-hover:opacity-100 transition-opacity", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => goToNote(note), className: "p-2 hover:bg-slate-100 rounded-xl text-slate-500 hover:text-brand-primary transition-colors", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExternalLink, { size: 18 }) }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => deleteNote(note.id), className: "p-2 hover:bg-red-50 rounded-xl text-slate-300 hover:text-red-500 transition-colors", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Trash2, { size: 18 }) })
+              ] })
+            ] }),
+            note.assignee && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-5 py-2 bg-slate-50 border-y border-slate-100 flex items-center gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(User, { size: 12, className: "text-slate-400" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] font-bold text-slate-500 uppercase tracking-tighter", children: [
+                "담당자: ",
+                note.assignee
               ] })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-5 pb-5 flex-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx(

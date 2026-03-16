@@ -10,7 +10,10 @@ import {
     ChevronDown,
     GripHorizontal,
     X,
-    Maximize2
+    Maximize2,
+    User,
+    Play,
+    Clock
 } from 'lucide-react';
 
 interface NoteCardProps {
@@ -194,6 +197,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
             >
                 <div className="flex items-center gap-1">
                     <GripHorizontal size={14} className="text-black/30" />
+                    <span className="text-[9px] font-bold text-black/40 mr-1">{new Date(note.updatedAt).toLocaleDateString()}</span>
                     {note.isPinned && <Pin size={12} className="text-red-500 fill-current" />}
                 </div>
 
@@ -212,6 +216,16 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
                     </button>
                 </div>
             </div>
+
+            {/* Assignee / Info Bar */}
+            {!note.isCollapsed && note.assignee && (
+                <div className="px-3 py-1 bg-black/5 flex items-center gap-1.5 border-b border-black/5">
+                    <User size={10} className="text-black/40" />
+                    <span className="text-[9px] font-bold text-black/60 uppercase tracking-tighter truncate">
+                        Assignee: {note.assignee}
+                    </span>
+                </div>
+            )}
 
             {!note.isCollapsed && (
                 <>
@@ -280,16 +294,29 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
                                 <Pin size={14} />
                             </button>
                             <button
-                                onClick={() => updateNote(note.id, { status: note.status === 'done' ? 'active' : 'done' })}
-                                className={`p-1 rounded ${note.status === 'done' ? 'bg-black/10 text-green-600' : 'hover:bg-black/10'}`}
-                                title="완료 처리"
+                                onClick={() => {
+                                    const statusMap: Record<string, any> = {
+                                        'pending': 'in-progress',
+                                        'in-progress': 'done',
+                                        'done': 'pending',
+                                        'active': 'pending' // Fallback for legacy
+                                    };
+                                    updateNote(note.id, { status: statusMap[note.status] || 'pending' });
+                                }}
+                                className={`p-1 rounded flex items-center gap-1 ${note.status === 'done' ? 'bg-green-500/10 text-green-600' :
+                                    note.status === 'in-progress' ? 'bg-blue-500/10 text-blue-600' :
+                                        'hover:bg-black/10 text-black/40'
+                                    }`}
+                                title={`Status: ${note.status}`}
                             >
-                                <CheckCircle size={14} />
+                                {note.status === 'done' ? <CheckCircle size={14} /> :
+                                    note.status === 'in-progress' ? <Play size={14} /> :
+                                        <Clock size={14} />}
+                                <span className="text-[8px] font-bold uppercase">{note.status}</span>
                             </button>
                         </div>
 
                         <div className="flex items-center gap-1">
-                            <span className="mr-1">{new Date(note.updatedAt).toLocaleDateString()}</span>
                             <div
                                 className="cursor-nwse-resize p-1 hover:bg-black/10 rounded"
                                 onMouseDown={handleResizeStart}

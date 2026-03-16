@@ -11,7 +11,14 @@ import {
     StickyNote,
     PenTool,
     BarChart3,
-    ChevronRight
+    ChevronRight,
+    Download,
+    Upload,
+    Share2,
+    User,
+    Play,
+    Clock,
+    CheckCircle
 } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
@@ -23,10 +30,14 @@ const Dashboard: React.FC = () => {
         searchQuery,
         setSearchQuery,
         stats,
-        settings
+        settings,
+        exportData,
+        importData
     } = useNoteStore();
 
     const [selectedDomain, setSelectedDomain] = React.useState<string | null>(null);
+    const [statusFilter, setStatusFilter] = React.useState<string | null>(null);
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         fetchAllNotes();
@@ -44,9 +55,11 @@ const Dashboard: React.FC = () => {
     }, [notes]);
 
     const filteredNotes = useMemo(() => {
-        if (!selectedDomain) return notes;
-        return notes.filter(n => n.domain === selectedDomain);
-    }, [notes, selectedDomain]);
+        let result = notes;
+        if (selectedDomain) result = result.filter(n => n.domain === selectedDomain);
+        if (statusFilter) result = result.filter(n => n.status === statusFilter);
+        return result;
+    }, [notes, selectedDomain, statusFilter]);
 
     const sortedDomains = useMemo(() => {
         return Object.keys(notesByDomain).sort((a, b) =>
@@ -86,6 +99,47 @@ const Dashboard: React.FC = () => {
                     </div>
                 </header>
 
+                {/* Collaboration & Sharing Controls */}
+                <div className="flex flex-wrap items-center gap-3 mb-8">
+                    <button
+                        onClick={() => exportData()}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl shadow-sm text-sm font-bold text-slate-700 hover:border-brand-primary hover:text-brand-primary transition-all"
+                    >
+                        <Download size={16} /> 전체 내보내기
+                    </button>
+                    {selectedDomain && (
+                        <button
+                            onClick={() => exportData(selectedDomain)}
+                            className="flex items-center gap-2 px-4 py-2 bg-brand-primary/10 border border-brand-primary/20 rounded-xl shadow-sm text-sm font-bold text-brand-primary hover:bg-brand-primary hover:text-white transition-all"
+                        >
+                            <Share2 size={16} /> {selectedDomain} 공유
+                        </button>
+                    )}
+                    <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl shadow-sm text-sm font-bold text-slate-700 hover:border-brand-primary hover:text-brand-primary transition-all"
+                    >
+                        <Upload size={16} /> 데이터 가져오기
+                    </button>
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        className="hidden"
+                        accept=".json"
+                        onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                    const content = event.target?.result as string;
+                                    importData(content);
+                                };
+                                reader.readAsText(file);
+                            }
+                        }}
+                    />
+                </div>
+
                 {/* Stats Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
                     {[
@@ -110,9 +164,35 @@ const Dashboard: React.FC = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
                     {/* Sidebar / Domains */}
                     <aside className="lg:col-span-3 space-y-6">
+                        {/* Status Filter */}
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                            <div className="p-4 border-b border-slate-50 bg-slate-50/50">
+                                <h3 className="font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wider">
+                                    <BarChart3 size={16} /> 진행 상태
+                                </h3>
+                            </div>
+                            <div className="p-2 space-y-1">
+                                {[
+                                    { id: null, label: '전체 보기', icon: Globe, color: 'text-slate-400' },
+                                    { id: 'pending', label: '보류 중 (Pending)', icon: Clock, color: 'text-amber-500' },
+                                    { id: 'in-progress', label: '진행 중 (In Progress)', icon: Play, color: 'text-blue-500' },
+                                    { id: 'done', label: '완료됨 (Done)', icon: CheckCircle, color: 'text-emerald-500' },
+                                ].map(status => (
+                                    <button
+                                        key={status.id || 'all'}
+                                        onClick={() => setStatusFilter(status.id)}
+                                        className={`w-full px-3 py-2 rounded-lg text-left text-sm font-bold flex items-center gap-3 transition-colors ${statusFilter === status.id ? 'bg-brand-primary text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                                    >
+                                        <status.icon size={16} className={statusFilter === status.id ? 'text-white' : status.color} />
+                                        {status.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
                         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                             <div className="p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between">
-                                <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                                <h3 className="font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wider">
                                     <Filter size={16} /> 사이트 리스트
                                 </h3>
                             </div>
@@ -164,7 +244,17 @@ const Dashboard: React.FC = () => {
                                         <div className="flex items-center gap-3">
                                             <div className="w-2.5 h-10 rounded-full" style={{ backgroundColor: note.color }} />
                                             <div className="flex flex-col max-w-[200px]">
-                                                <span className="text-xs font-bold text-brand-primary truncate uppercase tracking-wide">{note.domain}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-bold text-brand-primary truncate uppercase tracking-wide">{note.domain}</span>
+                                                    {note.status && (
+                                                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase ${note.status === 'done' ? 'bg-emerald-100 text-emerald-600' :
+                                                                note.status === 'in-progress' ? 'bg-blue-100 text-blue-600' :
+                                                                    'bg-amber-100 text-amber-600'
+                                                            }`}>
+                                                            {note.status}
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <time className="text-[10px] text-slate-400 font-medium mt-0.5">
                                                     {new Date(note.updatedAt).toLocaleDateString()} · {new Date(note.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                 </time>
@@ -179,6 +269,14 @@ const Dashboard: React.FC = () => {
                                             </button>
                                         </div>
                                     </div>
+
+                                    {/* Assignee display */}
+                                    {note.assignee && (
+                                        <div className="px-5 py-2 bg-slate-50 border-y border-slate-100 flex items-center gap-2">
+                                            <User size={12} className="text-slate-400" />
+                                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">담당자: {note.assignee}</span>
+                                        </div>
+                                    )}
 
                                     {/* Note Content */}
                                     <div className="px-5 pb-5 flex-1">

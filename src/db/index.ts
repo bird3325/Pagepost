@@ -32,7 +32,9 @@ export interface Note {
     };
 
     tags: string[];
-    status: 'active' | 'done' | 'archived';
+    status: 'pending' | 'in-progress' | 'done' | 'archived';
+    priority?: 'low' | 'medium' | 'high';
+    assignee?: string;
     isPinned: boolean;
     isCollapsed: boolean;
 
