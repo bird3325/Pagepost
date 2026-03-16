@@ -140,7 +140,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
                 top: note.notePosition.y,
                 width: note.isCollapsed ? undefined : note.size.width,
                 height: note.isCollapsed ? undefined : note.size.height,
-                zIndex: 2147483647,
+                zIndex: 2147483640,
                 opacity: note.status === 'done' ? 0.6 : 0.95,
             }}
         >

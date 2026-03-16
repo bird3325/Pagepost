@@ -8,21 +8,51 @@ export const CaptureLayer: React.FC = () => {
     const [startPos, setStartPos] = useState({ x: 0, y: 0 });
     const [currentPos, setCurrentPos] = useState({ x: 0, y: 0 });
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
+    const [selectionConfirmed, setSelectionConfirmed] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // Reset state when entering/leaving capture mode
+    // Reset state and handle Escape key
     useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                if (capturedImage) {
+                    setCapturedImage(null);
+                } else {
+                    setMode('note');
+                }
+            }
+        };
+
+        if (mode === 'capture') {
+            window.addEventListener('keydown', handleKeyDown);
+        }
+
         if (mode !== 'capture') {
             setCapturedImage(null);
             setIsSelecting(false);
+            setSelectionConfirmed(false);
         }
-    }, [mode]);
+
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [mode, capturedImage, setMode]);
 
     if (mode !== 'capture') return null;
 
     const handleMouseDown = (e: React.MouseEvent) => {
         if (capturedImage) return;
+
+        // Pre-emptive check for extension context invalidation
+        if (!chrome.runtime?.id) {
+            alert('확장 프로그램이 업데이트되었습니다.\n페이지를 새로고침한 후 다시 시도해주세요.');
+            setMode('note');
+            return;
+        }
+
+        e.preventDefault(); // Prevent text selection/drag interference
         setIsSelecting(true);
+        setSelectionConfirmed(false);
         setStartPos({ x: e.clientX, y: e.clientY });
         setCurrentPos({ x: e.clientX, y: e.clientY });
     };
@@ -36,24 +66,55 @@ export const CaptureLayer: React.FC = () => {
         if (!isSelecting) return;
         setIsSelecting(false);
 
-        const left = Math.min(startPos.x, currentPos.x);
-        const top = Math.min(startPos.y, currentPos.y);
         const width = Math.abs(startPos.x - currentPos.x);
         const height = Math.abs(startPos.y - currentPos.y);
 
         // Don't capture if too small
-        if (width < 10 || height < 10) return;
-
-        // Trigger capture from background
-        try {
-            const response = await chrome.runtime.sendMessage({ type: 'CAPTURE_TAB' });
-            if (response?.dataUrl) {
-                cropImage(response.dataUrl, left, top, width, height);
-            }
-        } catch (error) {
-            console.error('Capture failed:', error);
-            alert('캡쳐에 실패했습니다.');
+        if (width < 10 || height < 10) {
+            setSelectionConfirmed(false);
+            return;
         }
+
+        setSelectionConfirmed(true);
+
+        const left = Math.min(startPos.x, currentPos.x);
+        const top = Math.min(startPos.y, currentPos.y);
+
+        // Selective hiding for clean capture (excluding markups)
+        const host = document.getElementById('pagepost-extension-host');
+        const notesRoot = host?.shadowRoot?.getElementById('pagepost-notes-root');
+        const captureRoot = containerRef.current;
+
+        if (notesRoot) notesRoot.style.visibility = 'hidden';
+        if (captureRoot) captureRoot.style.visibility = 'hidden';
+
+        // Wait for UI to hide
+        setTimeout(async () => {
+            try {
+                const response = await chrome.runtime.sendMessage({ type: 'CAPTURE_TAB' });
+
+                // Restore UI visibility
+                if (notesRoot) notesRoot.style.visibility = 'visible';
+                if (captureRoot) captureRoot.style.visibility = 'visible';
+
+                if (response?.dataUrl) {
+                    cropImage(response.dataUrl, left, top, width, height);
+                }
+            } catch (error: any) {
+                if (notesRoot) notesRoot.style.visibility = 'visible';
+                if (captureRoot) captureRoot.style.visibility = 'visible';
+
+                console.error('Capture failed:', error);
+
+                if (error?.message?.includes('Extension context invalidated')) {
+                    alert('확장 프로그램이 업데이트되었습니다.\n페이지를 새로고침한 후 다시 시도해주세요.');
+                } else {
+                    alert('캡쳐에 실패했습니다.');
+                }
+
+                setSelectionConfirmed(false);
+            }
+        }, 150);
     };
 
     const cropImage = (dataUrl: string, x: number, y: number, width: number, height: number) => {
@@ -71,6 +132,7 @@ export const CaptureLayer: React.FC = () => {
                 // Actually captureVisibleTab is JUST the visible part. So x, y should align with clientX, clientY.
                 ctx.drawImage(img, x, y, width, height, 0, 0, width, height);
                 setCapturedImage(canvas.toDataURL('image/png'));
+                setSelectionConfirmed(false);
             }
         };
         img.src = dataUrl;
@@ -95,24 +157,44 @@ export const CaptureLayer: React.FC = () => {
     return (
         <div
             ref={containerRef}
-            className="fixed inset-0 z-[2147483646] bg-black/40 cursor-crosshair overflow-hidden"
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
+            style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 2147483646,
+                backgroundColor: 'rgba(0, 0, 0, 0.4)',
+                cursor: 'crosshair',
+                overflow: 'hidden',
+                pointerEvents: 'auto'
+            }}
         >
-            {/* Guide Text */}
-            {!capturedImage && !isSelecting && (
-                <div className="absolute top-10 left-1/2 -translate-x-1/2 bg-gray-900 border border-brand-primary text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce pointer-events-none">
-                    <Camera size={20} className="text-brand-primary" />
-                    <span className="font-bold">캡쳐할 영역을 드래그하여 선택하세요</span>
+            {/* Guide Text & Exit Button */}
+            {!capturedImage && !isSelecting && !selectionConfirmed && (
+                <div className="absolute top-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4">
+                    <div className="bg-gray-900 border border-brand-primary text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce pointer-events-none">
+                        <Camera size={20} className="text-brand-primary" />
+                        <span className="font-bold">캡쳐할 영역을 드래그하여 선택하세요</span>
+                    </div>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); setMode('note'); }}
+                        className="bg-white/10 hover:bg-white/20 backdrop-blur-md text-white border border-white/20 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all hover:scale-105 pointer-events-auto"
+                    >
+                        <X size={16} />
+                        취소 (ESC)
+                    </button>
                 </div>
             )}
 
             {/* Selection Box */}
-            {isSelecting && (
+            {(isSelecting || selectionConfirmed) && !capturedImage && (
                 <div
-                    className="absolute border-2 border-brand-primary bg-brand-primary/10 shadow-[0_0_20px_rgba(255,213,79,0.3)] pointer-events-none"
-                    style={selectionStyle}
+                    className="absolute border-2 border-brand-primary bg-white/5 shadow-[0_0_30px_rgba(255,213,79,0.5)] pointer-events-none"
+                    style={{
+                        ...selectionStyle,
+                        boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.6), 0 0 20px rgba(255, 213, 79, 0.8)',
+                    }}
                 />
             )}
 

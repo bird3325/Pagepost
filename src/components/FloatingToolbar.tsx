@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNoteStore } from '../store/useNoteStore';
-import { StickyNote, PenTool, Highlighter, Eraser, Trash2, ChevronLeft, ChevronRight, Palette, Type, Minus, Camera } from 'lucide-react';
+import { StickyNote, PenTool, Highlighter, Eraser, Trash2, ChevronLeft, ChevronRight, Palette, Type, Minus, Camera, X } from 'lucide-react';
 
 export const FloatingToolbar: React.FC = () => {
     const { mode, setMode, currentTool, setTool, currentColor, setColor, clearAllMarkups, settings, updateSettings } = useNoteStore();
@@ -32,15 +32,47 @@ export const FloatingToolbar: React.FC = () => {
     };
 
     return (
-        <div className="fixed bottom-10 inset-x-0 flex justify-center pointer-events-none z-[2147483647]">
+        <div className="fixed bottom-10 inset-x-0 flex justify-center pointer-events-none z-[2147483640]">
             <div style={{ all: 'initial', boxSizing: 'border-box' }} className="pointer-events-auto">
                 <div
-                    className={`bg-gray-900 shadow-[0_20px_60px_rgba(0,0,0,0.6),0_0_25px_rgba(255,213,79,0.2)] border-brand-primary flex items-center box-border text-white whitespace-nowrap transition-all duration-500 ease-in-out ${isVisible
-                        ? 'max-w-[min(800px,94vw)] h-18 rounded-3xl p-3 px-4 gap-3 border-2 overflow-visible'
-                        : 'max-w-[64px] h-16 rounded-full p-0 gap-0 border-4 overflow-hidden'
+                    className={`bg-gray-900 shadow-[0_20px_60px_rgba(0,0,0,0.6),0_0_25px_rgba(255,213,79,0.2)] border-2 border-brand-primary flex items-center box-border text-white whitespace-nowrap transition-all duration-500 ease-in-out ${isVisible
+                        ? 'max-w-[min(800px,94vw)] h-18 rounded-3xl p-3 px-4 gap-3'
+                        : 'max-w-[64px] h-16 rounded-full p-0 gap-0 border-brand-primary border-4'
                         }`}
-                    style={{ fontStyle: 'normal', fontFamily: 'Pretendard, system-ui, sans-serif' }}
+                    style={{
+                        fontStyle: 'normal',
+                        fontFamily: 'Pretendard, system-ui, sans-serif',
+                        position: 'relative',
+                        overflow: isVisible ? 'visible' : 'hidden'
+                    }}
                 >
+                    {isExpanded && isVisible && (
+                        <button
+                            onClick={() => { if (confirm('툴바를 숨기시겠습니까? 설정에서 다시 켤 수 있습니다.')) updateSettings({ showToolbar: false }); }}
+                            style={{
+                                position: 'absolute',
+                                top: '-10px',
+                                right: '-10px',
+                                width: '28px',
+                                height: '28px',
+                                backgroundColor: 'white',
+                                border: '2px solid #111827', // dark gray/black
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#111827',
+                                cursor: 'pointer',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                                zIndex: 100,
+                                transition: 'all 0.2s'
+                            }}
+                            className="hover:scale-110 hover:text-red-600"
+                            title="툴바 닫기"
+                        >
+                            <X size={14} strokeWidth={3} />
+                        </button>
+                    )}
                     {!isExpanded && !isVisible ? (
                         <button
                             onClick={() => setIsExpanded(true)}
@@ -233,6 +265,7 @@ export const FloatingToolbar: React.FC = () => {
                             <button
                                 onClick={handleCollapse}
                                 className="p-1 px-2 text-gray-500 hover:text-gray-300 rounded-lg hover:bg-white/5 transition-all ml-1 shrink-0"
+                                title="접기"
                             >
                                 <ChevronLeft size={16} />
                             </button>

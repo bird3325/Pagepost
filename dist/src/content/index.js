@@ -12546,7 +12546,7 @@
           }
           if (changes["pagepost_mode"]) {
             const newValue = changes["pagepost_mode"].newValue;
-            if (newValue === "note" || newValue === "markup") {
+            if (newValue === "note" || newValue === "markup" || newValue === "capture") {
               set({ mode: newValue });
             }
           }
@@ -12598,7 +12598,7 @@
           const updated = { ...currentSettings, ...newSettings };
           await chrome.storage.local.set({ [SETTINGS_KEY]: updated });
           set({ settings: updated });
-          if (isContextValid()) {
+          if (isContextValid() && typeof chrome.tabs !== "undefined") {
             chrome.tabs.query({}, (tabs) => {
               tabs.forEach((tab) => {
                 if (tab.id) {
@@ -12889,19 +12889,36 @@
     Component.displayName = toPascalCase(iconName);
     return Component;
   };
-  const __iconNode$g = [["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]];
-  const ChevronDown = createLucideIcon("chevron-down", __iconNode$g);
-  const __iconNode$f = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
-  const ChevronLeft = createLucideIcon("chevron-left", __iconNode$f);
-  const __iconNode$e = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
-  const ChevronRight = createLucideIcon("chevron-right", __iconNode$e);
-  const __iconNode$d = [["path", { d: "m18 15-6-6-6 6", key: "153udz" }]];
-  const ChevronUp = createLucideIcon("chevron-up", __iconNode$d);
-  const __iconNode$c = [
+  const __iconNode$i = [
+    [
+      "path",
+      {
+        d: "M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z",
+        key: "18u6gg"
+      }
+    ],
+    ["circle", { cx: "12", cy: "13", r: "3", key: "1vg3eu" }]
+  ];
+  const Camera = createLucideIcon("camera", __iconNode$i);
+  const __iconNode$h = [["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]];
+  const ChevronDown = createLucideIcon("chevron-down", __iconNode$h);
+  const __iconNode$g = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
+  const ChevronLeft = createLucideIcon("chevron-left", __iconNode$g);
+  const __iconNode$f = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
+  const ChevronRight = createLucideIcon("chevron-right", __iconNode$f);
+  const __iconNode$e = [["path", { d: "m18 15-6-6-6 6", key: "153udz" }]];
+  const ChevronUp = createLucideIcon("chevron-up", __iconNode$e);
+  const __iconNode$d = [
     ["path", { d: "M21.801 10A10 10 0 1 1 17 3.335", key: "yps3ct" }],
     ["path", { d: "m9 11 3 3L22 4", key: "1pflzl" }]
   ];
-  const CircleCheckBig = createLucideIcon("circle-check-big", __iconNode$c);
+  const CircleCheckBig = createLucideIcon("circle-check-big", __iconNode$d);
+  const __iconNode$c = [
+    ["path", { d: "M12 15V3", key: "m9g1x1" }],
+    ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", key: "ih7n3h" }],
+    ["path", { d: "m7 10 5 5 5-5", key: "brsn70" }]
+  ];
+  const Download = createLucideIcon("download", __iconNode$c);
   const __iconNode$b = [
     [
       "path",
@@ -13117,7 +13134,7 @@
           top: note.notePosition.y,
           width: note.isCollapsed ? void 0 : note.size.width,
           height: note.isCollapsed ? void 0 : note.size.height,
-          zIndex: 2147483647,
+          zIndex: 2147483640,
           opacity: note.status === "done" ? 0.6 : 0.95
         },
         children: [
@@ -13424,219 +13441,476 @@
         setIsExpanded(false);
       }, 500);
     };
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed bottom-10 inset-x-0 flex justify-center pointer-events-none z-[2147483647]", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { all: "initial", boxSizing: "border-box" }, className: "pointer-events-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed bottom-10 inset-x-0 flex justify-center pointer-events-none z-[2147483640]", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { all: "initial", boxSizing: "border-box" }, className: "pointer-events-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
       {
-        className: `bg-gray-900 shadow-[0_20px_60px_rgba(0,0,0,0.6),0_0_25px_rgba(255,213,79,0.2)] border-brand-primary flex items-center box-border text-white whitespace-nowrap transition-all duration-500 ease-in-out ${isVisible ? "max-w-[min(800px,94vw)] h-18 rounded-3xl p-3 px-4 gap-3 border-2 overflow-visible" : "max-w-[64px] h-16 rounded-full p-0 gap-0 border-4 overflow-hidden"}`,
-        style: { fontStyle: "normal", fontFamily: "Pretendard, system-ui, sans-serif" },
-        children: !isExpanded && !isVisible ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: () => setIsExpanded(true),
-            className: "w-16 h-16 text-brand-primary flex items-center justify-center hover:scale-110 transition-all group cursor-pointer shrink-0",
-            title: "툴바 열기",
-            children: /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronRight, { size: 32, className: "group-hover:scale-125 transition-transform" })
-          }
-        ) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `flex items-center gap-3 transition-all duration-500 ${isVisible ? "opacity-100" : "opacity-0 translate-y-4"}`, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex bg-white/10 rounded-xl p-1 border border-white/5 shrink-0", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "button",
-              {
-                onClick: () => setMode("note"),
-                className: `p-2 rounded-lg transition-all ${mode === "note" ? "bg-brand-primary shadow-sm text-gray-900" : "text-gray-400 hover:text-white hover:bg-white/5"}`,
-                title: "노트 모드",
-                children: /* @__PURE__ */ jsxRuntimeExports.jsx(StickyNote, { size: 20 })
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "button",
-              {
-                onClick: () => setMode("markup"),
-                className: `p-2 rounded-lg transition-all ${mode === "markup" ? "bg-brand-primary shadow-sm text-gray-900" : "text-gray-400 hover:text-white hover:bg-white/5"}`,
-                title: "마크업 모드",
-                children: /* @__PURE__ */ jsxRuntimeExports.jsx(PenTool, { size: 20 })
-              }
-            )
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-px h-8 bg-white/10 mx-1 shrink-0" }),
-          mode === "note" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2 items-center", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                "button",
-                {
-                  onClick: () => setIsFontPickerOpen(!isFontPickerOpen),
-                  className: "p-2 rounded-lg hover:bg-white/10 flex items-center gap-1.5 text-gray-300 hover:text-white transition-colors",
-                  title: "글꼴",
-                  children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(Type, { size: 20 }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-bold w-4 truncate opacity-80", children: fonts.find((f) => f.value === settings.fontFamily)?.name[0] || "F" })
-                  ]
-                }
-              ),
-              isFontPickerOpen && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute bottom-full left-0 mb-4 bg-gray-800 shadow-2xl border border-white/10 rounded-xl p-2 flex flex-col gap-1 w-40 backdrop-blur-xl", children: fonts.map((font) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "button",
-                {
-                  onClick: () => {
-                    updateSettings({ fontFamily: font.value });
-                    setIsFontPickerOpen(false);
-                  },
-                  className: `px-3 py-2 rounded-lg text-xs text-left hover:bg-white/5 transition-all ${settings.fontFamily === font.value ? "bg-brand-primary text-gray-900 font-bold" : "text-gray-300"}`,
-                  style: { fontFamily: font.value },
-                  children: font.name
-                },
-                font.value
-              )) })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1 bg-white/5 rounded-xl p-1 border border-white/5", children: [
+        className: `bg-gray-900 shadow-[0_20px_60px_rgba(0,0,0,0.6),0_0_25px_rgba(255,213,79,0.2)] border-2 border-brand-primary flex items-center box-border text-white whitespace-nowrap transition-all duration-500 ease-in-out ${isVisible ? "max-w-[min(800px,94vw)] h-18 rounded-3xl p-3 px-4 gap-3" : "max-w-[64px] h-16 rounded-full p-0 gap-0 border-brand-primary border-4"}`,
+        style: {
+          fontStyle: "normal",
+          fontFamily: "Pretendard, system-ui, sans-serif",
+          position: "relative",
+          overflow: isVisible ? "visible" : "hidden"
+        },
+        children: [
+          isExpanded && isVisible && /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: () => {
+                if (confirm("툴바를 숨기시겠습니까? 설정에서 다시 켤 수 있습니다.")) updateSettings({ showToolbar: false });
+              },
+              style: {
+                position: "absolute",
+                top: "-10px",
+                right: "-10px",
+                width: "28px",
+                height: "28px",
+                backgroundColor: "white",
+                border: "2px solid #111827",
+                // dark gray/black
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#111827",
+                cursor: "pointer",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                zIndex: 100,
+                transition: "all 0.2s"
+              },
+              className: "hover:scale-110 hover:text-red-600",
+              title: "툴바 닫기",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx(X, { size: 14, strokeWidth: 3 })
+            }
+          ),
+          !isExpanded && !isVisible ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: () => setIsExpanded(true),
+              className: "w-16 h-16 text-brand-primary flex items-center justify-center hover:scale-110 transition-all group cursor-pointer shrink-0",
+              title: "툴바 열기",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronRight, { size: 32, className: "group-hover:scale-125 transition-transform" })
+            }
+          ) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `flex items-center gap-3 transition-all duration-500 ${isVisible ? "opacity-100" : "opacity-0 translate-y-4"}`, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex bg-white/10 rounded-xl p-1 border border-white/5 shrink-0", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(
                 "button",
                 {
-                  onClick: () => updateSettings({ fontSize: Math.max(10, settings.fontSize - 1) }),
-                  className: "w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-all shadow-sm",
-                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(Minus, { size: 16 })
+                  onClick: () => setMode("note"),
+                  className: `p-2 rounded-lg transition-all ${mode === "note" ? "bg-brand-primary shadow-sm text-gray-900" : "text-gray-400 hover:text-white hover:bg-white/5"}`,
+                  title: "노트 모드",
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(StickyNote, { size: 20 })
                 }
               ),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-bold text-brand-primary w-6 text-center", children: settings.fontSize }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(
                 "button",
                 {
-                  onClick: () => updateSettings({ fontSize: Math.min(24, settings.fontSize + 1) }),
-                  className: "w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-all shadow-sm",
-                  children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-bold", children: "+" })
+                  onClick: () => setMode("markup"),
+                  className: `p-2 rounded-lg transition-all ${mode === "markup" ? "bg-brand-primary shadow-sm text-gray-900" : "text-gray-400 hover:text-white hover:bg-white/5"}`,
+                  title: "마크업 모드",
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(PenTool, { size: 20 })
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  onClick: () => setMode("capture"),
+                  className: `p-2 rounded-lg transition-all ${mode === "capture" ? "bg-brand-primary shadow-sm text-gray-900" : "text-gray-400 hover:text-white hover:bg-white/5"}`,
+                  title: "캡쳐 모드",
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(Camera, { size: 20 })
                 }
               )
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center ml-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "relative w-8 h-8 rounded-full border-2 border-brand-primary/50 shadow-[0_0_10px_rgba(255,213,79,0.2)] overflow-hidden", style: { backgroundColor: settings.textColor }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "color",
-                value: settings.textColor,
-                onChange: (e) => updateSettings({ textColor: e.target.value }),
-                className: "absolute inset-0 w-full h-full opacity-0 cursor-pointer",
-                title: "글꼴 색상"
-              }
-            ) }) })
-          ] }),
-          mode === "markup" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2 items-center", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "button",
-              {
-                onClick: () => setTool("pen"),
-                className: `p-2 rounded-lg transition-all ${currentTool === "pen" ? "bg-brand-primary text-gray-900" : "text-gray-400 hover:bg-white/5 hover:text-white"}`,
-                title: "펜",
-                children: /* @__PURE__ */ jsxRuntimeExports.jsx(PenTool, { size: 20 })
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "button",
-              {
-                onClick: () => setTool("highlight"),
-                className: `p-2 rounded-lg transition-all ${currentTool === "highlight" ? "bg-brand-primary text-gray-900" : "text-gray-400 hover:bg-white/5 hover:text-white"}`,
-                title: "형광펜",
-                children: /* @__PURE__ */ jsxRuntimeExports.jsx(Highlighter, { size: 20 })
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "button",
-              {
-                onClick: () => setTool("eraser"),
-                className: `p-2 rounded-lg transition-all ${currentTool === "eraser" ? "bg-red-500 text-white" : "text-gray-400 hover:bg-white/5 hover:text-white"}`,
-                title: "지우개",
-                children: /* @__PURE__ */ jsxRuntimeExports.jsx(Eraser, { size: 20 })
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-px h-8 bg-white/10 mx-1" }),
-            currentTool !== "eraser" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1 bg-white/5 rounded-xl p-1 border border-white/5", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "button",
-                {
-                  onClick: () => {
-                    const key = currentTool === "highlight" ? "highlightWidth" : "penWidth";
-                    const min = currentTool === "highlight" ? 5 : 1;
-                    updateSettings({ [key]: Math.max(min, settings[key] - (currentTool === "highlight" ? 5 : 1)) });
-                  },
-                  className: "w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-all shadow-sm",
-                  title: "두께 감소",
-                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(Minus, { size: 14 })
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center justify-center w-6 gap-0.5", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "div",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-px h-8 bg-white/10 mx-1 shrink-0" }),
+            mode === "note" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2 items-center", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                  "button",
                   {
-                    className: "bg-brand-primary rounded-full",
-                    style: {
-                      width: Math.min(10, currentTool === "highlight" ? settings.highlightWidth / 4 : settings.penWidth * 1.5),
-                      height: Math.min(10, currentTool === "highlight" ? settings.highlightWidth / 4 : settings.penWidth * 1.5)
-                    }
+                    onClick: () => setIsFontPickerOpen(!isFontPickerOpen),
+                    className: "p-2 rounded-lg hover:bg-white/10 flex items-center gap-1.5 text-gray-300 hover:text-white transition-colors",
+                    title: "글꼴",
+                    children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(Type, { size: 20 }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-bold w-4 truncate opacity-80", children: fonts.find((f) => f.value === settings.fontFamily)?.name[0] || "F" })
+                    ]
                   }
                 ),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[9px] font-bold text-brand-primary leading-none", children: currentTool === "highlight" ? settings.highlightWidth : settings.penWidth })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "button",
-                {
-                  onClick: () => {
-                    const key = currentTool === "highlight" ? "highlightWidth" : "penWidth";
-                    const max = currentTool === "highlight" ? 100 : 20;
-                    updateSettings({ [key]: Math.min(max, settings[key] + (currentTool === "highlight" ? 5 : 1)) });
+                isFontPickerOpen && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute bottom-full left-0 mb-4 bg-gray-800 shadow-2xl border border-white/10 rounded-xl p-2 flex flex-col gap-1 w-40 backdrop-blur-xl", children: fonts.map((font) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    onClick: () => {
+                      updateSettings({ fontFamily: font.value });
+                      setIsFontPickerOpen(false);
+                    },
+                    className: `px-3 py-2 rounded-lg text-xs text-left hover:bg-white/5 transition-all ${settings.fontFamily === font.value ? "bg-brand-primary text-gray-900 font-bold" : "text-gray-300"}`,
+                    style: { fontFamily: font.value },
+                    children: font.name
                   },
-                  className: "w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-all shadow-sm",
-                  title: "두께 증가",
-                  children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-bold", children: "+" })
-                }
-              )
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center ml-1", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative w-8 h-8 rounded-full border-2 border-brand-primary/50 shadow-[0_0_10px_rgba(255,213,79,0.2)] flex items-center justify-center overflow-hidden transition-transform hover:scale-110", style: { backgroundColor: currentColor }, children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(Palette, { size: 14, className: "text-white mix-blend-difference pointer-events-none" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  font.value
+                )) })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1 bg-white/5 rounded-xl p-1 border border-white/5", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    onClick: () => updateSettings({ fontSize: Math.max(10, settings.fontSize - 1) }),
+                    className: "w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-all shadow-sm",
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(Minus, { size: 16 })
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-bold text-brand-primary w-6 text-center", children: settings.fontSize }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    onClick: () => updateSettings({ fontSize: Math.min(24, settings.fontSize + 1) }),
+                    className: "w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-all shadow-sm",
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-bold", children: "+" })
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center ml-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "relative w-8 h-8 rounded-full border-2 border-brand-primary/50 shadow-[0_0_10px_rgba(255,213,79,0.2)] overflow-hidden", style: { backgroundColor: settings.textColor }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
                 "input",
                 {
                   type: "color",
-                  value: currentColor,
-                  onChange: (e) => setColor(e.target.value),
+                  value: settings.textColor,
+                  onChange: (e) => updateSettings({ textColor: e.target.value }),
                   className: "absolute inset-0 w-full h-full opacity-0 cursor-pointer",
-                  title: "마크업 색상"
+                  title: "글꼴 색상"
+                }
+              ) }) })
+            ] }),
+            mode === "markup" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2 items-center", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  onClick: () => setTool("pen"),
+                  className: `p-2 rounded-lg transition-all ${currentTool === "pen" ? "bg-brand-primary text-gray-900" : "text-gray-400 hover:bg-white/5 hover:text-white"}`,
+                  title: "펜",
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(PenTool, { size: 20 })
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  onClick: () => setTool("highlight"),
+                  className: `p-2 rounded-lg transition-all ${currentTool === "highlight" ? "bg-brand-primary text-gray-900" : "text-gray-400 hover:bg-white/5 hover:text-white"}`,
+                  title: "형광펜",
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(Highlighter, { size: 20 })
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  onClick: () => setTool("eraser"),
+                  className: `p-2 rounded-lg transition-all ${currentTool === "eraser" ? "bg-red-500 text-white" : "text-gray-400 hover:bg-white/5 hover:text-white"}`,
+                  title: "지우개",
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(Eraser, { size: 20 })
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-px h-8 bg-white/10 mx-1" }),
+              currentTool !== "eraser" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1 bg-white/5 rounded-xl p-1 border border-white/5", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    onClick: () => {
+                      const key = currentTool === "highlight" ? "highlightWidth" : "penWidth";
+                      const min = currentTool === "highlight" ? 5 : 1;
+                      updateSettings({ [key]: Math.max(min, settings[key] - (currentTool === "highlight" ? 5 : 1)) });
+                    },
+                    className: "w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-all shadow-sm",
+                    title: "두께 감소",
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(Minus, { size: 14 })
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center justify-center w-6 gap-0.5", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "div",
+                    {
+                      className: "bg-brand-primary rounded-full",
+                      style: {
+                        width: Math.min(10, currentTool === "highlight" ? settings.highlightWidth / 4 : settings.penWidth * 1.5),
+                        height: Math.min(10, currentTool === "highlight" ? settings.highlightWidth / 4 : settings.penWidth * 1.5)
+                      }
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[9px] font-bold text-brand-primary leading-none", children: currentTool === "highlight" ? settings.highlightWidth : settings.penWidth })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    onClick: () => {
+                      const key = currentTool === "highlight" ? "highlightWidth" : "penWidth";
+                      const max = currentTool === "highlight" ? 100 : 20;
+                      updateSettings({ [key]: Math.min(max, settings[key] + (currentTool === "highlight" ? 5 : 1)) });
+                    },
+                    className: "w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-all shadow-sm",
+                    title: "두께 증가",
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-bold", children: "+" })
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center ml-1", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative w-8 h-8 rounded-full border-2 border-brand-primary/50 shadow-[0_0_10px_rgba(255,213,79,0.2)] flex items-center justify-center overflow-hidden transition-transform hover:scale-110", style: { backgroundColor: currentColor }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Palette, { size: 14, className: "text-white mix-blend-difference pointer-events-none" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "color",
+                    value: currentColor,
+                    onChange: (e) => setColor(e.target.value),
+                    className: "absolute inset-0 w-full h-full opacity-0 cursor-pointer",
+                    title: "마크업 색상"
+                  }
+                )
+              ] }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  onClick: () => {
+                    if (confirm("이 페이지의 모든 마킹을 지우시겠습니까?")) clearAllMarkups();
+                  },
+                  className: "p-2 text-gray-500 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-all",
+                  title: "모두 지우기",
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(Trash2, { size: 20 })
                 }
               )
-            ] }) }),
+            ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
               {
-                onClick: () => {
-                  if (confirm("이 페이지의 모든 마킹을 지우시겠습니까?")) clearAllMarkups();
-                },
-                className: "p-2 text-gray-500 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-all",
-                title: "모두 지우기",
-                children: /* @__PURE__ */ jsxRuntimeExports.jsx(Trash2, { size: 20 })
+                onClick: handleCollapse,
+                className: "p-1 px-2 text-gray-500 hover:text-gray-300 rounded-lg hover:bg-white/5 transition-all ml-1 shrink-0",
+                title: "접기",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronLeft, { size: 16 })
               }
             )
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              onClick: handleCollapse,
-              className: "p-1 px-2 text-gray-500 hover:text-gray-300 rounded-lg hover:bg-white/5 transition-all ml-1 shrink-0",
-              children: /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronLeft, { size: 16 })
-            }
-          )
-        ] })
+          ] })
+        ]
       }
     ) }) });
   };
   const NoteContainer = () => {
-    const { notes, fetchNotesForUrl, fetchMarkupsForUrl, settings, loadSettings } = useNoteStore();
+    const { notes, fetchNotesForUrl, fetchMarkupsForUrl, settings, loadSettings, mode } = useNoteStore();
     reactExports.useEffect(() => {
       const url = window.location.href;
       loadSettings();
       fetchNotesForUrl(url);
       fetchMarkupsForUrl(url);
     }, [fetchNotesForUrl, fetchMarkupsForUrl, loadSettings]);
+    const isExtensionPage = window.location.protocol === "chrome-extension:";
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { id: "pagepost-notes-root", className: "pointer-events-none", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(MarkupLayer, {}),
-      settings.showToolbar && /* @__PURE__ */ jsxRuntimeExports.jsx(FloatingToolbar, {}),
+      settings.showToolbar && mode !== "capture" && !isExtensionPage && /* @__PURE__ */ jsxRuntimeExports.jsx(FloatingToolbar, {}),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pointer-events-none", children: notes.map((note) => /* @__PURE__ */ jsxRuntimeExports.jsx(NoteCard, { note }, note.id)) })
     ] });
+  };
+  const CaptureLayer = () => {
+    const { mode, setMode } = useNoteStore();
+    const [isSelecting, setIsSelecting] = reactExports.useState(false);
+    const [startPos, setStartPos] = reactExports.useState({ x: 0, y: 0 });
+    const [currentPos, setCurrentPos] = reactExports.useState({ x: 0, y: 0 });
+    const [capturedImage, setCapturedImage] = reactExports.useState(null);
+    const [selectionConfirmed, setSelectionConfirmed] = reactExports.useState(false);
+    const containerRef = reactExports.useRef(null);
+    reactExports.useEffect(() => {
+      const handleKeyDown = (e) => {
+        if (e.key === "Escape") {
+          if (capturedImage) {
+            setCapturedImage(null);
+          } else {
+            setMode("note");
+          }
+        }
+      };
+      if (mode === "capture") {
+        window.addEventListener("keydown", handleKeyDown);
+      }
+      if (mode !== "capture") {
+        setCapturedImage(null);
+        setIsSelecting(false);
+        setSelectionConfirmed(false);
+      }
+      return () => {
+        window.removeEventListener("keydown", handleKeyDown);
+      };
+    }, [mode, capturedImage, setMode]);
+    if (mode !== "capture") return null;
+    const handleMouseDown = (e) => {
+      if (capturedImage) return;
+      if (!chrome.runtime?.id) {
+        alert("확장 프로그램이 업데이트되었습니다.\n페이지를 새로고침한 후 다시 시도해주세요.");
+        setMode("note");
+        return;
+      }
+      e.preventDefault();
+      setIsSelecting(true);
+      setSelectionConfirmed(false);
+      setStartPos({ x: e.clientX, y: e.clientY });
+      setCurrentPos({ x: e.clientX, y: e.clientY });
+    };
+    const handleMouseMove = (e) => {
+      if (!isSelecting) return;
+      setCurrentPos({ x: e.clientX, y: e.clientY });
+    };
+    const handleMouseUp = async () => {
+      if (!isSelecting) return;
+      setIsSelecting(false);
+      const width = Math.abs(startPos.x - currentPos.x);
+      const height = Math.abs(startPos.y - currentPos.y);
+      if (width < 10 || height < 10) {
+        setSelectionConfirmed(false);
+        return;
+      }
+      setSelectionConfirmed(true);
+      const left = Math.min(startPos.x, currentPos.x);
+      const top = Math.min(startPos.y, currentPos.y);
+      const host = document.getElementById("pagepost-extension-host");
+      const notesRoot = host?.shadowRoot?.getElementById("pagepost-notes-root");
+      const captureRoot = containerRef.current;
+      if (notesRoot) notesRoot.style.visibility = "hidden";
+      if (captureRoot) captureRoot.style.visibility = "hidden";
+      setTimeout(async () => {
+        try {
+          const response = await chrome.runtime.sendMessage({ type: "CAPTURE_TAB" });
+          if (notesRoot) notesRoot.style.visibility = "visible";
+          if (captureRoot) captureRoot.style.visibility = "visible";
+          if (response?.dataUrl) {
+            cropImage(response.dataUrl, left, top, width, height);
+          }
+        } catch (error) {
+          if (notesRoot) notesRoot.style.visibility = "visible";
+          if (captureRoot) captureRoot.style.visibility = "visible";
+          console.error("Capture failed:", error);
+          if (error?.message?.includes("Extension context invalidated")) {
+            alert("확장 프로그램이 업데이트되었습니다.\n페이지를 새로고침한 후 다시 시도해주세요.");
+          } else {
+            alert("캡쳐에 실패했습니다.");
+          }
+          setSelectionConfirmed(false);
+        }
+      }, 150);
+    };
+    const cropImage = (dataUrl, x, y, width, height) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.scale(dpr, dpr);
+          ctx.drawImage(img, x, y, width, height, 0, 0, width, height);
+          setCapturedImage(canvas.toDataURL("image/png"));
+          setSelectionConfirmed(false);
+        }
+      };
+      img.src = dataUrl;
+    };
+    const downloadImage = () => {
+      if (!capturedImage) return;
+      const link = document.createElement("a");
+      link.href = capturedImage;
+      link.download = `pagepost_capture_${Date.now()}.png`;
+      link.click();
+      setMode("note");
+    };
+    const selectionStyle = {
+      left: Math.min(startPos.x, currentPos.x),
+      top: Math.min(startPos.y, currentPos.y),
+      width: Math.abs(startPos.x - currentPos.x),
+      height: Math.abs(startPos.y - currentPos.y)
+    };
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        ref: containerRef,
+        onMouseDown: handleMouseDown,
+        onMouseMove: handleMouseMove,
+        onMouseUp: handleMouseUp,
+        style: {
+          position: "fixed",
+          inset: 0,
+          zIndex: 2147483646,
+          backgroundColor: "rgba(0, 0, 0, 0.4)",
+          cursor: "crosshair",
+          overflow: "hidden",
+          pointerEvents: "auto"
+        },
+        children: [
+          !capturedImage && !isSelecting && !selectionConfirmed && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute top-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-gray-900 border border-brand-primary text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce pointer-events-none", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Camera, { size: 20, className: "text-brand-primary" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-bold", children: "캡쳐할 영역을 드래그하여 선택하세요" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                onClick: (e) => {
+                  e.stopPropagation();
+                  setMode("note");
+                },
+                className: "bg-white/10 hover:bg-white/20 backdrop-blur-md text-white border border-white/20 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all hover:scale-105 pointer-events-auto",
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(X, { size: 16 }),
+                  "취소 (ESC)"
+                ]
+              }
+            )
+          ] }),
+          (isSelecting || selectionConfirmed) && !capturedImage && /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "div",
+            {
+              className: "absolute border-2 border-brand-primary bg-white/5 shadow-[0_0_30px_rgba(255,213,79,0.5)] pointer-events-none",
+              style: {
+                ...selectionStyle,
+                boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.6), 0 0 20px rgba(255, 213, 79, 0.8)"
+              }
+            }
+          ),
+          capturedImage && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute inset-0 bg-black/80 flex flex-col items-center justify-center gap-6 p-10 animate-in fade-in duration-300", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative group", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "img",
+                {
+                  src: capturedImage,
+                  alt: "Captured",
+                  className: "max-w-full max-h-[70vh] rounded-lg border-2 border-brand-primary shadow-2xl"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  onClick: () => setCapturedImage(null),
+                  className: "absolute -top-4 -right-4 w-10 h-10 bg-red-500 text-white rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg",
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(X, { size: 24 })
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-4", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  onClick: downloadImage,
+                  className: "flex items-center gap-2 bg-brand-primary text-gray-900 px-8 py-4 rounded-2xl font-black text-lg hover:scale-105 transition-all shadow-xl active:scale-95",
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(Download, { size: 24 }),
+                    "다운로드 및 저장"
+                  ]
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  onClick: () => setMode("note"),
+                  className: "flex items-center gap-2 bg-gray-800 text-white px-8 py-4 rounded-2xl font-bold text-lg hover:bg-gray-700 transition-all border border-white/10",
+                  children: "취소"
+                }
+              )
+            ] })
+          ] })
+        ]
+      }
+    );
   };
   function getCssSelector(el) {
     if (el.id) return `#${CSS.escape(el.id)}`;
@@ -13702,7 +13976,7 @@
       }
     };
   }
-  const tailwindStyles = '/*! tailwindcss v4.2.1 | MIT License | https://tailwindcss.com */\n@layer properties {\n  @supports (((-webkit-hyphens: none)) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color: rgb(from red r g b)))) {\n    *, :before, :after, ::backdrop {\n      --tw-translate-x: 0;\n      --tw-translate-y: 0;\n      --tw-translate-z: 0;\n      --tw-scale-x: 1;\n      --tw-scale-y: 1;\n      --tw-scale-z: 1;\n      --tw-rotate-x: initial;\n      --tw-rotate-y: initial;\n      --tw-rotate-z: initial;\n      --tw-skew-x: initial;\n      --tw-skew-y: initial;\n      --tw-space-y-reverse: 0;\n      --tw-border-style: solid;\n      --tw-leading: initial;\n      --tw-font-weight: initial;\n      --tw-tracking: initial;\n      --tw-shadow: 0 0 #0000;\n      --tw-shadow-color: initial;\n      --tw-shadow-alpha: 100%;\n      --tw-inset-shadow: 0 0 #0000;\n      --tw-inset-shadow-color: initial;\n      --tw-inset-shadow-alpha: 100%;\n      --tw-ring-color: initial;\n      --tw-ring-shadow: 0 0 #0000;\n      --tw-inset-ring-color: initial;\n      --tw-inset-ring-shadow: 0 0 #0000;\n      --tw-ring-inset: initial;\n      --tw-ring-offset-width: 0px;\n      --tw-ring-offset-color: #fff;\n      --tw-ring-offset-shadow: 0 0 #0000;\n      --tw-outline-style: solid;\n      --tw-blur: initial;\n      --tw-brightness: initial;\n      --tw-contrast: initial;\n      --tw-grayscale: initial;\n      --tw-hue-rotate: initial;\n      --tw-invert: initial;\n      --tw-opacity: initial;\n      --tw-saturate: initial;\n      --tw-sepia: initial;\n      --tw-drop-shadow: initial;\n      --tw-drop-shadow-color: initial;\n      --tw-drop-shadow-alpha: 100%;\n      --tw-drop-shadow-size: initial;\n      --tw-backdrop-blur: initial;\n      --tw-backdrop-brightness: initial;\n      --tw-backdrop-contrast: initial;\n      --tw-backdrop-grayscale: initial;\n      --tw-backdrop-hue-rotate: initial;\n      --tw-backdrop-invert: initial;\n      --tw-backdrop-opacity: initial;\n      --tw-backdrop-saturate: initial;\n      --tw-backdrop-sepia: initial;\n      --tw-duration: initial;\n      --tw-ease: initial;\n    }\n  }\n}\n\n@layer theme {\n  :root, :host {\n    --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",\n      "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";\n    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",\n      "Courier New", monospace;\n    --color-red-50: oklch(97.1% .013 17.38);\n    --color-red-100: oklch(93.6% .032 17.717);\n    --color-red-400: oklch(70.4% .191 22.216);\n    --color-red-500: oklch(63.7% .237 25.331);\n    --color-red-600: oklch(57.7% .245 27.325);\n    --color-green-600: oklch(62.7% .194 149.214);\n    --color-gray-50: oklch(98.5% .002 247.839);\n    --color-gray-100: oklch(96.7% .003 264.542);\n    --color-gray-200: oklch(92.8% .006 264.531);\n    --color-gray-300: oklch(87.2% .01 258.338);\n    --color-gray-400: oklch(70.7% .022 261.325);\n    --color-gray-500: oklch(55.1% .027 264.364);\n    --color-gray-600: oklch(44.6% .03 256.802);\n    --color-gray-700: oklch(37.3% .034 259.733);\n    --color-gray-800: oklch(27.8% .033 256.848);\n    --color-gray-900: oklch(21% .034 264.665);\n    --color-black: #000;\n    --color-white: #fff;\n    --spacing: .25rem;\n    --text-xs: .75rem;\n    --text-xs--line-height: calc(1 / .75);\n    --text-sm: .875rem;\n    --text-sm--line-height: calc(1.25 / .875);\n    --text-lg: 1.125rem;\n    --text-lg--line-height: calc(1.75 / 1.125);\n    --font-weight-medium: 500;\n    --font-weight-semibold: 600;\n    --font-weight-bold: 700;\n    --tracking-wider: .05em;\n    --leading-relaxed: 1.625;\n    --radius-md: .375rem;\n    --radius-lg: .5rem;\n    --radius-xl: .75rem;\n    --radius-3xl: 1.5rem;\n    --ease-in-out: cubic-bezier(.4, 0, .2, 1);\n    --animate-pulse: pulse 2s cubic-bezier(.4, 0, .6, 1) infinite;\n    --blur-xl: 24px;\n    --default-transition-duration: .15s;\n    --default-transition-timing-function: cubic-bezier(.4, 0, .2, 1);\n    --default-font-family: var(--font-sans);\n    --default-mono-font-family: var(--font-mono);\n    --color-brand-primary: #ffd54f;\n    --color-brand-accent: #ff6f61;\n    --color-note-yellow: #fff9c4;\n    --color-note-green: #b2dfdb;\n    --color-note-pink: #f8bbd0;\n    --color-note-lavender: #e1bee7;\n    --color-note-blue: #bbdefb;\n  }\n}\n\n@layer base {\n  *, :after, :before, ::backdrop {\n    box-sizing: border-box;\n    border: 0 solid;\n    margin: 0;\n    padding: 0;\n  }\n\n  ::file-selector-button {\n    box-sizing: border-box;\n    border: 0 solid;\n    margin: 0;\n    padding: 0;\n  }\n\n  html, :host {\n    -webkit-text-size-adjust: 100%;\n    tab-size: 4;\n    line-height: 1.5;\n    font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");\n    font-feature-settings: var(--default-font-feature-settings, normal);\n    font-variation-settings: var(--default-font-variation-settings, normal);\n    -webkit-tap-highlight-color: transparent;\n  }\n\n  hr {\n    height: 0;\n    color: inherit;\n    border-top-width: 1px;\n  }\n\n  abbr:where([title]) {\n    -webkit-text-decoration: underline dotted;\n    text-decoration: underline dotted;\n  }\n\n  h1, h2, h3, h4, h5, h6 {\n    font-size: inherit;\n    font-weight: inherit;\n  }\n\n  a {\n    color: inherit;\n    -webkit-text-decoration: inherit;\n    -webkit-text-decoration: inherit;\n    -webkit-text-decoration: inherit;\n    text-decoration: inherit;\n  }\n\n  b, strong {\n    font-weight: bolder;\n  }\n\n  code, kbd, samp, pre {\n    font-family: var(--default-mono-font-family, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);\n    font-feature-settings: var(--default-mono-font-feature-settings, normal);\n    font-variation-settings: var(--default-mono-font-variation-settings, normal);\n    font-size: 1em;\n  }\n\n  small {\n    font-size: 80%;\n  }\n\n  sub, sup {\n    vertical-align: baseline;\n    font-size: 75%;\n    line-height: 0;\n    position: relative;\n  }\n\n  sub {\n    bottom: -.25em;\n  }\n\n  sup {\n    top: -.5em;\n  }\n\n  table {\n    text-indent: 0;\n    border-color: inherit;\n    border-collapse: collapse;\n  }\n\n  :-moz-focusring {\n    outline: auto;\n  }\n\n  progress {\n    vertical-align: baseline;\n  }\n\n  summary {\n    display: list-item;\n  }\n\n  ol, ul, menu {\n    list-style: none;\n  }\n\n  img, svg, video, canvas, audio, iframe, embed, object {\n    vertical-align: middle;\n    display: block;\n  }\n\n  img, video {\n    max-width: 100%;\n    height: auto;\n  }\n\n  button, input, select, optgroup, textarea {\n    font: inherit;\n    font-feature-settings: inherit;\n    font-variation-settings: inherit;\n    letter-spacing: inherit;\n    color: inherit;\n    opacity: 1;\n    background-color: #0000;\n    border-radius: 0;\n  }\n\n  ::file-selector-button {\n    font: inherit;\n    font-feature-settings: inherit;\n    font-variation-settings: inherit;\n    letter-spacing: inherit;\n    color: inherit;\n    opacity: 1;\n    background-color: #0000;\n    border-radius: 0;\n  }\n\n  :where(select:is([multiple], [size])) optgroup {\n    font-weight: bolder;\n  }\n\n  :where(select:is([multiple], [size])) optgroup option {\n    padding-inline-start: 20px;\n  }\n\n  ::file-selector-button {\n    margin-inline-end: 4px;\n  }\n\n  ::placeholder {\n    opacity: 1;\n  }\n\n  @supports (not ((-webkit-appearance: -apple-pay-button))) or (contain-intrinsic-size: 1px) {\n    ::placeholder {\n      color: currentColor;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      ::placeholder {\n        color: color-mix(in oklab, currentcolor 50%, transparent);\n      }\n    }\n  }\n\n  textarea {\n    resize: vertical;\n  }\n\n  ::-webkit-search-decoration {\n    -webkit-appearance: none;\n  }\n\n  ::-webkit-date-and-time-value {\n    min-height: 1lh;\n    text-align: inherit;\n  }\n\n  ::-webkit-datetime-edit {\n    display: inline-flex;\n  }\n\n  ::-webkit-datetime-edit-fields-wrapper {\n    padding: 0;\n  }\n\n  ::-webkit-datetime-edit {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-year-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-month-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-day-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-hour-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-minute-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-second-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-millisecond-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-meridiem-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-calendar-picker-indicator {\n    line-height: 1;\n  }\n\n  :-moz-ui-invalid {\n    box-shadow: none;\n  }\n\n  button, input:where([type="button"], [type="reset"], [type="submit"]) {\n    appearance: button;\n  }\n\n  ::file-selector-button {\n    appearance: button;\n  }\n\n  ::-webkit-inner-spin-button {\n    height: auto;\n  }\n\n  ::-webkit-outer-spin-button {\n    height: auto;\n  }\n\n  [hidden]:where(:not([hidden="until-found"])) {\n    display: none !important;\n  }\n}\n\n@layer components;\n\n@layer utilities {\n  .pointer-events-auto {\n    pointer-events: auto;\n  }\n\n  .pointer-events-none {\n    pointer-events: none;\n  }\n\n  .visible {\n    visibility: visible;\n  }\n\n  .absolute {\n    position: absolute;\n  }\n\n  .fixed {\n    position: fixed;\n  }\n\n  .relative {\n    position: relative;\n  }\n\n  .sticky {\n    position: sticky;\n  }\n\n  .inset-0 {\n    inset: calc(var(--spacing) * 0);\n  }\n\n  .inset-x-0 {\n    inset-inline: calc(var(--spacing) * 0);\n  }\n\n  .start {\n    inset-inline-start: var(--spacing);\n  }\n\n  .end {\n    inset-inline-end: var(--spacing);\n  }\n\n  .top-1 {\n    top: calc(var(--spacing) * 1);\n  }\n\n  .top-1\\/2 {\n    top: 50%;\n  }\n\n  .right-0 {\n    right: calc(var(--spacing) * 0);\n  }\n\n  .bottom-10 {\n    bottom: calc(var(--spacing) * 10);\n  }\n\n  .bottom-full {\n    bottom: 100%;\n  }\n\n  .left-0 {\n    left: calc(var(--spacing) * 0);\n  }\n\n  .left-2 {\n    left: calc(var(--spacing) * 2);\n  }\n\n  .left-2\\.5 {\n    left: calc(var(--spacing) * 2.5);\n  }\n\n  .z-20 {\n    z-index: 20;\n  }\n\n  .z-50 {\n    z-index: 50;\n  }\n\n  .z-\\[2147483647\\] {\n    z-index: 2147483647;\n  }\n\n  .container {\n    width: 100%;\n  }\n\n  @media (min-width: 40rem) {\n    .container {\n      max-width: 40rem;\n    }\n  }\n\n  @media (min-width: 48rem) {\n    .container {\n      max-width: 48rem;\n    }\n  }\n\n  @media (min-width: 64rem) {\n    .container {\n      max-width: 64rem;\n    }\n  }\n\n  @media (min-width: 80rem) {\n    .container {\n      max-width: 80rem;\n    }\n  }\n\n  @media (min-width: 96rem) {\n    .container {\n      max-width: 96rem;\n    }\n  }\n\n  .mx-1 {\n    margin-inline: calc(var(--spacing) * 1);\n  }\n\n  .mt-2 {\n    margin-top: calc(var(--spacing) * 2);\n  }\n\n  .mr-1 {\n    margin-right: calc(var(--spacing) * 1);\n  }\n\n  .mb-1 {\n    margin-bottom: calc(var(--spacing) * 1);\n  }\n\n  .mb-2 {\n    margin-bottom: calc(var(--spacing) * 2);\n  }\n\n  .mb-3 {\n    margin-bottom: calc(var(--spacing) * 3);\n  }\n\n  .mb-4 {\n    margin-bottom: calc(var(--spacing) * 4);\n  }\n\n  .ml-1 {\n    margin-left: calc(var(--spacing) * 1);\n  }\n\n  .box-border {\n    box-sizing: border-box;\n  }\n\n  .line-clamp-3 {\n    -webkit-line-clamp: 3;\n    -webkit-box-orient: vertical;\n    display: -webkit-box;\n    overflow: hidden;\n  }\n\n  .block {\n    display: block;\n  }\n\n  .flex {\n    display: flex;\n  }\n\n  .grid {\n    display: grid;\n  }\n\n  .hidden {\n    display: none;\n  }\n\n  .inline {\n    display: inline;\n  }\n\n  .table {\n    display: table;\n  }\n\n  .h-1 {\n    height: calc(var(--spacing) * 1);\n  }\n\n  .h-1\\.5 {\n    height: calc(var(--spacing) * 1.5);\n  }\n\n  .h-3 {\n    height: calc(var(--spacing) * 3);\n  }\n\n  .h-4 {\n    height: calc(var(--spacing) * 4);\n  }\n\n  .h-5 {\n    height: calc(var(--spacing) * 5);\n  }\n\n  .h-7 {\n    height: calc(var(--spacing) * 7);\n  }\n\n  .h-8 {\n    height: calc(var(--spacing) * 8);\n  }\n\n  .h-10 {\n    height: calc(var(--spacing) * 10);\n  }\n\n  .h-16 {\n    height: calc(var(--spacing) * 16);\n  }\n\n  .h-18 {\n    height: calc(var(--spacing) * 18);\n  }\n\n  .h-\\[480px\\] {\n    height: 480px;\n  }\n\n  .h-full {\n    height: 100%;\n  }\n\n  .w-1 {\n    width: calc(var(--spacing) * 1);\n  }\n\n  .w-1\\.5 {\n    width: calc(var(--spacing) * 1.5);\n  }\n\n  .w-2 {\n    width: calc(var(--spacing) * 2);\n  }\n\n  .w-3 {\n    width: calc(var(--spacing) * 3);\n  }\n\n  .w-4 {\n    width: calc(var(--spacing) * 4);\n  }\n\n  .w-6 {\n    width: calc(var(--spacing) * 6);\n  }\n\n  .w-7 {\n    width: calc(var(--spacing) * 7);\n  }\n\n  .w-8 {\n    width: calc(var(--spacing) * 8);\n  }\n\n  .w-10 {\n    width: calc(var(--spacing) * 10);\n  }\n\n  .w-16 {\n    width: calc(var(--spacing) * 16);\n  }\n\n  .w-40 {\n    width: calc(var(--spacing) * 40);\n  }\n\n  .w-\\[320px\\] {\n    width: 320px;\n  }\n\n  .w-full {\n    width: 100%;\n  }\n\n  .w-px {\n    width: 1px;\n  }\n\n  .max-w-\\[64px\\] {\n    max-width: 64px;\n  }\n\n  .max-w-\\[120px\\] {\n    max-width: 120px;\n  }\n\n  .max-w-\\[min\\(800px\\,94vw\\)\\] {\n    max-width: min(800px, 94vw);\n  }\n\n  .max-w-full {\n    max-width: 100%;\n  }\n\n  .flex-1 {\n    flex: 1;\n  }\n\n  .flex-shrink {\n    flex-shrink: 1;\n  }\n\n  .flex-shrink-0, .shrink-0 {\n    flex-shrink: 0;\n  }\n\n  .border-collapse {\n    border-collapse: collapse;\n  }\n\n  .translate-x-0 {\n    --tw-translate-x: calc(var(--spacing) * 0);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .translate-x-5 {\n    --tw-translate-x: calc(var(--spacing) * 5);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .-translate-y-1 {\n    --tw-translate-y: calc(var(--spacing) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .-translate-y-1\\/2 {\n    --tw-translate-y: calc(calc(1 / 2 * 100%) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .translate-y-4 {\n    --tw-translate-y: calc(var(--spacing) * 4);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .scale-110 {\n    --tw-scale-x: 110%;\n    --tw-scale-y: 110%;\n    --tw-scale-z: 110%;\n    scale: var(--tw-scale-x) var(--tw-scale-y);\n  }\n\n  .rotate-90 {\n    rotate: 90deg;\n  }\n\n  .transform {\n    transform: var(--tw-rotate-x,  ) var(--tw-rotate-y,  ) var(--tw-rotate-z,  ) var(--tw-skew-x,  ) var(--tw-skew-y,  );\n  }\n\n  .animate-pulse {\n    animation: var(--animate-pulse);\n  }\n\n  .cursor-grab {\n    cursor: grab;\n  }\n\n  .cursor-nwse-resize {\n    cursor: nwse-resize;\n  }\n\n  .cursor-pointer {\n    cursor: pointer;\n  }\n\n  .cursor-text {\n    cursor: text;\n  }\n\n  .resize {\n    resize: both;\n  }\n\n  .resize-none {\n    resize: none;\n  }\n\n  .appearance-none {\n    appearance: none;\n  }\n\n  .grid-cols-1 {\n    grid-template-columns: repeat(1, minmax(0, 1fr));\n  }\n\n  .grid-cols-4 {\n    grid-template-columns: repeat(4, minmax(0, 1fr));\n  }\n\n  .flex-col {\n    flex-direction: column;\n  }\n\n  .flex-wrap {\n    flex-wrap: wrap;\n  }\n\n  .items-center {\n    align-items: center;\n  }\n\n  .items-start {\n    align-items: flex-start;\n  }\n\n  .justify-between {\n    justify-content: space-between;\n  }\n\n  .justify-center {\n    justify-content: center;\n  }\n\n  .gap-0 {\n    gap: calc(var(--spacing) * 0);\n  }\n\n  .gap-0\\.5 {\n    gap: calc(var(--spacing) * .5);\n  }\n\n  .gap-1 {\n    gap: calc(var(--spacing) * 1);\n  }\n\n  .gap-1\\.5 {\n    gap: calc(var(--spacing) * 1.5);\n  }\n\n  .gap-2 {\n    gap: calc(var(--spacing) * 2);\n  }\n\n  .gap-3 {\n    gap: calc(var(--spacing) * 3);\n  }\n\n  :where(.space-y-2 > :not(:last-child)) {\n    --tw-space-y-reverse: 0;\n    margin-block-start: calc(calc(var(--spacing) * 2) * var(--tw-space-y-reverse));\n    margin-block-end: calc(calc(var(--spacing) * 2) * calc(1 - var(--tw-space-y-reverse)));\n  }\n\n  :where(.space-y-6 > :not(:last-child)) {\n    --tw-space-y-reverse: 0;\n    margin-block-start: calc(calc(var(--spacing) * 6) * var(--tw-space-y-reverse));\n    margin-block-end: calc(calc(var(--spacing) * 6) * calc(1 - var(--tw-space-y-reverse)));\n  }\n\n  .truncate {\n    text-overflow: ellipsis;\n    white-space: nowrap;\n    overflow: hidden;\n  }\n\n  .overflow-hidden {\n    overflow: hidden;\n  }\n\n  .overflow-visible {\n    overflow: visible;\n  }\n\n  .overflow-y-auto {\n    overflow-y: auto;\n  }\n\n  .rounded {\n    border-radius: .25rem;\n  }\n\n  .rounded-3xl {\n    border-radius: var(--radius-3xl);\n  }\n\n  .rounded-full {\n    border-radius: 3.40282e38px;\n  }\n\n  .rounded-lg {\n    border-radius: var(--radius-lg);\n  }\n\n  .rounded-md {\n    border-radius: var(--radius-md);\n  }\n\n  .rounded-xl {\n    border-radius: var(--radius-xl);\n  }\n\n  .border {\n    border-style: var(--tw-border-style);\n    border-width: 1px;\n  }\n\n  .border-2 {\n    border-style: var(--tw-border-style);\n    border-width: 2px;\n  }\n\n  .border-4 {\n    border-style: var(--tw-border-style);\n    border-width: 4px;\n  }\n\n  .border-t {\n    border-top-style: var(--tw-border-style);\n    border-top-width: 1px;\n  }\n\n  .border-b {\n    border-bottom-style: var(--tw-border-style);\n    border-bottom-width: 1px;\n  }\n\n  .border-none {\n    --tw-border-style: none;\n    border-style: none;\n  }\n\n  .border-black {\n    border-color: var(--color-black);\n  }\n\n  .border-black\\/5 {\n    border-color: #0000000d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-black\\/5 {\n      border-color: color-mix(in oklab, var(--color-black) 5%, transparent);\n    }\n  }\n\n  .border-black\\/10 {\n    border-color: #0000001a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-black\\/10 {\n      border-color: color-mix(in oklab, var(--color-black) 10%, transparent);\n    }\n  }\n\n  .border-brand-primary {\n    border-color: var(--color-brand-primary);\n  }\n\n  .border-brand-primary\\/50 {\n    border-color: #ffd54f80;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-brand-primary\\/50 {\n      border-color: color-mix(in oklab, var(--color-brand-primary) 50%, transparent);\n    }\n  }\n\n  .border-gray-100 {\n    border-color: var(--color-gray-100);\n  }\n\n  .border-gray-200 {\n    border-color: var(--color-gray-200);\n  }\n\n  .border-red-100 {\n    border-color: var(--color-red-100);\n  }\n\n  .border-white {\n    border-color: var(--color-white);\n  }\n\n  .border-white\\/5 {\n    border-color: #ffffff0d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-white\\/5 {\n      border-color: color-mix(in oklab, var(--color-white) 5%, transparent);\n    }\n  }\n\n  .border-white\\/10 {\n    border-color: #ffffff1a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-white\\/10 {\n      border-color: color-mix(in oklab, var(--color-white) 10%, transparent);\n    }\n  }\n\n  .bg-black {\n    background-color: var(--color-black);\n  }\n\n  .bg-black\\/5 {\n    background-color: #0000000d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-black\\/5 {\n      background-color: color-mix(in oklab, var(--color-black) 5%, transparent);\n    }\n  }\n\n  .bg-black\\/10 {\n    background-color: #0000001a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-black\\/10 {\n      background-color: color-mix(in oklab, var(--color-black) 10%, transparent);\n    }\n  }\n\n  .bg-brand-primary {\n    background-color: var(--color-brand-primary);\n  }\n\n  .bg-brand-primary\\/5 {\n    background-color: #ffd54f0d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-brand-primary\\/5 {\n      background-color: color-mix(in oklab, var(--color-brand-primary) 5%, transparent);\n    }\n  }\n\n  .bg-gray-50 {\n    background-color: var(--color-gray-50);\n  }\n\n  .bg-gray-100 {\n    background-color: var(--color-gray-100);\n  }\n\n  .bg-gray-200 {\n    background-color: var(--color-gray-200);\n  }\n\n  .bg-gray-300 {\n    background-color: var(--color-gray-300);\n  }\n\n  .bg-gray-800 {\n    background-color: var(--color-gray-800);\n  }\n\n  .bg-gray-900 {\n    background-color: var(--color-gray-900);\n  }\n\n  .bg-note-blue {\n    background-color: var(--color-note-blue);\n  }\n\n  .bg-note-green {\n    background-color: var(--color-note-green);\n  }\n\n  .bg-note-lavender {\n    background-color: var(--color-note-lavender);\n  }\n\n  .bg-note-pink {\n    background-color: var(--color-note-pink);\n  }\n\n  .bg-note-yellow {\n    background-color: var(--color-note-yellow);\n  }\n\n  .bg-red-50 {\n    background-color: var(--color-red-50);\n  }\n\n  .bg-red-500 {\n    background-color: var(--color-red-500);\n  }\n\n  .bg-transparent {\n    background-color: #0000;\n  }\n\n  .bg-white {\n    background-color: var(--color-white);\n  }\n\n  .bg-white\\/5 {\n    background-color: #ffffff0d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-white\\/5 {\n      background-color: color-mix(in oklab, var(--color-white) 5%, transparent);\n    }\n  }\n\n  .bg-white\\/10 {\n    background-color: #ffffff1a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-white\\/10 {\n      background-color: color-mix(in oklab, var(--color-white) 10%, transparent);\n    }\n  }\n\n  .fill-current {\n    fill: currentColor;\n  }\n\n  .p-0 {\n    padding: calc(var(--spacing) * 0);\n  }\n\n  .p-0\\.5 {\n    padding: calc(var(--spacing) * .5);\n  }\n\n  .p-1 {\n    padding: calc(var(--spacing) * 1);\n  }\n\n  .p-2 {\n    padding: calc(var(--spacing) * 2);\n  }\n\n  .p-3 {\n    padding: calc(var(--spacing) * 3);\n  }\n\n  .p-4 {\n    padding: calc(var(--spacing) * 4);\n  }\n\n  .px-1 {\n    padding-inline: calc(var(--spacing) * 1);\n  }\n\n  .px-1\\.5 {\n    padding-inline: calc(var(--spacing) * 1.5);\n  }\n\n  .px-2 {\n    padding-inline: calc(var(--spacing) * 2);\n  }\n\n  .px-3 {\n    padding-inline: calc(var(--spacing) * 3);\n  }\n\n  .px-4 {\n    padding-inline: calc(var(--spacing) * 4);\n  }\n\n  .py-0 {\n    padding-block: calc(var(--spacing) * 0);\n  }\n\n  .py-0\\.5 {\n    padding-block: calc(var(--spacing) * .5);\n  }\n\n  .py-1 {\n    padding-block: calc(var(--spacing) * 1);\n  }\n\n  .py-1\\.5 {\n    padding-block: calc(var(--spacing) * 1.5);\n  }\n\n  .py-2 {\n    padding-block: calc(var(--spacing) * 2);\n  }\n\n  .pr-3 {\n    padding-right: calc(var(--spacing) * 3);\n  }\n\n  .pl-8 {\n    padding-left: calc(var(--spacing) * 8);\n  }\n\n  .text-center {\n    text-align: center;\n  }\n\n  .text-left {\n    text-align: left;\n  }\n\n  .font-sans {\n    font-family: var(--font-sans);\n  }\n\n  .text-lg {\n    font-size: var(--text-lg);\n    line-height: var(--tw-leading, var(--text-lg--line-height));\n  }\n\n  .text-sm {\n    font-size: var(--text-sm);\n    line-height: var(--tw-leading, var(--text-sm--line-height));\n  }\n\n  .text-xs {\n    font-size: var(--text-xs);\n    line-height: var(--tw-leading, var(--text-xs--line-height));\n  }\n\n  .text-\\[9px\\] {\n    font-size: 9px;\n  }\n\n  .text-\\[10px\\] {\n    font-size: 10px;\n  }\n\n  .text-\\[11px\\] {\n    font-size: 11px;\n  }\n\n  .leading-none {\n    --tw-leading: 1;\n    line-height: 1;\n  }\n\n  .leading-relaxed {\n    --tw-leading: var(--leading-relaxed);\n    line-height: var(--leading-relaxed);\n  }\n\n  .font-bold {\n    --tw-font-weight: var(--font-weight-bold);\n    font-weight: var(--font-weight-bold);\n  }\n\n  .font-medium {\n    --tw-font-weight: var(--font-weight-medium);\n    font-weight: var(--font-weight-medium);\n  }\n\n  .font-semibold {\n    --tw-font-weight: var(--font-weight-semibold);\n    font-weight: var(--font-weight-semibold);\n  }\n\n  .tracking-wider {\n    --tw-tracking: var(--tracking-wider);\n    letter-spacing: var(--tracking-wider);\n  }\n\n  .whitespace-nowrap {\n    white-space: nowrap;\n  }\n\n  .whitespace-pre-wrap {\n    white-space: pre-wrap;\n  }\n\n  .text-black {\n    color: var(--color-black);\n  }\n\n  .text-black\\/30 {\n    color: #0000004d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .text-black\\/30 {\n      color: color-mix(in oklab, var(--color-black) 30%, transparent);\n    }\n  }\n\n  .text-black\\/50 {\n    color: #00000080;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .text-black\\/50 {\n      color: color-mix(in oklab, var(--color-black) 50%, transparent);\n    }\n  }\n\n  .text-brand-primary {\n    color: var(--color-brand-primary);\n  }\n\n  .text-gray-300 {\n    color: var(--color-gray-300);\n  }\n\n  .text-gray-400 {\n    color: var(--color-gray-400);\n  }\n\n  .text-gray-500 {\n    color: var(--color-gray-500);\n  }\n\n  .text-gray-700 {\n    color: var(--color-gray-700);\n  }\n\n  .text-gray-800 {\n    color: var(--color-gray-800);\n  }\n\n  .text-gray-900 {\n    color: var(--color-gray-900);\n  }\n\n  .text-green-600 {\n    color: var(--color-green-600);\n  }\n\n  .text-red-400 {\n    color: var(--color-red-400);\n  }\n\n  .text-red-500 {\n    color: var(--color-red-500);\n  }\n\n  .text-red-600 {\n    color: var(--color-red-600);\n  }\n\n  .text-white {\n    color: var(--color-white);\n  }\n\n  .uppercase {\n    text-transform: uppercase;\n  }\n\n  .italic {\n    font-style: italic;\n  }\n\n  .underline {\n    text-decoration-line: underline;\n  }\n\n  .accent-brand-primary {\n    accent-color: var(--color-brand-primary);\n  }\n\n  .opacity-0 {\n    opacity: 0;\n  }\n\n  .opacity-50 {\n    opacity: .5;\n  }\n\n  .opacity-80 {\n    opacity: .8;\n  }\n\n  .opacity-100 {\n    opacity: 1;\n  }\n\n  .mix-blend-difference {\n    mix-blend-mode: difference;\n  }\n\n  .shadow {\n    --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, #0000001a), 0 1px 2px -1px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-2xl {\n    --tw-shadow: 0 25px 50px -12px var(--tw-shadow-color, #00000040);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-\\[0_0_10px_rgba\\(255\\,213\\,79\\,0\\.2\\)\\] {\n    --tw-shadow: 0 0 10px var(--tw-shadow-color, #ffd54f33);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-\\[0_20px_60px_rgba\\(0\\,0\\,0\\,0\\.6\\)\\,0_0_25px_rgba\\(255\\,213\\,79\\,0\\.2\\)\\] {\n    --tw-shadow: 0 20px 60px var(--tw-shadow-color, #0009), 0 0 25px var(--tw-shadow-color, #ffd54f33);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-lg {\n    --tw-shadow: 0 10px 15px -3px var(--tw-shadow-color, #0000001a), 0 4px 6px -4px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-md {\n    --tw-shadow: 0 4px 6px -1px var(--tw-shadow-color, #0000001a), 0 2px 4px -2px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-sm {\n    --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, #0000001a), 0 1px 2px -1px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-1 {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-2 {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-4 {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(4px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-brand-primary {\n    --tw-ring-color: var(--color-brand-primary);\n  }\n\n  .outline {\n    outline-style: var(--tw-outline-style);\n    outline-width: 1px;\n  }\n\n  .blur {\n    --tw-blur: blur(8px);\n    filter: var(--tw-blur,  ) var(--tw-brightness,  ) var(--tw-contrast,  ) var(--tw-grayscale,  ) var(--tw-hue-rotate,  ) var(--tw-invert,  ) var(--tw-saturate,  ) var(--tw-sepia,  ) var(--tw-drop-shadow,  );\n  }\n\n  .filter {\n    filter: var(--tw-blur,  ) var(--tw-brightness,  ) var(--tw-contrast,  ) var(--tw-grayscale,  ) var(--tw-hue-rotate,  ) var(--tw-invert,  ) var(--tw-saturate,  ) var(--tw-sepia,  ) var(--tw-drop-shadow,  );\n  }\n\n  .backdrop-blur-xl {\n    --tw-backdrop-blur: blur(var(--blur-xl));\n    -webkit-backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n    backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n  }\n\n  .backdrop-filter {\n    -webkit-backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n    backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n  }\n\n  .transition-all {\n    transition-property: all;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-colors {\n    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-opacity {\n    transition-property: opacity;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-transform {\n    transition-property: transform, translate, scale, rotate;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .duration-200 {\n    --tw-duration: .2s;\n    transition-duration: .2s;\n  }\n\n  .duration-500 {\n    --tw-duration: .5s;\n    transition-duration: .5s;\n  }\n\n  .ease-in-out {\n    --tw-ease: var(--ease-in-out);\n    transition-timing-function: var(--ease-in-out);\n  }\n\n  .outline-none {\n    --tw-outline-style: none;\n    outline-style: none;\n  }\n\n  @media (hover: hover) {\n    .group-hover\\:scale-125:is(:where(.group):hover *) {\n      --tw-scale-x: 125%;\n      --tw-scale-y: 125%;\n      --tw-scale-z: 125%;\n      scale: var(--tw-scale-x) var(--tw-scale-y);\n    }\n\n    .group-hover\\:opacity-100:is(:where(.group):hover *) {\n      opacity: 1;\n    }\n\n    .hover\\:scale-110:hover {\n      --tw-scale-x: 110%;\n      --tw-scale-y: 110%;\n      --tw-scale-z: 110%;\n      scale: var(--tw-scale-x) var(--tw-scale-y);\n    }\n\n    .hover\\:border-brand-primary:hover {\n      border-color: var(--color-brand-primary);\n    }\n\n    .hover\\:border-gray-300:hover {\n      border-color: var(--color-gray-300);\n    }\n\n    .hover\\:bg-black\\/5:hover {\n      background-color: #0000000d;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-black\\/5:hover {\n        background-color: color-mix(in oklab, var(--color-black) 5%, transparent);\n      }\n    }\n\n    .hover\\:bg-black\\/10:hover {\n      background-color: #0000001a;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-black\\/10:hover {\n        background-color: color-mix(in oklab, var(--color-black) 10%, transparent);\n      }\n    }\n\n    .hover\\:bg-gray-100:hover {\n      background-color: var(--color-gray-100);\n    }\n\n    .hover\\:bg-red-100:hover {\n      background-color: var(--color-red-100);\n    }\n\n    .hover\\:bg-red-500\\/10:hover {\n      background-color: #fb2c361a;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-red-500\\/10:hover {\n        background-color: color-mix(in oklab, var(--color-red-500) 10%, transparent);\n      }\n    }\n\n    .hover\\:bg-white\\/5:hover {\n      background-color: #ffffff0d;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-white\\/5:hover {\n        background-color: color-mix(in oklab, var(--color-white) 5%, transparent);\n      }\n    }\n\n    .hover\\:bg-white\\/10:hover {\n      background-color: #ffffff1a;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-white\\/10:hover {\n        background-color: color-mix(in oklab, var(--color-white) 10%, transparent);\n      }\n    }\n\n    .hover\\:text-brand-accent:hover {\n      color: var(--color-brand-accent);\n    }\n\n    .hover\\:text-gray-300:hover {\n      color: var(--color-gray-300);\n    }\n\n    .hover\\:text-gray-600:hover {\n      color: var(--color-gray-600);\n    }\n\n    .hover\\:text-gray-700:hover {\n      color: var(--color-gray-700);\n    }\n\n    .hover\\:text-red-400:hover {\n      color: var(--color-red-400);\n    }\n\n    .hover\\:text-white:hover {\n      color: var(--color-white);\n    }\n  }\n\n  .focus\\:ring-1:focus {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .focus\\:ring-brand-primary:focus {\n    --tw-ring-color: var(--color-brand-primary);\n  }\n\n  .active\\:cursor-grabbing:active {\n    cursor: grabbing;\n  }\n\n  .\\[\\&\\:\\:-webkit-color-swatch\\]\\:rounded-full::-webkit-color-swatch {\n    border-radius: 3.40282e38px;\n  }\n\n  .\\[\\&\\:\\:-webkit-color-swatch\\]\\:border-none::-webkit-color-swatch {\n    --tw-border-style: none;\n    border-style: none;\n  }\n\n  .\\[\\&\\:\\:-webkit-color-swatch-wrapper\\]\\:p-0::-webkit-color-swatch-wrapper {\n    padding: calc(var(--spacing) * 0);\n  }\n}\n\n:root {\n  font-family: Pretendard Variable, system-ui, -apple-system, sans-serif;\n}\n\nbody {\n  margin: 0;\n  overflow-x: hidden;\n}\n\n@property --tw-translate-x {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-translate-y {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-translate-z {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-scale-x {\n  syntax: "*";\n  inherits: false;\n  initial-value: 1;\n}\n\n@property --tw-scale-y {\n  syntax: "*";\n  inherits: false;\n  initial-value: 1;\n}\n\n@property --tw-scale-z {\n  syntax: "*";\n  inherits: false;\n  initial-value: 1;\n}\n\n@property --tw-rotate-x {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-rotate-y {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-rotate-z {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-skew-x {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-skew-y {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-space-y-reverse {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-border-style {\n  syntax: "*";\n  inherits: false;\n  initial-value: solid;\n}\n\n@property --tw-leading {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-font-weight {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-tracking {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-shadow-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-shadow-alpha {\n  syntax: "<percentage>";\n  inherits: false;\n  initial-value: 100%;\n}\n\n@property --tw-inset-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-inset-shadow-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-inset-shadow-alpha {\n  syntax: "<percentage>";\n  inherits: false;\n  initial-value: 100%;\n}\n\n@property --tw-ring-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-ring-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-inset-ring-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-inset-ring-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-ring-inset {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-ring-offset-width {\n  syntax: "<length>";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-ring-offset-color {\n  syntax: "*";\n  inherits: false;\n  initial-value: #fff;\n}\n\n@property --tw-ring-offset-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-outline-style {\n  syntax: "*";\n  inherits: false;\n  initial-value: solid;\n}\n\n@property --tw-blur {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-brightness {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-contrast {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-grayscale {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-hue-rotate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-invert {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-opacity {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-saturate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-sepia {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-drop-shadow {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-drop-shadow-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-drop-shadow-alpha {\n  syntax: "<percentage>";\n  inherits: false;\n  initial-value: 100%;\n}\n\n@property --tw-drop-shadow-size {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-blur {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-brightness {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-contrast {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-grayscale {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-hue-rotate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-invert {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-opacity {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-saturate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-sepia {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-duration {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-ease {\n  syntax: "*";\n  inherits: false\n}\n\n@keyframes pulse {\n  50% {\n    opacity: .5;\n  }\n}\n';
+  const tailwindStyles = '/*! tailwindcss v4.2.1 | MIT License | https://tailwindcss.com */\n@layer properties {\n  @supports (((-webkit-hyphens: none)) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color: rgb(from red r g b)))) {\n    *, :before, :after, ::backdrop {\n      --tw-translate-x: 0;\n      --tw-translate-y: 0;\n      --tw-translate-z: 0;\n      --tw-scale-x: 1;\n      --tw-scale-y: 1;\n      --tw-scale-z: 1;\n      --tw-rotate-x: initial;\n      --tw-rotate-y: initial;\n      --tw-rotate-z: initial;\n      --tw-skew-x: initial;\n      --tw-skew-y: initial;\n      --tw-space-y-reverse: 0;\n      --tw-border-style: solid;\n      --tw-leading: initial;\n      --tw-font-weight: initial;\n      --tw-tracking: initial;\n      --tw-shadow: 0 0 #0000;\n      --tw-shadow-color: initial;\n      --tw-shadow-alpha: 100%;\n      --tw-inset-shadow: 0 0 #0000;\n      --tw-inset-shadow-color: initial;\n      --tw-inset-shadow-alpha: 100%;\n      --tw-ring-color: initial;\n      --tw-ring-shadow: 0 0 #0000;\n      --tw-inset-ring-color: initial;\n      --tw-inset-ring-shadow: 0 0 #0000;\n      --tw-ring-inset: initial;\n      --tw-ring-offset-width: 0px;\n      --tw-ring-offset-color: #fff;\n      --tw-ring-offset-shadow: 0 0 #0000;\n      --tw-outline-style: solid;\n      --tw-blur: initial;\n      --tw-brightness: initial;\n      --tw-contrast: initial;\n      --tw-grayscale: initial;\n      --tw-hue-rotate: initial;\n      --tw-invert: initial;\n      --tw-opacity: initial;\n      --tw-saturate: initial;\n      --tw-sepia: initial;\n      --tw-drop-shadow: initial;\n      --tw-drop-shadow-color: initial;\n      --tw-drop-shadow-alpha: 100%;\n      --tw-drop-shadow-size: initial;\n      --tw-backdrop-blur: initial;\n      --tw-backdrop-brightness: initial;\n      --tw-backdrop-contrast: initial;\n      --tw-backdrop-grayscale: initial;\n      --tw-backdrop-hue-rotate: initial;\n      --tw-backdrop-invert: initial;\n      --tw-backdrop-opacity: initial;\n      --tw-backdrop-saturate: initial;\n      --tw-backdrop-sepia: initial;\n      --tw-duration: initial;\n      --tw-ease: initial;\n    }\n  }\n}\n\n@layer theme {\n  :root, :host {\n    --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",\n      "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";\n    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",\n      "Courier New", monospace;\n    --color-red-50: oklch(97.1% .013 17.38);\n    --color-red-100: oklch(93.6% .032 17.717);\n    --color-red-400: oklch(70.4% .191 22.216);\n    --color-red-500: oklch(63.7% .237 25.331);\n    --color-red-600: oklch(57.7% .245 27.325);\n    --color-green-600: oklch(62.7% .194 149.214);\n    --color-gray-50: oklch(98.5% .002 247.839);\n    --color-gray-100: oklch(96.7% .003 264.542);\n    --color-gray-200: oklch(92.8% .006 264.531);\n    --color-gray-300: oklch(87.2% .01 258.338);\n    --color-gray-400: oklch(70.7% .022 261.325);\n    --color-gray-500: oklch(55.1% .027 264.364);\n    --color-gray-600: oklch(44.6% .03 256.802);\n    --color-gray-700: oklch(37.3% .034 259.733);\n    --color-gray-800: oklch(27.8% .033 256.848);\n    --color-gray-900: oklch(21% .034 264.665);\n    --color-black: #000;\n    --color-white: #fff;\n    --spacing: .25rem;\n    --text-xs: .75rem;\n    --text-xs--line-height: calc(1 / .75);\n    --text-sm: .875rem;\n    --text-sm--line-height: calc(1.25 / .875);\n    --text-lg: 1.125rem;\n    --text-lg--line-height: calc(1.75 / 1.125);\n    --font-weight-medium: 500;\n    --font-weight-semibold: 600;\n    --font-weight-bold: 700;\n    --font-weight-black: 900;\n    --tracking-wider: .05em;\n    --leading-relaxed: 1.625;\n    --radius-md: .375rem;\n    --radius-lg: .5rem;\n    --radius-xl: .75rem;\n    --radius-2xl: 1rem;\n    --radius-3xl: 1.5rem;\n    --ease-in-out: cubic-bezier(.4, 0, .2, 1);\n    --animate-pulse: pulse 2s cubic-bezier(.4, 0, .6, 1) infinite;\n    --animate-bounce: bounce 1s infinite;\n    --blur-md: 12px;\n    --blur-xl: 24px;\n    --default-transition-duration: .15s;\n    --default-transition-timing-function: cubic-bezier(.4, 0, .2, 1);\n    --default-font-family: var(--font-sans);\n    --default-mono-font-family: var(--font-mono);\n    --color-brand-primary: #ffd54f;\n    --color-brand-accent: #ff6f61;\n    --color-note-yellow: #fff9c4;\n    --color-note-green: #b2dfdb;\n    --color-note-pink: #f8bbd0;\n    --color-note-lavender: #e1bee7;\n    --color-note-blue: #bbdefb;\n  }\n}\n\n@layer base {\n  *, :after, :before, ::backdrop {\n    box-sizing: border-box;\n    border: 0 solid;\n    margin: 0;\n    padding: 0;\n  }\n\n  ::file-selector-button {\n    box-sizing: border-box;\n    border: 0 solid;\n    margin: 0;\n    padding: 0;\n  }\n\n  html, :host {\n    -webkit-text-size-adjust: 100%;\n    tab-size: 4;\n    line-height: 1.5;\n    font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");\n    font-feature-settings: var(--default-font-feature-settings, normal);\n    font-variation-settings: var(--default-font-variation-settings, normal);\n    -webkit-tap-highlight-color: transparent;\n  }\n\n  hr {\n    height: 0;\n    color: inherit;\n    border-top-width: 1px;\n  }\n\n  abbr:where([title]) {\n    -webkit-text-decoration: underline dotted;\n    text-decoration: underline dotted;\n  }\n\n  h1, h2, h3, h4, h5, h6 {\n    font-size: inherit;\n    font-weight: inherit;\n  }\n\n  a {\n    color: inherit;\n    -webkit-text-decoration: inherit;\n    -webkit-text-decoration: inherit;\n    -webkit-text-decoration: inherit;\n    text-decoration: inherit;\n  }\n\n  b, strong {\n    font-weight: bolder;\n  }\n\n  code, kbd, samp, pre {\n    font-family: var(--default-mono-font-family, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);\n    font-feature-settings: var(--default-mono-font-feature-settings, normal);\n    font-variation-settings: var(--default-mono-font-variation-settings, normal);\n    font-size: 1em;\n  }\n\n  small {\n    font-size: 80%;\n  }\n\n  sub, sup {\n    vertical-align: baseline;\n    font-size: 75%;\n    line-height: 0;\n    position: relative;\n  }\n\n  sub {\n    bottom: -.25em;\n  }\n\n  sup {\n    top: -.5em;\n  }\n\n  table {\n    text-indent: 0;\n    border-color: inherit;\n    border-collapse: collapse;\n  }\n\n  :-moz-focusring {\n    outline: auto;\n  }\n\n  progress {\n    vertical-align: baseline;\n  }\n\n  summary {\n    display: list-item;\n  }\n\n  ol, ul, menu {\n    list-style: none;\n  }\n\n  img, svg, video, canvas, audio, iframe, embed, object {\n    vertical-align: middle;\n    display: block;\n  }\n\n  img, video {\n    max-width: 100%;\n    height: auto;\n  }\n\n  button, input, select, optgroup, textarea {\n    font: inherit;\n    font-feature-settings: inherit;\n    font-variation-settings: inherit;\n    letter-spacing: inherit;\n    color: inherit;\n    opacity: 1;\n    background-color: #0000;\n    border-radius: 0;\n  }\n\n  ::file-selector-button {\n    font: inherit;\n    font-feature-settings: inherit;\n    font-variation-settings: inherit;\n    letter-spacing: inherit;\n    color: inherit;\n    opacity: 1;\n    background-color: #0000;\n    border-radius: 0;\n  }\n\n  :where(select:is([multiple], [size])) optgroup {\n    font-weight: bolder;\n  }\n\n  :where(select:is([multiple], [size])) optgroup option {\n    padding-inline-start: 20px;\n  }\n\n  ::file-selector-button {\n    margin-inline-end: 4px;\n  }\n\n  ::placeholder {\n    opacity: 1;\n  }\n\n  @supports (not ((-webkit-appearance: -apple-pay-button))) or (contain-intrinsic-size: 1px) {\n    ::placeholder {\n      color: currentColor;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      ::placeholder {\n        color: color-mix(in oklab, currentcolor 50%, transparent);\n      }\n    }\n  }\n\n  textarea {\n    resize: vertical;\n  }\n\n  ::-webkit-search-decoration {\n    -webkit-appearance: none;\n  }\n\n  ::-webkit-date-and-time-value {\n    min-height: 1lh;\n    text-align: inherit;\n  }\n\n  ::-webkit-datetime-edit {\n    display: inline-flex;\n  }\n\n  ::-webkit-datetime-edit-fields-wrapper {\n    padding: 0;\n  }\n\n  ::-webkit-datetime-edit {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-year-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-month-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-day-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-hour-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-minute-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-second-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-millisecond-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-meridiem-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-calendar-picker-indicator {\n    line-height: 1;\n  }\n\n  :-moz-ui-invalid {\n    box-shadow: none;\n  }\n\n  button, input:where([type="button"], [type="reset"], [type="submit"]) {\n    appearance: button;\n  }\n\n  ::file-selector-button {\n    appearance: button;\n  }\n\n  ::-webkit-inner-spin-button {\n    height: auto;\n  }\n\n  ::-webkit-outer-spin-button {\n    height: auto;\n  }\n\n  [hidden]:where(:not([hidden="until-found"])) {\n    display: none !important;\n  }\n}\n\n@layer components;\n\n@layer utilities {\n  .pointer-events-auto {\n    pointer-events: auto;\n  }\n\n  .pointer-events-none {\n    pointer-events: none;\n  }\n\n  .visible {\n    visibility: visible;\n  }\n\n  .absolute {\n    position: absolute;\n  }\n\n  .fixed {\n    position: fixed;\n  }\n\n  .relative {\n    position: relative;\n  }\n\n  .sticky {\n    position: sticky;\n  }\n\n  .inset-0 {\n    inset: calc(var(--spacing) * 0);\n  }\n\n  .inset-x-0 {\n    inset-inline: calc(var(--spacing) * 0);\n  }\n\n  .start {\n    inset-inline-start: var(--spacing);\n  }\n\n  .end {\n    inset-inline-end: var(--spacing);\n  }\n\n  .-top-4 {\n    top: calc(var(--spacing) * -4);\n  }\n\n  .top-1 {\n    top: calc(var(--spacing) * 1);\n  }\n\n  .top-1\\/2 {\n    top: 50%;\n  }\n\n  .top-10 {\n    top: calc(var(--spacing) * 10);\n  }\n\n  .-right-4 {\n    right: calc(var(--spacing) * -4);\n  }\n\n  .right-0 {\n    right: calc(var(--spacing) * 0);\n  }\n\n  .bottom-10 {\n    bottom: calc(var(--spacing) * 10);\n  }\n\n  .bottom-full {\n    bottom: 100%;\n  }\n\n  .left-0 {\n    left: calc(var(--spacing) * 0);\n  }\n\n  .left-1 {\n    left: calc(var(--spacing) * 1);\n  }\n\n  .left-1\\/2 {\n    left: 50%;\n  }\n\n  .left-2 {\n    left: calc(var(--spacing) * 2);\n  }\n\n  .left-2\\.5 {\n    left: calc(var(--spacing) * 2.5);\n  }\n\n  .z-20 {\n    z-index: 20;\n  }\n\n  .z-50 {\n    z-index: 50;\n  }\n\n  .z-\\[2147483640\\] {\n    z-index: 2147483640;\n  }\n\n  .container {\n    width: 100%;\n  }\n\n  @media (min-width: 40rem) {\n    .container {\n      max-width: 40rem;\n    }\n  }\n\n  @media (min-width: 48rem) {\n    .container {\n      max-width: 48rem;\n    }\n  }\n\n  @media (min-width: 64rem) {\n    .container {\n      max-width: 64rem;\n    }\n  }\n\n  @media (min-width: 80rem) {\n    .container {\n      max-width: 80rem;\n    }\n  }\n\n  @media (min-width: 96rem) {\n    .container {\n      max-width: 96rem;\n    }\n  }\n\n  .mx-0 {\n    margin-inline: calc(var(--spacing) * 0);\n  }\n\n  .mx-1 {\n    margin-inline: calc(var(--spacing) * 1);\n  }\n\n  .mt-2 {\n    margin-top: calc(var(--spacing) * 2);\n  }\n\n  .mr-1 {\n    margin-right: calc(var(--spacing) * 1);\n  }\n\n  .mb-1 {\n    margin-bottom: calc(var(--spacing) * 1);\n  }\n\n  .mb-2 {\n    margin-bottom: calc(var(--spacing) * 2);\n  }\n\n  .mb-3 {\n    margin-bottom: calc(var(--spacing) * 3);\n  }\n\n  .mb-4 {\n    margin-bottom: calc(var(--spacing) * 4);\n  }\n\n  .ml-1 {\n    margin-left: calc(var(--spacing) * 1);\n  }\n\n  .box-border {\n    box-sizing: border-box;\n  }\n\n  .line-clamp-3 {\n    -webkit-line-clamp: 3;\n    -webkit-box-orient: vertical;\n    display: -webkit-box;\n    overflow: hidden;\n  }\n\n  .block {\n    display: block;\n  }\n\n  .flex {\n    display: flex;\n  }\n\n  .grid {\n    display: grid;\n  }\n\n  .hidden {\n    display: none;\n  }\n\n  .inline {\n    display: inline;\n  }\n\n  .table {\n    display: table;\n  }\n\n  .h-1 {\n    height: calc(var(--spacing) * 1);\n  }\n\n  .h-1\\.5 {\n    height: calc(var(--spacing) * 1.5);\n  }\n\n  .h-3 {\n    height: calc(var(--spacing) * 3);\n  }\n\n  .h-4 {\n    height: calc(var(--spacing) * 4);\n  }\n\n  .h-5 {\n    height: calc(var(--spacing) * 5);\n  }\n\n  .h-6 {\n    height: calc(var(--spacing) * 6);\n  }\n\n  .h-7 {\n    height: calc(var(--spacing) * 7);\n  }\n\n  .h-8 {\n    height: calc(var(--spacing) * 8);\n  }\n\n  .h-10 {\n    height: calc(var(--spacing) * 10);\n  }\n\n  .h-16 {\n    height: calc(var(--spacing) * 16);\n  }\n\n  .h-18 {\n    height: calc(var(--spacing) * 18);\n  }\n\n  .h-\\[480px\\] {\n    height: 480px;\n  }\n\n  .h-full {\n    height: 100%;\n  }\n\n  .max-h-\\[70vh\\] {\n    max-height: 70vh;\n  }\n\n  .w-1 {\n    width: calc(var(--spacing) * 1);\n  }\n\n  .w-1\\.5 {\n    width: calc(var(--spacing) * 1.5);\n  }\n\n  .w-2 {\n    width: calc(var(--spacing) * 2);\n  }\n\n  .w-3 {\n    width: calc(var(--spacing) * 3);\n  }\n\n  .w-4 {\n    width: calc(var(--spacing) * 4);\n  }\n\n  .w-6 {\n    width: calc(var(--spacing) * 6);\n  }\n\n  .w-7 {\n    width: calc(var(--spacing) * 7);\n  }\n\n  .w-8 {\n    width: calc(var(--spacing) * 8);\n  }\n\n  .w-10 {\n    width: calc(var(--spacing) * 10);\n  }\n\n  .w-16 {\n    width: calc(var(--spacing) * 16);\n  }\n\n  .w-40 {\n    width: calc(var(--spacing) * 40);\n  }\n\n  .w-\\[320px\\] {\n    width: 320px;\n  }\n\n  .w-full {\n    width: 100%;\n  }\n\n  .w-px {\n    width: 1px;\n  }\n\n  .max-w-\\[64px\\] {\n    max-width: 64px;\n  }\n\n  .max-w-\\[120px\\] {\n    max-width: 120px;\n  }\n\n  .max-w-\\[min\\(800px\\,94vw\\)\\] {\n    max-width: min(800px, 94vw);\n  }\n\n  .max-w-full {\n    max-width: 100%;\n  }\n\n  .flex-1 {\n    flex: 1;\n  }\n\n  .flex-shrink {\n    flex-shrink: 1;\n  }\n\n  .flex-shrink-0, .shrink-0 {\n    flex-shrink: 0;\n  }\n\n  .border-collapse {\n    border-collapse: collapse;\n  }\n\n  .-translate-x-1 {\n    --tw-translate-x: calc(var(--spacing) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .-translate-x-1\\/2 {\n    --tw-translate-x: calc(calc(1 / 2 * 100%) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .translate-x-0 {\n    --tw-translate-x: calc(var(--spacing) * 0);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .translate-x-5 {\n    --tw-translate-x: calc(var(--spacing) * 5);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .-translate-y-1 {\n    --tw-translate-y: calc(var(--spacing) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .-translate-y-1\\/2 {\n    --tw-translate-y: calc(calc(1 / 2 * 100%) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .translate-y-4 {\n    --tw-translate-y: calc(var(--spacing) * 4);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .scale-110 {\n    --tw-scale-x: 110%;\n    --tw-scale-y: 110%;\n    --tw-scale-z: 110%;\n    scale: var(--tw-scale-x) var(--tw-scale-y);\n  }\n\n  .rotate-90 {\n    rotate: 90deg;\n  }\n\n  .transform {\n    transform: var(--tw-rotate-x,  ) var(--tw-rotate-y,  ) var(--tw-rotate-z,  ) var(--tw-skew-x,  ) var(--tw-skew-y,  );\n  }\n\n  .animate-bounce {\n    animation: var(--animate-bounce);\n  }\n\n  .animate-pulse {\n    animation: var(--animate-pulse);\n  }\n\n  .cursor-crosshair {\n    cursor: crosshair;\n  }\n\n  .cursor-grab {\n    cursor: grab;\n  }\n\n  .cursor-nwse-resize {\n    cursor: nwse-resize;\n  }\n\n  .cursor-pointer {\n    cursor: pointer;\n  }\n\n  .cursor-text {\n    cursor: text;\n  }\n\n  .resize {\n    resize: both;\n  }\n\n  .resize-none {\n    resize: none;\n  }\n\n  .appearance-none {\n    appearance: none;\n  }\n\n  .grid-cols-1 {\n    grid-template-columns: repeat(1, minmax(0, 1fr));\n  }\n\n  .grid-cols-4 {\n    grid-template-columns: repeat(4, minmax(0, 1fr));\n  }\n\n  .flex-col {\n    flex-direction: column;\n  }\n\n  .flex-wrap {\n    flex-wrap: wrap;\n  }\n\n  .items-center {\n    align-items: center;\n  }\n\n  .items-start {\n    align-items: flex-start;\n  }\n\n  .justify-between {\n    justify-content: space-between;\n  }\n\n  .justify-center {\n    justify-content: center;\n  }\n\n  .gap-0 {\n    gap: calc(var(--spacing) * 0);\n  }\n\n  .gap-0\\.5 {\n    gap: calc(var(--spacing) * .5);\n  }\n\n  .gap-1 {\n    gap: calc(var(--spacing) * 1);\n  }\n\n  .gap-1\\.5 {\n    gap: calc(var(--spacing) * 1.5);\n  }\n\n  .gap-2 {\n    gap: calc(var(--spacing) * 2);\n  }\n\n  .gap-3 {\n    gap: calc(var(--spacing) * 3);\n  }\n\n  .gap-4 {\n    gap: calc(var(--spacing) * 4);\n  }\n\n  .gap-6 {\n    gap: calc(var(--spacing) * 6);\n  }\n\n  :where(.space-y-2 > :not(:last-child)) {\n    --tw-space-y-reverse: 0;\n    margin-block-start: calc(calc(var(--spacing) * 2) * var(--tw-space-y-reverse));\n    margin-block-end: calc(calc(var(--spacing) * 2) * calc(1 - var(--tw-space-y-reverse)));\n  }\n\n  :where(.space-y-6 > :not(:last-child)) {\n    --tw-space-y-reverse: 0;\n    margin-block-start: calc(calc(var(--spacing) * 6) * var(--tw-space-y-reverse));\n    margin-block-end: calc(calc(var(--spacing) * 6) * calc(1 - var(--tw-space-y-reverse)));\n  }\n\n  .truncate {\n    text-overflow: ellipsis;\n    white-space: nowrap;\n    overflow: hidden;\n  }\n\n  .overflow-hidden {\n    overflow: hidden;\n  }\n\n  .overflow-visible {\n    overflow: visible;\n  }\n\n  .overflow-y-auto {\n    overflow-y: auto;\n  }\n\n  .rounded {\n    border-radius: .25rem;\n  }\n\n  .rounded-2xl {\n    border-radius: var(--radius-2xl);\n  }\n\n  .rounded-3xl {\n    border-radius: var(--radius-3xl);\n  }\n\n  .rounded-full {\n    border-radius: 3.40282e38px;\n  }\n\n  .rounded-lg {\n    border-radius: var(--radius-lg);\n  }\n\n  .rounded-md {\n    border-radius: var(--radius-md);\n  }\n\n  .rounded-xl {\n    border-radius: var(--radius-xl);\n  }\n\n  .border {\n    border-style: var(--tw-border-style);\n    border-width: 1px;\n  }\n\n  .border-2 {\n    border-style: var(--tw-border-style);\n    border-width: 2px;\n  }\n\n  .border-4 {\n    border-style: var(--tw-border-style);\n    border-width: 4px;\n  }\n\n  .border-t {\n    border-top-style: var(--tw-border-style);\n    border-top-width: 1px;\n  }\n\n  .border-b {\n    border-bottom-style: var(--tw-border-style);\n    border-bottom-width: 1px;\n  }\n\n  .border-none {\n    --tw-border-style: none;\n    border-style: none;\n  }\n\n  .border-black {\n    border-color: var(--color-black);\n  }\n\n  .border-black\\/5 {\n    border-color: #0000000d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-black\\/5 {\n      border-color: color-mix(in oklab, var(--color-black) 5%, transparent);\n    }\n  }\n\n  .border-black\\/10 {\n    border-color: #0000001a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-black\\/10 {\n      border-color: color-mix(in oklab, var(--color-black) 10%, transparent);\n    }\n  }\n\n  .border-brand-primary {\n    border-color: var(--color-brand-primary);\n  }\n\n  .border-brand-primary\\/50 {\n    border-color: #ffd54f80;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-brand-primary\\/50 {\n      border-color: color-mix(in oklab, var(--color-brand-primary) 50%, transparent);\n    }\n  }\n\n  .border-gray-100 {\n    border-color: var(--color-gray-100);\n  }\n\n  .border-gray-200 {\n    border-color: var(--color-gray-200);\n  }\n\n  .border-red-100 {\n    border-color: var(--color-red-100);\n  }\n\n  .border-white {\n    border-color: var(--color-white);\n  }\n\n  .border-white\\/5 {\n    border-color: #ffffff0d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-white\\/5 {\n      border-color: color-mix(in oklab, var(--color-white) 5%, transparent);\n    }\n  }\n\n  .border-white\\/10 {\n    border-color: #ffffff1a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-white\\/10 {\n      border-color: color-mix(in oklab, var(--color-white) 10%, transparent);\n    }\n  }\n\n  .border-white\\/20 {\n    border-color: #fff3;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-white\\/20 {\n      border-color: color-mix(in oklab, var(--color-white) 20%, transparent);\n    }\n  }\n\n  .bg-black {\n    background-color: var(--color-black);\n  }\n\n  .bg-black\\/5 {\n    background-color: #0000000d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-black\\/5 {\n      background-color: color-mix(in oklab, var(--color-black) 5%, transparent);\n    }\n  }\n\n  .bg-black\\/10 {\n    background-color: #0000001a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-black\\/10 {\n      background-color: color-mix(in oklab, var(--color-black) 10%, transparent);\n    }\n  }\n\n  .bg-black\\/80 {\n    background-color: #000c;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-black\\/80 {\n      background-color: color-mix(in oklab, var(--color-black) 80%, transparent);\n    }\n  }\n\n  .bg-brand-primary {\n    background-color: var(--color-brand-primary);\n  }\n\n  .bg-brand-primary\\/5 {\n    background-color: #ffd54f0d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-brand-primary\\/5 {\n      background-color: color-mix(in oklab, var(--color-brand-primary) 5%, transparent);\n    }\n  }\n\n  .bg-gray-50 {\n    background-color: var(--color-gray-50);\n  }\n\n  .bg-gray-100 {\n    background-color: var(--color-gray-100);\n  }\n\n  .bg-gray-200 {\n    background-color: var(--color-gray-200);\n  }\n\n  .bg-gray-300 {\n    background-color: var(--color-gray-300);\n  }\n\n  .bg-gray-800 {\n    background-color: var(--color-gray-800);\n  }\n\n  .bg-gray-900 {\n    background-color: var(--color-gray-900);\n  }\n\n  .bg-note-blue {\n    background-color: var(--color-note-blue);\n  }\n\n  .bg-note-green {\n    background-color: var(--color-note-green);\n  }\n\n  .bg-note-lavender {\n    background-color: var(--color-note-lavender);\n  }\n\n  .bg-note-pink {\n    background-color: var(--color-note-pink);\n  }\n\n  .bg-note-yellow {\n    background-color: var(--color-note-yellow);\n  }\n\n  .bg-red-50 {\n    background-color: var(--color-red-50);\n  }\n\n  .bg-red-500 {\n    background-color: var(--color-red-500);\n  }\n\n  .bg-transparent {\n    background-color: #0000;\n  }\n\n  .bg-white {\n    background-color: var(--color-white);\n  }\n\n  .bg-white\\/5 {\n    background-color: #ffffff0d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-white\\/5 {\n      background-color: color-mix(in oklab, var(--color-white) 5%, transparent);\n    }\n  }\n\n  .bg-white\\/10 {\n    background-color: #ffffff1a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-white\\/10 {\n      background-color: color-mix(in oklab, var(--color-white) 10%, transparent);\n    }\n  }\n\n  .fill-current {\n    fill: currentColor;\n  }\n\n  .p-0 {\n    padding: calc(var(--spacing) * 0);\n  }\n\n  .p-0\\.5 {\n    padding: calc(var(--spacing) * .5);\n  }\n\n  .p-1 {\n    padding: calc(var(--spacing) * 1);\n  }\n\n  .p-2 {\n    padding: calc(var(--spacing) * 2);\n  }\n\n  .p-3 {\n    padding: calc(var(--spacing) * 3);\n  }\n\n  .p-4 {\n    padding: calc(var(--spacing) * 4);\n  }\n\n  .p-10 {\n    padding: calc(var(--spacing) * 10);\n  }\n\n  .px-1 {\n    padding-inline: calc(var(--spacing) * 1);\n  }\n\n  .px-1\\.5 {\n    padding-inline: calc(var(--spacing) * 1.5);\n  }\n\n  .px-2 {\n    padding-inline: calc(var(--spacing) * 2);\n  }\n\n  .px-3 {\n    padding-inline: calc(var(--spacing) * 3);\n  }\n\n  .px-4 {\n    padding-inline: calc(var(--spacing) * 4);\n  }\n\n  .px-6 {\n    padding-inline: calc(var(--spacing) * 6);\n  }\n\n  .px-8 {\n    padding-inline: calc(var(--spacing) * 8);\n  }\n\n  .py-0 {\n    padding-block: calc(var(--spacing) * 0);\n  }\n\n  .py-0\\.5 {\n    padding-block: calc(var(--spacing) * .5);\n  }\n\n  .py-1 {\n    padding-block: calc(var(--spacing) * 1);\n  }\n\n  .py-1\\.5 {\n    padding-block: calc(var(--spacing) * 1.5);\n  }\n\n  .py-2 {\n    padding-block: calc(var(--spacing) * 2);\n  }\n\n  .py-3 {\n    padding-block: calc(var(--spacing) * 3);\n  }\n\n  .py-4 {\n    padding-block: calc(var(--spacing) * 4);\n  }\n\n  .pr-3 {\n    padding-right: calc(var(--spacing) * 3);\n  }\n\n  .pl-8 {\n    padding-left: calc(var(--spacing) * 8);\n  }\n\n  .text-center {\n    text-align: center;\n  }\n\n  .text-left {\n    text-align: left;\n  }\n\n  .font-sans {\n    font-family: var(--font-sans);\n  }\n\n  .text-lg {\n    font-size: var(--text-lg);\n    line-height: var(--tw-leading, var(--text-lg--line-height));\n  }\n\n  .text-sm {\n    font-size: var(--text-sm);\n    line-height: var(--tw-leading, var(--text-sm--line-height));\n  }\n\n  .text-xs {\n    font-size: var(--text-xs);\n    line-height: var(--tw-leading, var(--text-xs--line-height));\n  }\n\n  .text-\\[9px\\] {\n    font-size: 9px;\n  }\n\n  .text-\\[10px\\] {\n    font-size: 10px;\n  }\n\n  .text-\\[11px\\] {\n    font-size: 11px;\n  }\n\n  .leading-none {\n    --tw-leading: 1;\n    line-height: 1;\n  }\n\n  .leading-relaxed {\n    --tw-leading: var(--leading-relaxed);\n    line-height: var(--leading-relaxed);\n  }\n\n  .font-black {\n    --tw-font-weight: var(--font-weight-black);\n    font-weight: var(--font-weight-black);\n  }\n\n  .font-bold {\n    --tw-font-weight: var(--font-weight-bold);\n    font-weight: var(--font-weight-bold);\n  }\n\n  .font-medium {\n    --tw-font-weight: var(--font-weight-medium);\n    font-weight: var(--font-weight-medium);\n  }\n\n  .font-semibold {\n    --tw-font-weight: var(--font-weight-semibold);\n    font-weight: var(--font-weight-semibold);\n  }\n\n  .tracking-wider {\n    --tw-tracking: var(--tracking-wider);\n    letter-spacing: var(--tracking-wider);\n  }\n\n  .whitespace-nowrap {\n    white-space: nowrap;\n  }\n\n  .whitespace-pre-wrap {\n    white-space: pre-wrap;\n  }\n\n  .text-black {\n    color: var(--color-black);\n  }\n\n  .text-black\\/30 {\n    color: #0000004d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .text-black\\/30 {\n      color: color-mix(in oklab, var(--color-black) 30%, transparent);\n    }\n  }\n\n  .text-black\\/50 {\n    color: #00000080;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .text-black\\/50 {\n      color: color-mix(in oklab, var(--color-black) 50%, transparent);\n    }\n  }\n\n  .text-brand-primary {\n    color: var(--color-brand-primary);\n  }\n\n  .text-gray-300 {\n    color: var(--color-gray-300);\n  }\n\n  .text-gray-400 {\n    color: var(--color-gray-400);\n  }\n\n  .text-gray-500 {\n    color: var(--color-gray-500);\n  }\n\n  .text-gray-700 {\n    color: var(--color-gray-700);\n  }\n\n  .text-gray-800 {\n    color: var(--color-gray-800);\n  }\n\n  .text-gray-900 {\n    color: var(--color-gray-900);\n  }\n\n  .text-green-600 {\n    color: var(--color-green-600);\n  }\n\n  .text-red-400 {\n    color: var(--color-red-400);\n  }\n\n  .text-red-500 {\n    color: var(--color-red-500);\n  }\n\n  .text-red-600 {\n    color: var(--color-red-600);\n  }\n\n  .text-white {\n    color: var(--color-white);\n  }\n\n  .uppercase {\n    text-transform: uppercase;\n  }\n\n  .italic {\n    font-style: italic;\n  }\n\n  .underline {\n    text-decoration-line: underline;\n  }\n\n  .accent-brand-primary {\n    accent-color: var(--color-brand-primary);\n  }\n\n  .opacity-0 {\n    opacity: 0;\n  }\n\n  .opacity-50 {\n    opacity: .5;\n  }\n\n  .opacity-80 {\n    opacity: .8;\n  }\n\n  .opacity-100 {\n    opacity: 1;\n  }\n\n  .mix-blend-difference {\n    mix-blend-mode: difference;\n  }\n\n  .shadow {\n    --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, #0000001a), 0 1px 2px -1px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-2xl {\n    --tw-shadow: 0 25px 50px -12px var(--tw-shadow-color, #00000040);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-\\[0_0_10px_rgba\\(255\\,213\\,79\\,0\\.2\\)\\] {\n    --tw-shadow: 0 0 10px var(--tw-shadow-color, #ffd54f33);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-\\[0_0_30px_rgba\\(255\\,213\\,79\\,0\\.5\\)\\] {\n    --tw-shadow: 0 0 30px var(--tw-shadow-color, #ffd54f80);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-\\[0_20px_60px_rgba\\(0\\,0\\,0\\,0\\.6\\)\\,0_0_25px_rgba\\(255\\,213\\,79\\,0\\.2\\)\\] {\n    --tw-shadow: 0 20px 60px var(--tw-shadow-color, #0009), 0 0 25px var(--tw-shadow-color, #ffd54f33);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-lg {\n    --tw-shadow: 0 10px 15px -3px var(--tw-shadow-color, #0000001a), 0 4px 6px -4px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-md {\n    --tw-shadow: 0 4px 6px -1px var(--tw-shadow-color, #0000001a), 0 2px 4px -2px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-sm {\n    --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, #0000001a), 0 1px 2px -1px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-xl {\n    --tw-shadow: 0 20px 25px -5px var(--tw-shadow-color, #0000001a), 0 8px 10px -6px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-1 {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-2 {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-4 {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(4px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-brand-primary {\n    --tw-ring-color: var(--color-brand-primary);\n  }\n\n  .outline {\n    outline-style: var(--tw-outline-style);\n    outline-width: 1px;\n  }\n\n  .blur {\n    --tw-blur: blur(8px);\n    filter: var(--tw-blur,  ) var(--tw-brightness,  ) var(--tw-contrast,  ) var(--tw-grayscale,  ) var(--tw-hue-rotate,  ) var(--tw-invert,  ) var(--tw-saturate,  ) var(--tw-sepia,  ) var(--tw-drop-shadow,  );\n  }\n\n  .filter {\n    filter: var(--tw-blur,  ) var(--tw-brightness,  ) var(--tw-contrast,  ) var(--tw-grayscale,  ) var(--tw-hue-rotate,  ) var(--tw-invert,  ) var(--tw-saturate,  ) var(--tw-sepia,  ) var(--tw-drop-shadow,  );\n  }\n\n  .backdrop-blur-md {\n    --tw-backdrop-blur: blur(var(--blur-md));\n    -webkit-backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n    backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n  }\n\n  .backdrop-blur-xl {\n    --tw-backdrop-blur: blur(var(--blur-xl));\n    -webkit-backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n    backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n  }\n\n  .backdrop-filter {\n    -webkit-backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n    backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n  }\n\n  .transition {\n    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-all {\n    transition-property: all;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-colors {\n    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-opacity {\n    transition-property: opacity;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-transform {\n    transition-property: transform, translate, scale, rotate;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .duration-200 {\n    --tw-duration: .2s;\n    transition-duration: .2s;\n  }\n\n  .duration-300 {\n    --tw-duration: .3s;\n    transition-duration: .3s;\n  }\n\n  .duration-500 {\n    --tw-duration: .5s;\n    transition-duration: .5s;\n  }\n\n  .ease-in-out {\n    --tw-ease: var(--ease-in-out);\n    transition-timing-function: var(--ease-in-out);\n  }\n\n  .outline-none {\n    --tw-outline-style: none;\n    outline-style: none;\n  }\n\n  @media (hover: hover) {\n    .group-hover\\:scale-125:is(:where(.group):hover *) {\n      --tw-scale-x: 125%;\n      --tw-scale-y: 125%;\n      --tw-scale-z: 125%;\n      scale: var(--tw-scale-x) var(--tw-scale-y);\n    }\n\n    .group-hover\\:opacity-100:is(:where(.group):hover *) {\n      opacity: 1;\n    }\n\n    .hover\\:scale-105:hover {\n      --tw-scale-x: 105%;\n      --tw-scale-y: 105%;\n      --tw-scale-z: 105%;\n      scale: var(--tw-scale-x) var(--tw-scale-y);\n    }\n\n    .hover\\:scale-110:hover {\n      --tw-scale-x: 110%;\n      --tw-scale-y: 110%;\n      --tw-scale-z: 110%;\n      scale: var(--tw-scale-x) var(--tw-scale-y);\n    }\n\n    .hover\\:border-brand-primary:hover {\n      border-color: var(--color-brand-primary);\n    }\n\n    .hover\\:border-gray-300:hover {\n      border-color: var(--color-gray-300);\n    }\n\n    .hover\\:bg-black\\/5:hover {\n      background-color: #0000000d;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-black\\/5:hover {\n        background-color: color-mix(in oklab, var(--color-black) 5%, transparent);\n      }\n    }\n\n    .hover\\:bg-black\\/10:hover {\n      background-color: #0000001a;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-black\\/10:hover {\n        background-color: color-mix(in oklab, var(--color-black) 10%, transparent);\n      }\n    }\n\n    .hover\\:bg-gray-100:hover {\n      background-color: var(--color-gray-100);\n    }\n\n    .hover\\:bg-gray-700:hover {\n      background-color: var(--color-gray-700);\n    }\n\n    .hover\\:bg-red-100:hover {\n      background-color: var(--color-red-100);\n    }\n\n    .hover\\:bg-red-500\\/10:hover {\n      background-color: #fb2c361a;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-red-500\\/10:hover {\n        background-color: color-mix(in oklab, var(--color-red-500) 10%, transparent);\n      }\n    }\n\n    .hover\\:bg-white\\/5:hover {\n      background-color: #ffffff0d;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-white\\/5:hover {\n        background-color: color-mix(in oklab, var(--color-white) 5%, transparent);\n      }\n    }\n\n    .hover\\:bg-white\\/10:hover {\n      background-color: #ffffff1a;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-white\\/10:hover {\n        background-color: color-mix(in oklab, var(--color-white) 10%, transparent);\n      }\n    }\n\n    .hover\\:bg-white\\/20:hover {\n      background-color: #fff3;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-white\\/20:hover {\n        background-color: color-mix(in oklab, var(--color-white) 20%, transparent);\n      }\n    }\n\n    .hover\\:text-brand-accent:hover {\n      color: var(--color-brand-accent);\n    }\n\n    .hover\\:text-gray-300:hover {\n      color: var(--color-gray-300);\n    }\n\n    .hover\\:text-gray-600:hover {\n      color: var(--color-gray-600);\n    }\n\n    .hover\\:text-gray-700:hover {\n      color: var(--color-gray-700);\n    }\n\n    .hover\\:text-red-400:hover {\n      color: var(--color-red-400);\n    }\n\n    .hover\\:text-red-600:hover {\n      color: var(--color-red-600);\n    }\n\n    .hover\\:text-white:hover {\n      color: var(--color-white);\n    }\n  }\n\n  .focus\\:ring-1:focus {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .focus\\:ring-brand-primary:focus {\n    --tw-ring-color: var(--color-brand-primary);\n  }\n\n  .active\\:scale-95:active {\n    --tw-scale-x: 95%;\n    --tw-scale-y: 95%;\n    --tw-scale-z: 95%;\n    scale: var(--tw-scale-x) var(--tw-scale-y);\n  }\n\n  .active\\:cursor-grabbing:active {\n    cursor: grabbing;\n  }\n\n  .\\[\\&\\:\\:-webkit-color-swatch\\]\\:rounded-full::-webkit-color-swatch {\n    border-radius: 3.40282e38px;\n  }\n\n  .\\[\\&\\:\\:-webkit-color-swatch\\]\\:border-none::-webkit-color-swatch {\n    --tw-border-style: none;\n    border-style: none;\n  }\n\n  .\\[\\&\\:\\:-webkit-color-swatch-wrapper\\]\\:p-0::-webkit-color-swatch-wrapper {\n    padding: calc(var(--spacing) * 0);\n  }\n}\n\n:root {\n  font-family: Pretendard Variable, system-ui, -apple-system, sans-serif;\n}\n\nbody {\n  margin: 0;\n  overflow-x: hidden;\n}\n\n@property --tw-translate-x {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-translate-y {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-translate-z {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-scale-x {\n  syntax: "*";\n  inherits: false;\n  initial-value: 1;\n}\n\n@property --tw-scale-y {\n  syntax: "*";\n  inherits: false;\n  initial-value: 1;\n}\n\n@property --tw-scale-z {\n  syntax: "*";\n  inherits: false;\n  initial-value: 1;\n}\n\n@property --tw-rotate-x {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-rotate-y {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-rotate-z {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-skew-x {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-skew-y {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-space-y-reverse {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-border-style {\n  syntax: "*";\n  inherits: false;\n  initial-value: solid;\n}\n\n@property --tw-leading {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-font-weight {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-tracking {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-shadow-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-shadow-alpha {\n  syntax: "<percentage>";\n  inherits: false;\n  initial-value: 100%;\n}\n\n@property --tw-inset-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-inset-shadow-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-inset-shadow-alpha {\n  syntax: "<percentage>";\n  inherits: false;\n  initial-value: 100%;\n}\n\n@property --tw-ring-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-ring-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-inset-ring-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-inset-ring-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-ring-inset {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-ring-offset-width {\n  syntax: "<length>";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-ring-offset-color {\n  syntax: "*";\n  inherits: false;\n  initial-value: #fff;\n}\n\n@property --tw-ring-offset-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-outline-style {\n  syntax: "*";\n  inherits: false;\n  initial-value: solid;\n}\n\n@property --tw-blur {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-brightness {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-contrast {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-grayscale {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-hue-rotate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-invert {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-opacity {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-saturate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-sepia {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-drop-shadow {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-drop-shadow-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-drop-shadow-alpha {\n  syntax: "<percentage>";\n  inherits: false;\n  initial-value: 100%;\n}\n\n@property --tw-drop-shadow-size {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-blur {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-brightness {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-contrast {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-grayscale {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-hue-rotate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-invert {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-opacity {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-saturate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-sepia {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-duration {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-ease {\n  syntax: "*";\n  inherits: false\n}\n\n@keyframes pulse {\n  50% {\n    opacity: .5;\n  }\n}\n\n@keyframes bounce {\n  0%, 100% {\n    animation-timing-function: cubic-bezier(.8, 0, 1, 1);\n    transform: translateY(-25%);\n  }\n\n  50% {\n    animation-timing-function: cubic-bezier(0, 0, .2, 1);\n    transform: none;\n  }\n}\n';
   const contentStyles = "/* PagePost Content Styles */\r\n.pagepost-note-container {\r\n    all: initial;\r\n    position: absolute;\r\n    z-index: 2147483647;\r\n}";
   let lastElement = null;
   let lastClickInfo = { x: 0, y: 0 };
@@ -13813,7 +14087,13 @@
       styleTag.textContent = (tailwindStyles || "") + "\n" + (contentStyles || "");
       shadow.appendChild(styleTag);
       const root = clientExports.createRoot(rootContainer);
-      root.render(/* @__PURE__ */ jsxRuntimeExports.jsx(NoteContainer, {}));
+      root.render(
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(NoteContainer, {}),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(MarkupLayer, {}),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CaptureLayer, {})
+        ] })
+      );
       console.log("PagePost: UI Root rendered into Shadow DOM");
     } catch (err) {
       console.error("PagePost: Initialization failed:", err);

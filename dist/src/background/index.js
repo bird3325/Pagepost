@@ -37,4 +37,17 @@
       });
     }
   });
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message.type === "CAPTURE_TAB") {
+      chrome.tabs.captureVisibleTab({ format: "png" }, (dataUrl) => {
+        if (chrome.runtime.lastError) {
+          console.error("Capture failed:", chrome.runtime.lastError.message);
+          sendResponse({ error: chrome.runtime.lastError.message });
+        } else {
+          sendResponse({ dataUrl });
+        }
+      });
+      return true;
+    }
+  });
 })();

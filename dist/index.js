@@ -12573,7 +12573,7 @@ const useNoteStore = create((set, get) => {
         }
         if (changes["pagepost_mode"]) {
           const newValue = changes["pagepost_mode"].newValue;
-          if (newValue === "note" || newValue === "markup") {
+          if (newValue === "note" || newValue === "markup" || newValue === "capture") {
             set({ mode: newValue });
           }
         }
@@ -12625,7 +12625,7 @@ const useNoteStore = create((set, get) => {
         const updated = { ...currentSettings, ...newSettings };
         await chrome.storage.local.set({ [SETTINGS_KEY]: updated });
         set({ settings: updated });
-        if (isContextValid()) {
+        if (isContextValid() && typeof chrome.tabs !== "undefined") {
           chrome.tabs.query({}, (tabs) => {
             tabs.forEach((tab) => {
               if (tab.id) {

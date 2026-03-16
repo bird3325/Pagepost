@@ -2,8 +2,8 @@
 
 import { createRoot } from 'react-dom/client';
 import { NoteContainer } from '../components/NoteContainer';
-import { MarkupLayer } from '../components/MarkupLayer';
-import { CaptureLayer } from '../components/CaptureLayer';
+import { MarkupLayer } from './MarkupLayer';
+import { CaptureLayer } from './CaptureLayer';
 import { captureAnchor } from '../utils/anchoring';
 import { useNoteStore } from '../store/useNoteStore';
 import { normalizeUrl } from '../utils/url';

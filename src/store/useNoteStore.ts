@@ -34,7 +34,7 @@ interface NoteState {
     deleteAllNotes: () => Promise<void>;
     setActiveNoteId: (id: string | null) => void;
     setSearchQuery: (query: string) => void;
-    setMode: (mode: 'note' | 'markup') => void;
+    setMode: (mode: 'note' | 'markup' | 'capture') => void;
     setTool: (tool: MarkupType) => void;
     setColor: (color: string) => void;
     updateSettings: (settings: Partial<NoteState['settings']>) => Promise<void>;
@@ -88,7 +88,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
                 }
                 if (changes['pagepost_mode']) {
                     const newValue = changes['pagepost_mode'].newValue;
-                    if (newValue === 'note' || newValue === 'markup') {
+                    if (newValue === 'note' || newValue === 'markup' || newValue === 'capture') {
                         set({ mode: newValue });
                     }
                 }
@@ -148,7 +148,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
                 set({ settings: updated });
 
                 // Broadcast to all tabs for immediate synchronization
-                if (isContextValid()) {
+                if (isContextValid() && typeof chrome.tabs !== 'undefined') {
                     chrome.tabs.query({}, (tabs) => {
                         tabs.forEach(tab => {
                             if (tab.id) {
