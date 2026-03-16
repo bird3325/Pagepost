@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNoteStore } from './store/useNoteStore';
-import { StickyNote, Search, Settings, ExternalLink, Trash2, MapPin, X, ChevronLeft, Type, AlertTriangle, Minus, Palette, PenTool } from 'lucide-react';
+import { StickyNote, Search, Settings, ExternalLink, Trash2, MapPin, X, ChevronLeft, Type, AlertTriangle, Minus, Palette, PenTool, Eye, EyeOff } from 'lucide-react';
 
 const App: React.FC = () => {
   const {
@@ -177,6 +177,24 @@ const App: React.FC = () => {
                 <span>12px</span>
                 <span>24px</span>
               </div>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-1.5">
+              {settings.showToolbar ? <Eye size={14} /> : <EyeOff size={14} />} 플로팅 툴바 설정
+            </h2>
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-gray-700 uppercase">플로팅 툴바 표시</span>
+                <span className="text-[10px] text-gray-400 italic font-medium">웹페이지 하단 툴바 노출 여부</span>
+              </div>
+              <button
+                onClick={() => updateSettings({ showToolbar: !settings.showToolbar })}
+                className={`w-10 h-5 rounded-full p-1 transition-colors duration-200 ease-in-out ${settings.showToolbar ? 'bg-brand-primary' : 'bg-gray-300'}`}
+              >
+                <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform duration-200 ease-in-out ${settings.showToolbar ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
             </div>
           </section>
 

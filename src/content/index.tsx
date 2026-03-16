@@ -95,8 +95,8 @@ const init = () => {
 
     handleScrollHash();
 
-    if (!document.body) {
-        console.log('PagePost: document.body not found, waiting...');
+    if (!document.documentElement) {
+        console.log('PagePost: document.documentElement not found, waiting...');
         setTimeout(init, 100);
         return;
     }

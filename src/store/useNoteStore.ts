@@ -16,6 +16,7 @@ interface NoteState {
         fontFamily: string;
         fontSize: number;
         textColor: string;
+        showToolbar: boolean;
     };
     markups: MarkupObject[];
     fetchRequestId: number;
@@ -75,7 +76,13 @@ export const useNoteStore = create<NoteState>((set, get) => {
                     if (targetUrl) fetchMarkupsForUrl(targetUrl);
                 }
                 if (changes[SETTINGS_KEY]) {
-                    get().loadSettings();
+                    const { newValue } = changes[SETTINGS_KEY];
+                    if (newValue) {
+                        console.log('PagePost: Settings updated - showToolbar:', (newValue as any).showToolbar);
+                        set((state) => ({
+                            settings: { ...state.settings, ...newValue }
+                        }));
+                    }
                 }
                 if (changes['pagepost_mode']) {
                     const newValue = changes['pagepost_mode'].newValue;
@@ -83,6 +90,14 @@ export const useNoteStore = create<NoteState>((set, get) => {
                         set({ mode: newValue });
                     }
                 }
+            }
+        });
+
+        // Supplement with message listener for immediate cross-context sync
+        chrome.runtime.onMessage.addListener((message) => {
+            if (message.type === 'SETTINGS_UPDATED') {
+                console.log('PagePost: Received direct settings update:', message.settings);
+                set({ settings: { ...get().settings, ...message.settings } });
             }
         });
     }
@@ -102,7 +117,8 @@ export const useNoteStore = create<NoteState>((set, get) => {
         settings: {
             fontFamily: 'Pretendard, -apple-system, sans-serif',
             fontSize: 14,
-            textColor: '#1a1a1a'
+            textColor: '#1a1a1a',
+            showToolbar: true
         },
         markups: [],
         markupFetchRequestId: 0,
@@ -126,6 +142,17 @@ export const useNoteStore = create<NoteState>((set, get) => {
                 const updated = { ...currentSettings, ...newSettings };
                 await chrome.storage.local.set({ [SETTINGS_KEY]: updated });
                 set({ settings: updated });
+
+                // Broadcast to all tabs for immediate synchronization
+                if (isContextValid()) {
+                    chrome.tabs.query({}, (tabs) => {
+                        tabs.forEach(tab => {
+                            if (tab.id) {
+                                chrome.tabs.sendMessage(tab.id, { type: 'SETTINGS_UPDATED', settings: updated }).catch(() => { });
+                            }
+                        });
+                    });
+                }
             } catch (error) {
                 console.error('Failed to update settings:', error);
             }

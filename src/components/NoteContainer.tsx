@@ -5,19 +5,20 @@ import { MarkupLayer } from '../content/MarkupLayer';
 import { FloatingToolbar } from './FloatingToolbar';
 
 export const NoteContainer: React.FC = () => {
-    const { notes, fetchNotesForUrl, fetchMarkupsForUrl } = useNoteStore();
+    const { notes, fetchNotesForUrl, fetchMarkupsForUrl, settings, loadSettings } = useNoteStore();
 
     // Initial fetch to ensure notes and markups are loaded on mount
     useEffect(() => {
         const url = window.location.href;
+        loadSettings();
         fetchNotesForUrl(url);
         fetchMarkupsForUrl(url);
-    }, [fetchNotesForUrl, fetchMarkupsForUrl]);
+    }, [fetchNotesForUrl, fetchMarkupsForUrl, loadSettings]);
 
     return (
         <div id="pagepost-notes-root" className="pointer-events-none">
             <MarkupLayer />
-            <FloatingToolbar />
+            {settings.showToolbar && <FloatingToolbar />}
             <div className="pointer-events-none">
                 {notes.map((note) => (
                     <NoteCard key={note.id} note={note} />
