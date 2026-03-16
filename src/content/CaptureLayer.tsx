@@ -80,12 +80,8 @@ export const CaptureLayer: React.FC = () => {
         const left = Math.min(startPos.x, currentPos.x);
         const top = Math.min(startPos.y, currentPos.y);
 
-        // Selective hiding for clean capture (excluding markups)
-        const host = document.getElementById('pagepost-extension-host');
-        const notesRoot = host?.shadowRoot?.getElementById('pagepost-notes-root');
         const captureRoot = containerRef.current;
 
-        if (notesRoot) notesRoot.style.visibility = 'hidden';
         if (captureRoot) captureRoot.style.visibility = 'hidden';
 
         // Wait for UI to hide
@@ -94,14 +90,12 @@ export const CaptureLayer: React.FC = () => {
                 const response = await chrome.runtime.sendMessage({ type: 'CAPTURE_TAB' });
 
                 // Restore UI visibility
-                if (notesRoot) notesRoot.style.visibility = 'visible';
                 if (captureRoot) captureRoot.style.visibility = 'visible';
 
                 if (response?.dataUrl) {
                     cropImage(response.dataUrl, left, top, width, height);
                 }
             } catch (error: any) {
-                if (notesRoot) notesRoot.style.visibility = 'visible';
                 if (captureRoot) captureRoot.style.visibility = 'visible';
 
                 console.error('Capture failed:', error);
@@ -178,6 +172,7 @@ export const CaptureLayer: React.FC = () => {
                         <span className="font-bold">캡쳐할 영역을 드래그하여 선택하세요</span>
                     </div>
                     <button
+                        onMouseDown={(e) => e.stopPropagation()}
                         onClick={(e) => { e.stopPropagation(); setMode('note'); }}
                         className="bg-white/10 hover:bg-white/20 backdrop-blur-md text-white border border-white/20 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all hover:scale-105 pointer-events-auto"
                     >
@@ -208,6 +203,7 @@ export const CaptureLayer: React.FC = () => {
                             className="max-w-full max-h-[70vh] rounded-lg border-2 border-brand-primary shadow-2xl"
                         />
                         <button
+                            onMouseDown={(e) => e.stopPropagation()}
                             onClick={() => setCapturedImage(null)}
                             className="absolute -top-4 -right-4 w-10 h-10 bg-red-500 text-white rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
                         >
@@ -217,6 +213,7 @@ export const CaptureLayer: React.FC = () => {
 
                     <div className="flex gap-4">
                         <button
+                            onMouseDown={(e) => e.stopPropagation()}
                             onClick={downloadImage}
                             className="flex items-center gap-2 bg-brand-primary text-gray-900 px-8 py-4 rounded-2xl font-black text-lg hover:scale-105 transition-all shadow-xl active:scale-95"
                         >
@@ -224,6 +221,7 @@ export const CaptureLayer: React.FC = () => {
                             다운로드 및 저장
                         </button>
                         <button
+                            onMouseDown={(e) => e.stopPropagation()}
                             onClick={() => setMode('note')}
                             className="flex items-center gap-2 bg-gray-800 text-white px-8 py-4 rounded-2xl font-bold text-lg hover:bg-gray-700 transition-all border border-white/10"
                         >

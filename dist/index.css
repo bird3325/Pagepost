@@ -668,10 +668,6 @@
     height: calc(var(--spacing) * 1);
   }
 
-  .h-1\.5 {
-    height: calc(var(--spacing) * 1.5);
-  }
-
   .h-3 {
     height: calc(var(--spacing) * 3);
   }
@@ -730,10 +726,6 @@
 
   .w-1 {
     width: calc(var(--spacing) * 1);
-  }
-
-  .w-1\.5 {
-    width: calc(var(--spacing) * 1.5);
   }
 
   .w-2 {
@@ -1467,10 +1459,6 @@
     padding: calc(var(--spacing) * 0);
   }
 
-  .p-0\.5 {
-    padding: calc(var(--spacing) * .5);
-  }
-
   .p-1 {
     padding: calc(var(--spacing) * 1);
   }
@@ -2117,10 +2105,6 @@
       }
     }
 
-    .hover\:border-gray-300:hover {
-      border-color: var(--color-gray-300);
-    }
-
     .hover\:bg-black\/5:hover {
       background-color: #0000000d;
     }
@@ -2223,10 +2207,6 @@
 
     .hover\:text-gray-600:hover {
       color: var(--color-gray-600);
-    }
-
-    .hover\:text-gray-700:hover {
-      color: var(--color-gray-700);
     }
 
     .hover\:text-red-400:hover {
@@ -2339,19 +2319,6 @@
       font-size: var(--text-base);
       line-height: var(--tw-leading, var(--text-base--line-height));
     }
-  }
-
-  .\[\&\:\:-webkit-color-swatch\]\:rounded-full::-webkit-color-swatch {
-    border-radius: 3.40282e38px;
-  }
-
-  .\[\&\:\:-webkit-color-swatch\]\:border-none::-webkit-color-swatch {
-    --tw-border-style: none;
-    border-style: none;
-  }
-
-  .\[\&\:\:-webkit-color-swatch-wrapper\]\:p-0::-webkit-color-swatch-wrapper {
-    padding: calc(var(--spacing) * 0);
   }
 }
 

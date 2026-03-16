@@ -168,6 +168,7 @@ const checkUrlChange = (forcedUrl?: string) => {
         console.log(`PagePost: URL change confirmed from ${lastUrl} to ${currentUrl}`);
         lastUrl = currentUrl;
         useNoteStore.getState().fetchNotesForUrl(currentUrl);
+        useNoteStore.getState().fetchMarkupsForUrl(currentUrl);
     }
 };
 

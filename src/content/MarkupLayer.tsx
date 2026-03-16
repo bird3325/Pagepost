@@ -11,6 +11,7 @@ export const MarkupLayer: React.FC = () => {
     const [currentPoints, setCurrentPoints] = useState<{ x: number; y: number }[]>([]);
     const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
+
     const getPagePoints = (markup: any) => {
         let points = markup.points || [];
         if (points.length < 1) return [];
@@ -469,15 +470,26 @@ export const MarkupLayer: React.FC = () => {
             // Find element for sticker anchor
             const element = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
             let anchor = undefined;
-            if (element && element !== document.body && element !== document.documentElement) {
+            let finalPoints = [{ x, y }];
+
+            if (activeNoteId) {
+                const activeNote = notes.find(n => n.id === activeNoteId);
+                if (activeNote) {
+                    finalPoints = [{
+                        x: x - activeNote.notePosition.x,
+                        y: y - activeNote.notePosition.y
+                    }];
+                }
+            } else if (element && element !== document.body && element !== document.documentElement) {
                 anchor = captureAnchor(element, x, y);
+                finalPoints = [{ x: getRelativePoint(element, x, y).x, y: getRelativePoint(element, x, y).y }];
             }
 
             addMarkup({
                 id: crypto.randomUUID(),
                 url: window.location.href,
                 type: 'sticker',
-                points: [{ x, y }],
+                points: finalPoints,
                 content: sticker,
                 anchor,
                 linkedNoteId: activeNoteId || undefined,
@@ -530,6 +542,7 @@ export const MarkupLayer: React.FC = () => {
         } else {
             setSelectedMarkupId(null);
         }
+        return found;
     };
 
     const checkAndErase = (x: number, y: number) => {
@@ -553,6 +566,7 @@ export const MarkupLayer: React.FC = () => {
         const x = e.clientX + window.scrollX;
         const y = e.clientY + window.scrollY;
 
+
         if (currentTool === 'eraser') {
             checkAndErase(x, y);
         } else {
@@ -564,6 +578,7 @@ export const MarkupLayer: React.FC = () => {
         if (!drawingRef.current) return;
         drawingRef.current = false;
         setIsDrawing(false);
+
 
         if (currentPoints.length > 1) {
             // For shapes, we only need start and end points

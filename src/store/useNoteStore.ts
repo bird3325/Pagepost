@@ -7,6 +7,7 @@ interface NoteState {
     activeNoteId: string | null;
     selectedMarkupId: string | null;
     isLoading: boolean;
+    isSettingsLoaded: boolean;
     currentUrl: string;
     isGlobalView: boolean;
     searchQuery: string;
@@ -124,6 +125,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
         activeNoteId: null,
         selectedMarkupId: null,
         isLoading: false,
+        isSettingsLoaded: false,
         currentUrl: '',
         isGlobalView: false,
         searchQuery: '',
@@ -153,7 +155,9 @@ export const useNoteStore = create<NoteState>((set, get) => {
             try {
                 const result = await chrome.storage.local.get(SETTINGS_KEY);
                 if (result[SETTINGS_KEY]) {
-                    set({ settings: { ...get().settings, ...result[SETTINGS_KEY] } });
+                    set({ settings: { ...get().settings, ...result[SETTINGS_KEY] }, isSettingsLoaded: true });
+                } else {
+                    set({ isSettingsLoaded: true });
                 }
             } catch (error) {
                 console.error('Failed to load settings:', error);
@@ -269,12 +273,19 @@ export const useNoteStore = create<NoteState>((set, get) => {
 
             // Increment request ID to track the latest navigation
             const nextId = get().fetchRequestId + 1;
+            const isNewUrl = get().currentUrl !== normalizedUrl;
+
             set({ fetchRequestId: nextId });
 
             console.log(`PagePost: Fetching notes for URL [ReqID:${nextId}]:`, normalizedUrl);
 
-            // Clear existing notes and set loading state immediately
-            set({ notes: [], activeNoteId: null, isLoading: true, currentUrl: normalizedUrl, isGlobalView: false });
+            // Only clear existing notes if we are actually navigating to a new URL
+            // This prevents flicker on every small update/storage change
+            if (isNewUrl) {
+                set({ notes: [], activeNoteId: null, currentUrl: normalizedUrl, isGlobalView: false });
+            }
+
+            set({ isLoading: true });
             try {
                 const result = await chrome.storage.local.get(STORAGE_KEY);
 

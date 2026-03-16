@@ -36,24 +36,56 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
         loadSettings();
     }, [loadSettings]);
 
-    // --- Smart Anchoring Restoration ---
+    // --- Smart Anchoring Restoration with Retry ---
     useEffect(() => {
-        if (note.anchor) {
-            const el = restoreElement(note.anchor);
+        if (!note.anchor) return;
+
+        let retryCount = 0;
+        const maxRetries = 50;
+        const retryInterval = 100; // 0.1 second
+
+        const attemptRestoration = () => {
+            const el = restoreElement(note.anchor!);
             if (el) {
                 const rect = el.getBoundingClientRect();
-                const newX = rect.left + window.scrollX + (note.anchor.position.x * rect.width);
-                const newY = rect.top + window.scrollY + (note.anchor.position.y * rect.height);
 
-                // Only update if shifted significantly to avoid jitter
+                // Safety check: If the element is found but has no dimensions yet (still rendering/loading),
+                // wait for the next retry instead of updating to potentially (0,0) coordinates.
+                if (rect.width === 0 || rect.height === 0) {
+                    return false;
+                }
+
+                const newX = rect.left + window.scrollX + (note.anchor!.position.x * rect.width);
+                const newY = rect.top + window.scrollY + (note.anchor!.position.y * rect.height);
+
+                // Safety check: If both coordinates are basically 0 but the previous position wasn't, 
+                // this is likely a premature restoration or a hidden element. Discard and retry.
+                if (Math.abs(newX) < 1 && Math.abs(newY) < 1 && (Math.abs(note.notePosition.x) > 5 || Math.abs(note.notePosition.y) > 5)) {
+                    return false;
+                }
+
+                // Update physical position to move note to anchor
                 if (Math.abs(newX - note.notePosition.x) > 1 || Math.abs(newY - note.notePosition.y) > 1) {
                     updateNote(note.id, {
                         notePosition: { x: newX, y: newY }
                     });
                 }
+                return true; // Success
             }
+            return false; // Not found yet
+        };
+
+        // Initial attempt
+        if (!attemptRestoration()) {
+            const timer = setInterval(() => {
+                retryCount++;
+                if (attemptRestoration() || retryCount >= maxRetries) {
+                    clearInterval(timer);
+                }
+            }, retryInterval);
+            return () => clearInterval(timer);
         }
-    }, [note.id]); // Run once per note or on ID change
+    }, [note.id]); // Run on mount or on ID change
     const [showColors, setShowColors] = useState(false);
     const [localContent, setLocalContent] = useState(note.content);
 
@@ -110,14 +142,17 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
             const finalX = interactionRef.current.initialX + (ev.clientX - interactionRef.current.startX);
             const finalY = interactionRef.current.initialY + (ev.clientY - interactionRef.current.startY);
 
-            // Re-anchor after move
+            // Re-anchor after move - Use center of the note for more reliable anchoring when collapsed
+            const anchorPointX = note.isCollapsed ? finalX + 20 : finalX;
+            const anchorPointY = note.isCollapsed ? finalY + 20 : finalY;
+
             if (cardRef.current) cardRef.current.style.pointerEvents = 'none';
-            const element = document.elementFromPoint(finalX - window.scrollX, finalY - window.scrollY) as HTMLElement;
+            const element = document.elementFromPoint(anchorPointX - window.scrollX, anchorPointY - window.scrollY) as HTMLElement;
             if (cardRef.current) cardRef.current.style.pointerEvents = 'auto';
 
             let newAnchor = undefined;
             if (element && element !== document.body && element !== document.documentElement) {
-                newAnchor = captureAnchor(element, finalX, finalY);
+                newAnchor = captureAnchor(element, anchorPointX, anchorPointY);
             }
 
             // Persistence: update storage exactly ONCE with all data to prevent flickering
@@ -192,29 +227,43 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
         >
             {/* Header / Drag Area */}
             <div
-                className="h-8 flex items-center justify-between px-2 cursor-grab active:cursor-grabbing border-b border-black/5 flex-shrink-0"
+                className={`flex items-center ${note.isCollapsed ? 'h-10 justify-center' : 'h-8 justify-between px-2 border-b border-black/5'} cursor-grab active:cursor-grabbing flex-shrink-0`}
                 onMouseDown={handleDragStart}
             >
-                <div className="flex items-center gap-1">
-                    <GripHorizontal size={14} className="text-black/30" />
-                    <span className="text-[9px] font-bold text-black/40 mr-1">{new Date(note.updatedAt).toLocaleDateString()}</span>
-                    {note.isPinned && <Pin size={12} className="text-red-500 fill-current" />}
-                </div>
-
-                <div className="flex items-center gap-1">
+                {note.isCollapsed ? (
                     <button
-                        onClick={(e) => { e.stopPropagation(); updateNote(note.id, { isCollapsed: !note.isCollapsed }); }}
+                        onClick={(e) => { e.stopPropagation(); updateNote(note.id, { isCollapsed: false }); }}
                         className="p-1 hover:bg-black/10 rounded transition-colors"
+                        title="확장"
                     >
-                        {note.isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                        <ChevronDown size={14} />
                     </button>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }}
-                        className="p-1 hover:bg-black/10 rounded text-red-500 transition-colors"
-                    >
-                        <X size={14} />
-                    </button>
-                </div>
+                ) : (
+                    <>
+                        <div className="flex items-center gap-1">
+                            <GripHorizontal size={14} className="text-black/30" />
+                            <span className="text-[9px] font-bold text-black/40 mr-1">{new Date(note.updatedAt).toLocaleDateString()}</span>
+                            {note.isPinned && <Pin size={12} className="text-red-500 fill-current" />}
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={(e) => { e.stopPropagation(); updateNote(note.id, { isCollapsed: true }); }}
+                                className="p-1 hover:bg-black/10 rounded transition-colors"
+                                title="축소"
+                            >
+                                <ChevronUp size={14} />
+                            </button>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }}
+                                className="p-1 hover:bg-black/10 rounded text-red-500 transition-colors"
+                                title="삭제"
+                            >
+                                <X size={14} />
+                            </button>
+                        </div>
+                    </>
+                )}
             </div>
 
             {/* Assignee / Info Bar */}

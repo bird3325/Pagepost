@@ -102,16 +102,19 @@ export function restoreElement(anchor: Note['anchor']): HTMLElement | null {
     } catch (e) { }
 
     // 3. Text Context Match (Advanced)
+    const targetText = anchor.context.elementText.trim();
+    if (!targetText) return null;
+
     const allElements = document.querySelectorAll('p, h1, h2, h3, h4, h5, h6, span, div, li, td, a');
     let bestMatch: HTMLElement | null = null;
     let bestScore = 0;
 
-    const targetText = anchor.context.elementText.trim();
-    if (!targetText) return null;
+    // Cache body text ONCE per restoration pass to avoid expensive layout thrashing
+    const fullBodyText = document.body.innerText;
 
     for (const el of Array.from(allElements)) {
         const htmlEl = el as HTMLElement;
-        // Skip elements with too many children to narrow down toleaf-ish nodes
+        // Skip elements with too many children to narrow down to leaf-ish nodes
         if (htmlEl.children.length > 5) continue;
 
         const elText = htmlEl.innerText || '';
@@ -119,18 +122,16 @@ export function restoreElement(anchor: Note['anchor']): HTMLElement | null {
             let score = 0;
 
             // Context matching score
-            const fullText = document.body.innerText;
-            const idx = fullText.indexOf(elText);
+            const idx = fullBodyText.indexOf(elText);
             if (idx !== -1) {
-                const actualBefore = fullText.substring(Math.max(0, idx - 50), idx);
-                const actualAfter = fullText.substring(idx + elText.length, idx + elText.length + 50);
+                const actualBefore = fullBodyText.substring(Math.max(0, idx - 50), idx);
+                const actualAfter = fullBodyText.substring(idx + elText.length, idx + elText.length + 50);
 
-                // Simple overlap calculation (could be improved with dice coefficient)
                 if (actualBefore.includes(anchor.context.beforeText.substring(30))) score += 0.4;
                 if (actualAfter.includes(anchor.context.afterText.substring(0, 20))) score += 0.4;
             }
 
-            // Element text similarity score (higher if text is more unique)
+            // Element text similarity score
             if (elText === targetText) score += 0.2;
 
             if (score > bestScore) {
@@ -140,7 +141,6 @@ export function restoreElement(anchor: Note['anchor']): HTMLElement | null {
         }
     }
 
-    // Only return if we have a reasonably confident match
     return bestScore > 0.3 ? bestMatch : null;
 }
 

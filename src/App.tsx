@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNoteStore } from './store/useNoteStore';
-import { StickyNote, Search, Settings, ExternalLink, Trash2, MapPin, X, ChevronLeft, Type, AlertTriangle, Minus, Palette, PenTool, Eye, EyeOff } from 'lucide-react';
+import { StickyNote, Search, Settings, ExternalLink, Trash2, MapPin, X, ChevronLeft, AlertTriangle, Eye, EyeOff, Clock, Play, CheckCircle2 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 
 const App: React.FC = () => {
@@ -21,10 +21,9 @@ const App: React.FC = () => {
 
 const PopupView: React.FC = () => {
   const {
-    notes, fetchAllNotes, deleteNote, deleteAllNotes,
+    notes, fetchAllNotes, deleteNote, deleteAllNotes, updateNote,
     searchQuery, setSearchQuery,
-    settings, updateSettings, loadSettings,
-    mode, setMode
+    settings, updateSettings, loadSettings
   } = useNoteStore();
 
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
@@ -64,22 +63,6 @@ const PopupView: React.FC = () => {
         <div className="flex gap-2 text-gray-700 items-center">
           {!isSettingsOpen && (
             <>
-              <div className="flex bg-black/10 rounded-lg p-0.5 mr-1">
-                <button
-                  onClick={() => setMode('note')}
-                  className={`p-1 rounded-md transition-all ${mode === 'note' ? 'bg-white shadow-sm text-brand-primary' : 'text-gray-500 hover:text-gray-700'}`}
-                  title="노트 모드"
-                >
-                  <StickyNote size={16} />
-                </button>
-                <button
-                  onClick={() => setMode('markup')}
-                  className={`p-1 rounded-md transition-all ${mode === 'markup' ? 'bg-white shadow-sm text-brand-primary' : 'text-gray-500 hover:text-gray-700'}`}
-                  title="마크업 모드"
-                >
-                  <PenTool size={16} />
-                </button>
-              </div>
               <button
                 onClick={() => setIsSearchOpen(!isSearchOpen)}
                 className={`p-1 hover:bg-black/5 rounded ${isSearchOpen ? 'bg-black/5' : ''}`}
@@ -137,61 +120,7 @@ const PopupView: React.FC = () => {
       {isSettingsOpen ? (
         /* Settings Panel */
         <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-white animate-in fade-in duration-200">
-          <section>
-            <h2 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-1.5">
-              <Type size={14} /> 글꼴 설정
-            </h2>
-            <div className="grid grid-cols-1 gap-2">
-              {[
-                { name: '기본 (Pretendard)', value: 'Pretendard, -apple-system, sans-serif' },
-                { name: '나눔고딕', value: '"Nanum Gothic", sans-serif' },
-                { name: 'G마켓 산스', value: '"Gmarket Sans", sans-serif' },
-                { name: '교보 손글씨', value: '"Kyobo Handwriting", cursive' }
-              ].map((f) => (
-                <button
-                  key={f.value}
-                  onClick={() => updateSettings({ fontFamily: f.value })}
-                  className={`flex items-center justify-between p-3 rounded-lg border text-left transition-all ${settings.fontFamily === f.value
-                    ? 'border-brand-primary bg-brand-primary/5 ring-1 ring-brand-primary'
-                    : 'border-gray-100 hover:border-gray-300'
-                    }`}
-                  style={{ fontFamily: f.value }}
-                >
-                  <span className="text-sm text-gray-800">{f.name}</span>
-                  {settings.fontFamily === f.value && (
-                    <div className="w-1.5 h-1.5 bg-brand-primary rounded-full" />
-                  )}
-                </button>
-              ))}
-            </div>
-            <p className="mt-2 text-[10px] text-gray-400 italic font-sans">
-              * 선택한 글꼴은 모든 메모 카드에 즉시 적용됩니다.
-            </p>
-          </section>
 
-          <section>
-            <h2 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center justify-between gap-1.5">
-              <div className="flex items-center gap-1.5">
-                <Minus size={14} /> 글꼴 크기
-              </div>
-              <span className="text-brand-primary text-[10px] font-bold">{settings.fontSize}px</span>
-            </h2>
-            <div className="flex flex-col gap-2 p-2 bg-gray-50 rounded-lg border border-gray-100">
-              <input
-                type="range"
-                min="12"
-                max="24"
-                step="1"
-                value={settings.fontSize}
-                onChange={(e) => updateSettings({ fontSize: parseInt(e.target.value) })}
-                className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-primary"
-              />
-              <div className="flex justify-between text-[9px] text-gray-400 px-1 font-medium italic">
-                <span>12px</span>
-                <span>24px</span>
-              </div>
-            </div>
-          </section>
 
           <section>
             <h2 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-1.5">
@@ -211,25 +140,6 @@ const PopupView: React.FC = () => {
             </div>
           </section>
 
-          <section>
-            <h2 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-1.5">
-              <Palette size={14} /> 글꼴 색상
-            </h2>
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
-              <div className="relative">
-                <input
-                  type="color"
-                  value={settings.textColor}
-                  onChange={(e) => updateSettings({ textColor: e.target.value })}
-                  className="w-10 h-10 rounded-full border-2 border-white shadow-sm cursor-pointer appearance-none bg-transparent [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-full [&::-webkit-color-swatch]:border-none"
-                />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs font-bold text-gray-700 uppercase">{settings.textColor}</span>
-                <span className="text-[10px] text-gray-400 italic font-medium">원하는 색상을 선택하세요</span>
-              </div>
-            </div>
-          </section>
 
           <section>
             <h2 className="text-xs font-bold text-red-400 uppercase mb-3 flex items-center gap-1.5">
@@ -278,6 +188,26 @@ const PopupView: React.FC = () => {
                       {note.isPinned && <MapPin size={10} className="text-red-400" />}
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => {
+                          const statusMap: Record<string, any> = {
+                            'pending': 'in-progress',
+                            'in-progress': 'done',
+                            'done': 'pending',
+                            'active': 'pending'
+                          };
+                          updateNote(note.id, { status: statusMap[note.status] || 'pending' });
+                        }}
+                        className={`p-1 rounded flex items-center gap-1 ${note.status === 'done' ? 'bg-green-500/10 text-green-600' :
+                          note.status === 'in-progress' ? 'bg-blue-500/10 text-blue-600' :
+                            'hover:bg-gray-100 text-gray-400'
+                          }`}
+                        title={`상태: ${note.status}`}
+                      >
+                        {note.status === 'done' ? <CheckCircle2 size={12} /> :
+                          note.status === 'in-progress' ? <Play size={12} /> :
+                            <Clock size={12} />}
+                      </button>
                       <button
                         onClick={() => goToNote(note)}
                         className="p-1 hover:bg-gray-100 rounded text-gray-500"
