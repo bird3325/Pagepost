@@ -157,7 +157,7 @@ export const CaptureLayer: React.FC = () => {
             style={{
                 position: 'fixed',
                 inset: 0,
-                zIndex: 2147483646,
+                zIndex: 400,
                 backgroundColor: 'rgba(0, 0, 0, 0.4)',
                 cursor: 'crosshair',
                 overflow: 'hidden',

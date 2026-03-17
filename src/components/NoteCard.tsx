@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, memo } from 'react';
 import { type Note } from '../db';
 import { useNoteStore } from '../store/useNoteStore';
 import { captureAnchor, restoreElement } from '../utils/anchoring';
@@ -28,9 +28,10 @@ const COLORS = [
     { name: 'Sky', hex: '#BBDEFB', class: 'bg-note-blue' },
 ];
 
-export const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
-    const { updateNote, updateNoteState, deleteNote, settings, loadSettings, activeNoteId, setActiveNoteId } = useNoteStore();
+const NoteCardComponent: React.FC<NoteCardProps> = ({ note }) => {
+    const { updateNote, deleteNote, settings, loadSettings, activeNoteId, setActiveNoteId } = useNoteStore();
     const [isEditing, setIsEditing] = useState(false);
+    const [isHovered, setIsHovered] = useState(false);
 
     useEffect(() => {
         loadSettings();
@@ -90,6 +91,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
     const [localContent, setLocalContent] = useState(note.content);
 
     const cardRef = useRef<HTMLDivElement>(null);
+    const rafRef = useRef<number | null>(null);
     const interactionRef = useRef({
         isDragging: false,
         isResizing: false,
@@ -116,22 +118,18 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
 
         const handleMouseMove = (ev: MouseEvent) => {
             if (!interactionRef.current.isDragging) return;
-            const dx = ev.clientX - interactionRef.current.startX;
-            const dy = ev.clientY - interactionRef.current.startY;
 
-            try {
-                updateNoteState(note.id, {
-                    notePosition: {
-                        x: interactionRef.current.initialX + dx,
-                        y: interactionRef.current.initialY + dy
-                    }
-                });
-            } catch (e) {
-                // Extension context invalidated
-                window.removeEventListener('mousemove', handleMouseMove);
-                window.removeEventListener('mouseup', handleMouseUp);
-                interactionRef.current.isDragging = false;
-            }
+            if (rafRef.current) cancelAnimationFrame(rafRef.current);
+            rafRef.current = requestAnimationFrame(() => {
+                const dx = ev.clientX - interactionRef.current.startX;
+                const dy = ev.clientY - interactionRef.current.startY;
+
+                if (cardRef.current) {
+                    cardRef.current.style.left = `${interactionRef.current.initialX + dx}px`;
+                    cardRef.current.style.top = `${interactionRef.current.initialY + dy}px`;
+                    cardRef.current.style.cursor = 'grabbing';
+                }
+            });
         };
 
         const handleMouseUp = (ev: MouseEvent) => {
@@ -181,32 +179,36 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
 
         const handleMouseMove = (ev: MouseEvent) => {
             if (!interactionRef.current.isResizing) return;
-            const dx = ev.clientX - interactionRef.current.startX;
-            const dy = ev.clientY - interactionRef.current.startY;
 
-            try {
-                updateNote(note.id, {
-                    size: {
-                        width: Math.max(150, interactionRef.current.initialW + dx),
-                        height: Math.max(100, interactionRef.current.initialH + dy)
-                    }
-                });
-            } catch (e) {
-                // Extension context invalidated
-                window.removeEventListener('mousemove', handleMouseMove);
-                window.removeEventListener('mouseup', handleMouseUp);
-                interactionRef.current.isResizing = false;
-            }
+            if (rafRef.current) cancelAnimationFrame(rafRef.current);
+            rafRef.current = requestAnimationFrame(() => {
+                const dx = ev.clientX - interactionRef.current.startX;
+                const dy = ev.clientY - interactionRef.current.startY;
+
+                if (cardRef.current && !note.isCollapsed) {
+                    const newWidth = Math.max(150, interactionRef.current.initialW + dx);
+                    const newHeight = Math.max(100, interactionRef.current.initialH + dy);
+                    cardRef.current.style.width = `${newWidth}px`;
+                    cardRef.current.style.height = `${newHeight}px`;
+                }
+            });
         };
 
-        const handleMouseUp = () => {
+        const handleMouseUpResize = (ev: MouseEvent) => {
             interactionRef.current.isResizing = false;
             window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
+            window.removeEventListener('mouseup', handleMouseUpResize);
+
+            const finalW = Math.max(150, interactionRef.current.initialW + (ev.clientX - interactionRef.current.startX));
+            const finalH = Math.max(100, interactionRef.current.initialH + (ev.clientY - interactionRef.current.startY));
+
+            updateNote(note.id, {
+                size: { width: finalW, height: finalH }
+            });
         };
 
         window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('mouseup', handleMouseUp);
+        window.addEventListener('mouseup', handleMouseUpResize);
     };
 
     const currentColorClass = COLORS.find(c => c.hex === note.color)?.class || 'bg-note-yellow';
@@ -214,15 +216,21 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
     return (
         <div
             ref={cardRef}
+            data-note-id={note.id}
             onClick={() => setActiveNoteId(note.id)}
-            className={`absolute rounded-lg shadow-lg border border-black/5 overflow-hidden flex flex-col pointer-events-auto ${currentColorClass} ${note.isCollapsed ? 'w-10 h-10' : ''} ${activeNoteId === note.id ? 'ring-2 ring-brand-primary' : ''}`}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+            className={`absolute rounded-lg shadow-lg border border-black/5 overflow-hidden flex flex-col pointer-events-auto transition-[opacity,transform,filter,ring-width] duration-300 ${currentColorClass} ${note.isCollapsed ? 'w-10 h-10' : ''} ${activeNoteId === note.id ? 'ring-2 ring-brand-primary' : ''} ${settings.isCleanView && !isHovered ? 'scale-95' : 'scale-100'}`}
             style={{
                 left: note.notePosition.x,
                 top: note.notePosition.y,
                 width: note.isCollapsed ? undefined : note.size.width,
                 height: note.isCollapsed ? undefined : note.size.height,
-                zIndex: 2147483640,
-                opacity: note.status === 'done' ? 0.6 : 0.95,
+                zIndex: activeNoteId === note.id ? 200 : 100,
+                opacity: settings.isCleanView
+                    ? (isHovered ? 1.0 : 0.05)
+                    : (note.status === 'done' ? 0.6 : 1.0),
+                filter: settings.isCleanView && !isHovered ? 'grayscale(100%) blur(2px)' : 'none'
             }}
         >
             {/* Header / Drag Area */}
@@ -379,3 +387,5 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
         </div>
     );
 };
+
+export const NoteCard = memo(NoteCardComponent);

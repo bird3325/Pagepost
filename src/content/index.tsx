@@ -39,7 +39,7 @@ const handleMessage = (message: any) => {
             color: '#FFF9C4',
             size: { width: 200, height: 150 },
             notePosition: {
-                x: Math.max(0, lastClickInfo.x),
+                x: Math.max(0, lastClickInfo.x + window.scrollX),
                 y: Math.max(0, lastClickInfo.y + window.scrollY)
             },
             tags: [],
@@ -153,8 +153,10 @@ const init = () => {
     }
 };
 
-// Start initialization
-init();
+// Start initialization only if NOT on an extension page (popup, dashboard, etc.)
+if (window.location.protocol !== 'chrome-extension:') {
+    init();
+}
 
 
 // Global message listener - SINGLE REGISTER

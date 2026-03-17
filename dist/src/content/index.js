@@ -12523,38 +12523,42 @@
   const useNoteStore = create((set, get) => {
     if (isContextValid()) {
       chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (!isContextValid()) return;
         if (areaName === "local") {
-          if (changes[STORAGE_KEY]) {
-            const { currentUrl, isGlobalView, fetchNotesForUrl, fetchAllNotes } = get();
-            const targetUrl = currentUrl || (typeof window !== "undefined" ? normalizeUrl(window.location.href) : "");
-            if (isGlobalView) fetchAllNotes();
-            else if (targetUrl) fetchNotesForUrl(targetUrl);
-          }
-          if (changes[MARKUP_STORAGE_KEY]) {
-            const { currentUrl, fetchMarkupsForUrl } = get();
-            const targetUrl = currentUrl || (typeof window !== "undefined" ? normalizeUrl(window.location.href) : "");
-            if (targetUrl) fetchMarkupsForUrl(targetUrl);
-          }
-          if (changes[SETTINGS_KEY]) {
-            const { newValue } = changes[SETTINGS_KEY];
-            if (newValue) {
-              console.log("PagePost: Settings updated - showToolbar:", newValue.showToolbar);
-              set((state) => ({
-                settings: { ...state.settings, ...newValue }
-              }));
+          try {
+            if (changes[STORAGE_KEY]) {
+              const { currentUrl, isGlobalView, fetchNotesForUrl, fetchAllNotes } = get();
+              const targetUrl = currentUrl || (typeof window !== "undefined" ? normalizeUrl(window.location.href) : "");
+              if (isGlobalView) fetchAllNotes();
+              else if (targetUrl) fetchNotesForUrl(targetUrl);
             }
-          }
-          if (changes["pagepost_mode"]) {
-            const newValue = changes["pagepost_mode"].newValue;
-            if (newValue === "note" || newValue === "markup" || newValue === "capture") {
-              set({ mode: newValue });
+            if (changes[MARKUP_STORAGE_KEY]) {
+              const { currentUrl, fetchMarkupsForUrl } = get();
+              const targetUrl = currentUrl || (typeof window !== "undefined" ? normalizeUrl(window.location.href) : "");
+              if (targetUrl) fetchMarkupsForUrl(targetUrl);
             }
+            if (changes[SETTINGS_KEY]) {
+              const { newValue } = changes[SETTINGS_KEY];
+              if (newValue) {
+                set((state) => ({
+                  settings: { ...state.settings, ...newValue }
+                }));
+              }
+            }
+            if (changes["pagepost_mode"]) {
+              const newValue = changes["pagepost_mode"].newValue;
+              if (newValue === "note" || newValue === "markup" || newValue === "capture" || newValue === "review") {
+                set({ mode: newValue });
+              }
+            }
+          } catch (e) {
+            console.error("PagePost: Error in storage change listener:", e);
           }
         }
       });
       chrome.runtime.onMessage.addListener((message) => {
+        if (!isContextValid()) return;
         if (message.type === "SETTINGS_UPDATED") {
-          console.log("PagePost: Received direct settings update:", message.settings);
           set({ settings: { ...get().settings, ...message.settings } });
         }
       });
@@ -12582,15 +12586,19 @@
         fontSize: 14,
         textColor: "#1a1a1a",
         showToolbar: true,
+        isToolbarExpanded: true,
         penWidth: 3,
-        highlightWidth: 20
+        highlightWidth: 20,
+        markupOpacity: 1,
+        isCleanView: false
       },
       markups: [],
       markupFetchRequestId: 0,
       loadSettings: async () => {
-        if (!isContextValid()) throw new Error("Extension context invalidated");
+        if (!isContextValid()) return;
         try {
           const result = await chrome.storage.local.get(SETTINGS_KEY);
+          if (!isContextValid()) return;
           if (result[SETTINGS_KEY]) {
             set({ settings: { ...get().settings, ...result[SETTINGS_KEY] }, isSettingsLoaded: true });
           } else {
@@ -12601,32 +12609,27 @@
         }
       },
       updateSettings: async (newSettings) => {
-        if (!isContextValid()) throw new Error("Extension context invalidated");
+        if (!isContextValid()) return;
         try {
           const currentSettings = get().settings;
           const updated = { ...currentSettings, ...newSettings };
           await chrome.storage.local.set({ [SETTINGS_KEY]: updated });
+          if (!isContextValid()) return;
           set({ settings: updated });
-          if (isContextValid() && typeof chrome.tabs !== "undefined") {
-            chrome.tabs.query({}, (tabs) => {
-              tabs.forEach((tab) => {
-                if (tab.id) {
-                  chrome.tabs.sendMessage(tab.id, { type: "SETTINGS_UPDATED", settings: updated }).catch(() => {
-                  });
-                }
-              });
-            });
-          }
         } catch (error) {
           console.error("Failed to update settings:", error);
         }
       },
       setSearchQuery: (query) => set({ searchQuery: query }),
       setMode: async (mode) => {
-        if (isContextValid()) {
+        if (!isContextValid()) return;
+        try {
           await chrome.storage.local.set({ "pagepost_mode": mode });
+          if (!isContextValid()) return;
+          set({ mode });
+        } catch (e) {
+          set({ mode });
         }
-        set({ mode });
       },
       setActiveNoteId: (id) => set({ activeNoteId: id, selectedMarkupId: null }),
       setSelectedMarkupId: (id) => set({ selectedMarkupId: id }),
@@ -12641,11 +12644,22 @@
           }
         }
       },
+      setOpacity: async (opacity) => {
+        const { updateSettings, selectedMarkupId, updateMarkup, markups } = get();
+        await updateSettings({ markupOpacity: opacity });
+        if (selectedMarkupId) {
+          const markup = markups.find((m) => m.id === selectedMarkupId);
+          if (markup) {
+            updateMarkup(selectedMarkupId, { style: { ...markup.style, opacity } });
+          }
+        }
+      },
       fetchAllNotes: async () => {
-        if (!isContextValid()) throw new Error("Extension context invalidated");
+        if (!isContextValid()) return;
         set({ isLoading: true, isGlobalView: true });
         try {
           const result = await chrome.storage.local.get(STORAGE_KEY);
+          if (!isContextValid()) return;
           let allNotes = result[STORAGE_KEY] || [];
           const query = get().searchQuery.toLowerCase();
           if (query) {
@@ -12665,11 +12679,13 @@
         set({ isLoading: true });
         try {
           const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+          if (!isContextValid()) return;
           const allMarkups = result[MARKUP_STORAGE_KEY] || [];
           const query = get().searchQuery.toLowerCase();
           const filteredMarkups = query ? allMarkups.filter((m) => m.content?.toLowerCase().includes(query)) : allMarkups;
           set({ markups: filteredMarkups, isLoading: false });
           const notesResult = await chrome.storage.local.get(STORAGE_KEY);
+          if (!isContextValid()) return;
           const allNotes = notesResult[STORAGE_KEY] || [];
           const domains = new Set(allNotes.map((n) => n.domain));
           set({
@@ -12690,34 +12706,30 @@
         const nextId = get().fetchRequestId + 1;
         const isNewUrl = get().currentUrl !== normalizedUrl;
         set({ fetchRequestId: nextId });
-        console.log(`PagePost: Fetching notes for URL [ReqID:${nextId}]:`, normalizedUrl);
         if (isNewUrl) {
           set({ notes: [], activeNoteId: null, currentUrl: normalizedUrl, isGlobalView: false });
         }
         set({ isLoading: true });
         try {
           const result = await chrome.storage.local.get(STORAGE_KEY);
-          if (get().fetchRequestId !== nextId) {
-            console.log(`PagePost: Discarding outdated fetch [ReqID:${nextId}]`);
-            return;
-          }
+          if (!isContextValid() || get().fetchRequestId !== nextId) return;
           let allNotes = result[STORAGE_KEY] || [];
           const filteredNotes = allNotes.filter((n) => normalizeUrl(n.url) === normalizedUrl);
-          console.log(`PagePost: Found ${filteredNotes.length} notes for this URL [ReqID:${nextId}]`);
           const query = get().searchQuery.toLowerCase();
           const processedNotes = query ? filteredNotes.filter((n) => n.content.toLowerCase().includes(query)) : filteredNotes;
           set({ notes: processedNotes, isLoading: false });
         } catch (error) {
-          console.error(`PagePost: Failed to fetch notes [ReqID:${nextId}]:`, error);
+          console.error(`PagePost: Failed to fetch notes:`, error);
           if (get().fetchRequestId === nextId) {
             set({ isLoading: false });
           }
         }
       },
       addNote: async (note) => {
-        if (!isContextValid()) throw new Error("Extension context invalidated");
+        if (!isContextValid()) return;
         try {
           const result = await chrome.storage.local.get(STORAGE_KEY);
+          if (!isContextValid()) return;
           const allNotes = result[STORAGE_KEY] || [];
           const normalizedUrl = normalizeUrl(note.url);
           const tags = note.content ? Array.from(note.content.matchAll(/#(\w+)/g)).map((m) => m[1]) : [];
@@ -12728,6 +12740,7 @@
           };
           const updatedAllNotes = [...allNotes, noteWithTags];
           await chrome.storage.local.set({ [STORAGE_KEY]: updatedAllNotes });
+          if (!isContextValid()) return;
           const { currentUrl, isGlobalView, notes } = get();
           const normalizedCurrentUrl = currentUrl ? normalizeUrl(currentUrl) : typeof window !== "undefined" ? normalizeUrl(window.location.href) : "";
           if (isGlobalView) {
@@ -12740,15 +12753,17 @@
         }
       },
       updateNote: async (id, updates) => {
-        if (!isContextValid()) throw new Error("Extension context invalidated");
+        if (!isContextValid()) return;
         try {
           const result = await chrome.storage.local.get(STORAGE_KEY);
+          if (!isContextValid()) return;
           const allNotes = result[STORAGE_KEY] || [];
           const updatedAt = Date.now();
           const tags = updates.content ? Array.from(updates.content.matchAll(/#(\w+)/g)).map((m) => m[1]) : void 0;
           const finalUpdates = tags !== void 0 ? { ...updates, tags, updatedAt } : { ...updates, updatedAt };
           const updatedAllNotes = allNotes.map((n) => n.id === id ? { ...n, ...finalUpdates } : n);
           await chrome.storage.local.set({ [STORAGE_KEY]: updatedAllNotes });
+          if (!isContextValid()) return;
           const { notes } = get();
           set({ notes: notes.map((n) => n.id === id ? { ...n, ...finalUpdates } : n) });
         } catch (error) {
@@ -12761,12 +12776,14 @@
         }));
       },
       deleteNote: async (id) => {
-        if (!isContextValid()) throw new Error("Extension context invalidated");
+        if (!isContextValid()) return;
         try {
           const result = await chrome.storage.local.get(STORAGE_KEY);
+          if (!isContextValid()) return;
           const allNotes = result[STORAGE_KEY] || [];
           const updatedAllNotes = allNotes.filter((n) => n.id !== id);
           await chrome.storage.local.set({ [STORAGE_KEY]: updatedAllNotes });
+          if (!isContextValid()) return;
           const { notes } = get();
           set((state) => ({
             notes: notes.filter((n) => n.id !== id),
@@ -12777,42 +12794,43 @@
         }
       },
       deleteAllNotes: async () => {
-        if (!isContextValid()) throw new Error("Extension context invalidated");
+        if (!isContextValid()) return;
         try {
           if (confirm("정말로 모든 메모를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) {
             await chrome.storage.local.set({ [STORAGE_KEY]: [] });
+            if (!isContextValid()) return;
             set({ notes: [] });
           }
         } catch (error) {
           console.error("Failed to delete all notes:", error);
         }
       },
-      // Markup Implementation
       fetchMarkupsForUrl: async (url) => {
         if (!isContextValid()) return;
         const normalizedUrl = normalizeUrl(url);
         const nextId = get().markupFetchRequestId + 1;
         set({ markupFetchRequestId: nextId });
-        console.log(`PagePost: Fetching markups for URL [ReqID:${nextId}]:`, normalizedUrl);
         try {
           const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
-          if (get().markupFetchRequestId !== nextId) return;
+          if (!isContextValid() || get().markupFetchRequestId !== nextId) return;
           const allMarkups = result[MARKUP_STORAGE_KEY] || [];
           const filteredMarkups = allMarkups.filter((m) => normalizeUrl(m.url) === normalizedUrl);
           set({ markups: filteredMarkups });
         } catch (error) {
-          console.error(`PagePost: Failed to fetch markups [ReqID:${nextId}]:`, error);
+          console.error(`PagePost: Failed to fetch markups:`, error);
         }
       },
       addMarkup: async (markup) => {
-        if (!isContextValid()) throw new Error("Extension context invalidated");
+        if (!isContextValid()) return;
         try {
           const normalizedUrl = normalizeUrl(markup.url);
           const markupWithUrl = { ...markup, url: normalizedUrl };
           const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+          if (!isContextValid()) return;
           const allMarkups = result[MARKUP_STORAGE_KEY] || [];
           const updatedAllMarkups = [...allMarkups, markupWithUrl];
           await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
+          if (!isContextValid()) return;
           const { currentUrl, markups } = get();
           if (currentUrl && normalizeUrl(currentUrl) === normalizedUrl) {
             set({ markups: [...markups, markupWithUrl] });
@@ -12822,13 +12840,15 @@
         }
       },
       updateMarkup: async (id, updates) => {
-        if (!isContextValid()) throw new Error("Extension context invalidated");
+        if (!isContextValid()) return;
         try {
           const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+          if (!isContextValid()) return;
           const allMarkups = result[MARKUP_STORAGE_KEY] || [];
           const updatedAt = Date.now();
           const updatedAllMarkups = allMarkups.map((m) => m.id === id ? { ...m, ...updates, updatedAt } : m);
           await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
+          if (!isContextValid()) return;
           const { markups } = get();
           set({ markups: markups.map((m) => m.id === id ? { ...m, ...updates, updatedAt } : m) });
         } catch (error) {
@@ -12836,12 +12856,14 @@
         }
       },
       deleteMarkup: async (id) => {
-        if (!isContextValid()) throw new Error("Extension context invalidated");
+        if (!isContextValid()) return;
         try {
           const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+          if (!isContextValid()) return;
           const allMarkups = result[MARKUP_STORAGE_KEY] || [];
           const updatedAllMarkups = allMarkups.filter((m) => m.id !== id);
           await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
+          if (!isContextValid()) return;
           const { markups } = get();
           set({ markups: markups.filter((m) => m.id !== id) });
         } catch (error) {
@@ -12855,30 +12877,34 @@
         try {
           const normalizedUrl = normalizeUrl(currentUrl);
           const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+          if (!isContextValid()) return;
           const allMarkups = result[MARKUP_STORAGE_KEY] || [];
           const urlMarkups = allMarkups.filter((m) => normalizeUrl(m.url) === normalizedUrl);
           if (urlMarkups.length === 0) return;
           const lastMarkupId = urlMarkups[urlMarkups.length - 1].id;
           const updatedAllMarkups = allMarkups.filter((m) => m.id !== lastMarkupId);
           await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
+          if (!isContextValid()) return;
           set({ markups: markups.filter((m) => m.id !== lastMarkupId) });
         } catch (error) {
           console.error("Failed to undo markup:", error);
         }
       },
       redoMarkup: async () => {
-        console.log("Redo not yet implemented for persistent storage");
+        console.log("Redo not yet implemented");
       },
       clearAllMarkups: async () => {
-        if (!isContextValid()) throw new Error("Extension context invalidated");
+        if (!isContextValid()) return;
         try {
           const { currentUrl } = get();
           if (!currentUrl) return;
           const normalizedCurrentUrl = normalizeUrl(currentUrl);
           const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+          if (!isContextValid()) return;
           const allMarkups = result[MARKUP_STORAGE_KEY] || [];
           const updatedAllMarkups = allMarkups.filter((m) => normalizeUrl(m.url) !== normalizedCurrentUrl);
           await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
+          if (!isContextValid()) return;
           set({ markups: [] });
         } catch (error) {
           console.error("Failed to clear markups:", error);
@@ -12889,6 +12915,7 @@
         try {
           const notesResult = await chrome.storage.local.get(STORAGE_KEY);
           const markupsResult = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+          if (!isContextValid()) return;
           let notesToExport = notesResult[STORAGE_KEY] || [];
           let markupsToExport = markupsResult[MARKUP_STORAGE_KEY] || [];
           if (domain) {
@@ -12904,14 +12931,11 @@
           };
           const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
           const url = URL.createObjectURL(blob);
-          const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").slice(0, 19);
-          const filename = `pagepost_export_${domain || "all"}_${timestamp}.json`;
+          const filename = `pagepost_export_${domain || "all"}.json`;
           const link = document.createElement("a");
           link.href = url;
           link.download = filename;
-          document.body.appendChild(link);
           link.click();
-          document.body.removeChild(link);
           URL.revokeObjectURL(url);
         } catch (error) {
           console.error("Failed to export data:", error);
@@ -12921,9 +12945,9 @@
         if (!isContextValid()) return;
         try {
           const data = JSON.parse(jsonData);
-          if (!data.notes && !data.markups) throw new Error("Invalid data format");
           const notesResult = await chrome.storage.local.get(STORAGE_KEY);
           const markupsResult = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+          if (!isContextValid()) return;
           const existingNotes = notesResult[STORAGE_KEY] || [];
           const existingMarkups = markupsResult[MARKUP_STORAGE_KEY] || [];
           const incomingNotes = data.notes || [];
@@ -12934,24 +12958,18 @@
           const markupMap = /* @__PURE__ */ new Map();
           existingMarkups.forEach((m) => markupMap.set(m.id, m));
           incomingMarkups.forEach((m) => markupMap.set(m.id, m));
-          const mergedNotes = Array.from(noteMap.values());
-          const mergedMarkups = Array.from(markupMap.values());
           await chrome.storage.local.set({
-            [STORAGE_KEY]: mergedNotes,
-            [MARKUP_STORAGE_KEY]: mergedMarkups
+            [STORAGE_KEY]: Array.from(noteMap.values()),
+            [MARKUP_STORAGE_KEY]: Array.from(markupMap.values())
           });
-          const { currentUrl, isGlobalView, fetchNotesForUrl, fetchMarkupsForUrl, fetchAllNotes, fetchAllMarkups } = get();
-          if (isGlobalView) {
-            await fetchAllNotes();
-            await fetchAllMarkups();
-          } else if (currentUrl) {
+          if (!isContextValid()) return;
+          const { currentUrl, fetchNotesForUrl, fetchMarkupsForUrl } = get();
+          if (currentUrl) {
             await fetchNotesForUrl(currentUrl);
             await fetchMarkupsForUrl(currentUrl);
           }
-          alert(`${incomingNotes.length}개의 메모와 ${incomingMarkups.length}개의 마크업을 성공적으로 가져왔습니다.`);
         } catch (error) {
           console.error("Failed to import data:", error);
-          alert("데이터를 가져오는데 실패했습니다: " + (error instanceof Error ? error.message : "알 수 없는 오류"));
         }
       }
     };
@@ -13149,12 +13167,12 @@
     Component.displayName = toPascalCase(iconName);
     return Component;
   };
-  const __iconNode$E = [
+  const __iconNode$H = [
     ["path", { d: "M5 12h14", key: "1ays0h" }],
     ["path", { d: "m12 5 7 7-7 7", key: "xquz4c" }]
   ];
-  const ArrowRight = createLucideIcon("arrow-right", __iconNode$E);
-  const __iconNode$D = [
+  const ArrowRight = createLucideIcon("arrow-right", __iconNode$H);
+  const __iconNode$G = [
     [
       "path",
       {
@@ -13164,32 +13182,32 @@
     ],
     ["circle", { cx: "12", cy: "13", r: "3", key: "1vg3eu" }]
   ];
-  const Camera = createLucideIcon("camera", __iconNode$D);
-  const __iconNode$C = [["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]];
-  const ChevronDown = createLucideIcon("chevron-down", __iconNode$C);
-  const __iconNode$B = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
-  const ChevronLeft = createLucideIcon("chevron-left", __iconNode$B);
-  const __iconNode$A = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
-  const ChevronRight = createLucideIcon("chevron-right", __iconNode$A);
-  const __iconNode$z = [["path", { d: "m18 15-6-6-6 6", key: "153udz" }]];
-  const ChevronUp = createLucideIcon("chevron-up", __iconNode$z);
-  const __iconNode$y = [
+  const Camera = createLucideIcon("camera", __iconNode$G);
+  const __iconNode$F = [["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]];
+  const ChevronDown = createLucideIcon("chevron-down", __iconNode$F);
+  const __iconNode$E = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
+  const ChevronLeft = createLucideIcon("chevron-left", __iconNode$E);
+  const __iconNode$D = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
+  const ChevronRight = createLucideIcon("chevron-right", __iconNode$D);
+  const __iconNode$C = [["path", { d: "m18 15-6-6-6 6", key: "153udz" }]];
+  const ChevronUp = createLucideIcon("chevron-up", __iconNode$C);
+  const __iconNode$B = [
     ["path", { d: "M21.801 10A10 10 0 1 1 17 3.335", key: "yps3ct" }],
     ["path", { d: "m9 11 3 3L22 4", key: "1pflzl" }]
   ];
-  const CircleCheckBig = createLucideIcon("circle-check-big", __iconNode$y);
-  const __iconNode$x = [["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }]];
-  const Circle = createLucideIcon("circle", __iconNode$x);
-  const __iconNode$w = [
+  const CircleCheckBig = createLucideIcon("circle-check-big", __iconNode$B);
+  const __iconNode$A = [["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }]];
+  const Circle = createLucideIcon("circle", __iconNode$A);
+  const __iconNode$z = [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 6v6l4 2", key: "mmk7yg" }]
   ];
-  const Clock = createLucideIcon("clock", __iconNode$w);
-  const __iconNode$v = [
+  const Clock = createLucideIcon("clock", __iconNode$z);
+  const __iconNode$y = [
     ["path", { d: "M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z", key: "p7xjir" }]
   ];
-  const Cloud = createLucideIcon("cloud", __iconNode$v);
-  const __iconNode$u = [
+  const Cloud = createLucideIcon("cloud", __iconNode$y);
+  const __iconNode$x = [
     [
       "path",
       {
@@ -13198,14 +13216,14 @@
       }
     ]
   ];
-  const Diamond = createLucideIcon("diamond", __iconNode$u);
-  const __iconNode$t = [
+  const Diamond = createLucideIcon("diamond", __iconNode$x);
+  const __iconNode$w = [
     ["path", { d: "M12 15V3", key: "m9g1x1" }],
     ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", key: "ih7n3h" }],
     ["path", { d: "m7 10 5 5 5-5", key: "brsn70" }]
   ];
-  const Download = createLucideIcon("download", __iconNode$t);
-  const __iconNode$s = [
+  const Download = createLucideIcon("download", __iconNode$w);
+  const __iconNode$v = [
     [
       "path",
       {
@@ -13215,8 +13233,38 @@
     ],
     ["path", { d: "m5.082 11.09 8.828 8.828", key: "1wx5vj" }]
   ];
-  const Eraser = createLucideIcon("eraser", __iconNode$s);
-  const __iconNode$r = [
+  const Eraser = createLucideIcon("eraser", __iconNode$v);
+  const __iconNode$u = [
+    [
+      "path",
+      {
+        d: "M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49",
+        key: "ct8e1f"
+      }
+    ],
+    ["path", { d: "M14.084 14.158a3 3 0 0 1-4.242-4.242", key: "151rxh" }],
+    [
+      "path",
+      {
+        d: "M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143",
+        key: "13bj9a"
+      }
+    ],
+    ["path", { d: "m2 2 20 20", key: "1ooewy" }]
+  ];
+  const EyeOff = createLucideIcon("eye-off", __iconNode$u);
+  const __iconNode$t = [
+    [
+      "path",
+      {
+        d: "M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0",
+        key: "1nclc0"
+      }
+    ],
+    ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
+  ];
+  const Eye = createLucideIcon("eye", __iconNode$t);
+  const __iconNode$s = [
     [
       "path",
       {
@@ -13225,8 +13273,8 @@
       }
     ]
   ];
-  const Flag = createLucideIcon("flag", __iconNode$r);
-  const __iconNode$q = [
+  const Flag = createLucideIcon("flag", __iconNode$s);
+  const __iconNode$r = [
     [
       "path",
       {
@@ -13235,8 +13283,8 @@
       }
     ]
   ];
-  const Flame = createLucideIcon("flame", __iconNode$q);
-  const __iconNode$p = [
+  const Flame = createLucideIcon("flame", __iconNode$r);
+  const __iconNode$q = [
     ["circle", { cx: "12", cy: "9", r: "1", key: "124mty" }],
     ["circle", { cx: "19", cy: "9", r: "1", key: "1ruzo2" }],
     ["circle", { cx: "5", cy: "9", r: "1", key: "1a8b28" }],
@@ -13244,8 +13292,8 @@
     ["circle", { cx: "19", cy: "15", r: "1", key: "1a92ep" }],
     ["circle", { cx: "5", cy: "15", r: "1", key: "5r1jwy" }]
   ];
-  const GripHorizontal = createLucideIcon("grip-horizontal", __iconNode$p);
-  const __iconNode$o = [
+  const GripHorizontal = createLucideIcon("grip-horizontal", __iconNode$q);
+  const __iconNode$p = [
     [
       "path",
       {
@@ -13254,8 +13302,8 @@
       }
     ]
   ];
-  const Heart = createLucideIcon("heart", __iconNode$o);
-  const __iconNode$n = [
+  const Heart = createLucideIcon("heart", __iconNode$p);
+  const __iconNode$o = [
     [
       "path",
       {
@@ -13264,12 +13312,21 @@
       }
     ]
   ];
-  const Hexagon = createLucideIcon("hexagon", __iconNode$n);
-  const __iconNode$m = [
+  const Hexagon = createLucideIcon("hexagon", __iconNode$o);
+  const __iconNode$n = [
     ["path", { d: "m9 11-6 6v3h9l3-3", key: "1a3l36" }],
     ["path", { d: "m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4", key: "14a9rk" }]
   ];
-  const Highlighter = createLucideIcon("highlighter", __iconNode$m);
+  const Highlighter = createLucideIcon("highlighter", __iconNode$n);
+  const __iconNode$m = [
+    ["rect", { width: "7", height: "7", x: "3", y: "3", rx: "1", key: "1g98yp" }],
+    ["rect", { width: "7", height: "7", x: "3", y: "14", rx: "1", key: "1bb6yr" }],
+    ["path", { d: "M14 4h7", key: "3xa0d5" }],
+    ["path", { d: "M14 9h7", key: "1icrd9" }],
+    ["path", { d: "M14 15h7", key: "1mj8o2" }],
+    ["path", { d: "M14 20h7", key: "11slyb" }]
+  ];
+  const LayoutList = createLucideIcon("layout-list", __iconNode$m);
   const __iconNode$l = [
     ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
     ["path", { d: "m21 3-7 7", key: "1l2asr" }],
@@ -13466,9 +13523,10 @@
     { name: "Lavender", hex: "#E1BEE7", class: "bg-note-lavender" },
     { name: "Sky", hex: "#BBDEFB", class: "bg-note-blue" }
   ];
-  const NoteCard = ({ note }) => {
-    const { updateNote, updateNoteState, deleteNote, settings, loadSettings, activeNoteId, setActiveNoteId } = useNoteStore();
+  const NoteCardComponent = ({ note }) => {
+    const { updateNote, deleteNote, settings, loadSettings, activeNoteId, setActiveNoteId } = useNoteStore();
     const [isEditing, setIsEditing] = reactExports.useState(false);
+    const [isHovered, setIsHovered] = reactExports.useState(false);
     reactExports.useEffect(() => {
       loadSettings();
     }, [loadSettings]);
@@ -13511,6 +13569,7 @@
     const [showColors, setShowColors] = reactExports.useState(false);
     const [localContent, setLocalContent] = reactExports.useState(note.content);
     const cardRef = reactExports.useRef(null);
+    const rafRef = reactExports.useRef(null);
     const interactionRef = reactExports.useRef({
       isDragging: false,
       isResizing: false,
@@ -13534,20 +13593,16 @@
       };
       const handleMouseMove = (ev) => {
         if (!interactionRef.current.isDragging) return;
-        const dx = ev.clientX - interactionRef.current.startX;
-        const dy = ev.clientY - interactionRef.current.startY;
-        try {
-          updateNoteState(note.id, {
-            notePosition: {
-              x: interactionRef.current.initialX + dx,
-              y: interactionRef.current.initialY + dy
-            }
-          });
-        } catch (e2) {
-          window.removeEventListener("mousemove", handleMouseMove);
-          window.removeEventListener("mouseup", handleMouseUp);
-          interactionRef.current.isDragging = false;
-        }
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        rafRef.current = requestAnimationFrame(() => {
+          const dx = ev.clientX - interactionRef.current.startX;
+          const dy = ev.clientY - interactionRef.current.startY;
+          if (cardRef.current) {
+            cardRef.current.style.left = `${interactionRef.current.initialX + dx}px`;
+            cardRef.current.style.top = `${interactionRef.current.initialY + dy}px`;
+            cardRef.current.style.cursor = "grabbing";
+          }
+        });
       };
       const handleMouseUp = (ev) => {
         interactionRef.current.isDragging = false;
@@ -13585,43 +13640,49 @@
       };
       const handleMouseMove = (ev) => {
         if (!interactionRef.current.isResizing) return;
-        const dx = ev.clientX - interactionRef.current.startX;
-        const dy = ev.clientY - interactionRef.current.startY;
-        try {
-          updateNote(note.id, {
-            size: {
-              width: Math.max(150, interactionRef.current.initialW + dx),
-              height: Math.max(100, interactionRef.current.initialH + dy)
-            }
-          });
-        } catch (e2) {
-          window.removeEventListener("mousemove", handleMouseMove);
-          window.removeEventListener("mouseup", handleMouseUp);
-          interactionRef.current.isResizing = false;
-        }
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        rafRef.current = requestAnimationFrame(() => {
+          const dx = ev.clientX - interactionRef.current.startX;
+          const dy = ev.clientY - interactionRef.current.startY;
+          if (cardRef.current && !note.isCollapsed) {
+            const newWidth = Math.max(150, interactionRef.current.initialW + dx);
+            const newHeight = Math.max(100, interactionRef.current.initialH + dy);
+            cardRef.current.style.width = `${newWidth}px`;
+            cardRef.current.style.height = `${newHeight}px`;
+          }
+        });
       };
-      const handleMouseUp = () => {
+      const handleMouseUpResize = (ev) => {
         interactionRef.current.isResizing = false;
         window.removeEventListener("mousemove", handleMouseMove);
-        window.removeEventListener("mouseup", handleMouseUp);
+        window.removeEventListener("mouseup", handleMouseUpResize);
+        const finalW = Math.max(150, interactionRef.current.initialW + (ev.clientX - interactionRef.current.startX));
+        const finalH = Math.max(100, interactionRef.current.initialH + (ev.clientY - interactionRef.current.startY));
+        updateNote(note.id, {
+          size: { width: finalW, height: finalH }
+        });
       };
       window.addEventListener("mousemove", handleMouseMove);
-      window.addEventListener("mouseup", handleMouseUp);
+      window.addEventListener("mouseup", handleMouseUpResize);
     };
     const currentColorClass = COLORS.find((c) => c.hex === note.color)?.class || "bg-note-yellow";
     return /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
       {
         ref: cardRef,
+        "data-note-id": note.id,
         onClick: () => setActiveNoteId(note.id),
-        className: `absolute rounded-lg shadow-lg border border-black/5 overflow-hidden flex flex-col pointer-events-auto ${currentColorClass} ${note.isCollapsed ? "w-10 h-10" : ""} ${activeNoteId === note.id ? "ring-2 ring-brand-primary" : ""}`,
+        onMouseEnter: () => setIsHovered(true),
+        onMouseLeave: () => setIsHovered(false),
+        className: `absolute rounded-lg shadow-lg border border-black/5 overflow-hidden flex flex-col pointer-events-auto transition-[opacity,transform,filter,ring-width] duration-300 ${currentColorClass} ${note.isCollapsed ? "w-10 h-10" : ""} ${activeNoteId === note.id ? "ring-2 ring-brand-primary" : ""} ${settings.isCleanView && !isHovered ? "scale-95" : "scale-100"}`,
         style: {
           left: note.notePosition.x,
           top: note.notePosition.y,
           width: note.isCollapsed ? void 0 : note.size.width,
           height: note.isCollapsed ? void 0 : note.size.height,
-          zIndex: 2147483640,
-          opacity: note.status === "done" ? 0.6 : 0.95
+          zIndex: activeNoteId === note.id ? 200 : 100,
+          opacity: settings.isCleanView ? isHovered ? 1 : 0.05 : note.status === "done" ? 0.6 : 1,
+          filter: settings.isCleanView && !isHovered ? "grayscale(100%) blur(2px)" : "none"
         },
         children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -13786,15 +13847,13 @@
       }
     );
   };
+  const NoteCard = reactExports.memo(NoteCardComponent);
   const FloatingToolbar = () => {
-    const { mode, setMode, currentTool, setTool, currentColor, setColor, clearAllMarkups, undoMarkup, settings, updateSettings, selectedMarkupId, updateMarkup, markups } = useNoteStore();
-    const [isExpanded, setIsExpanded] = reactExports.useState(true);
-    const [isVisible, setIsVisible] = reactExports.useState(false);
+    const { mode, setMode, currentTool, setTool, currentColor, setColor, clearAllMarkups, undoMarkup, settings, updateSettings, selectedMarkupId, updateMarkup, markups, setOpacity } = useNoteStore();
+    const [isExpanded, setIsExpanded] = reactExports.useState(settings.isToolbarExpanded);
+    const [isVisible, setIsVisible] = reactExports.useState(settings.isToolbarExpanded);
     React.useEffect(() => {
-      if (isExpanded) {
-        const timer = setTimeout(() => setIsVisible(true), 50);
-        return () => clearTimeout(timer);
-      }
+      setIsVisible(isExpanded);
     }, [isExpanded]);
     const [isFontPickerOpen, setIsFontPickerOpen] = reactExports.useState(false);
     const [isStickerPickerOpen, setIsStickerPickerOpen] = reactExports.useState(false);
@@ -13830,17 +13889,18 @@
       setIsVisible(false);
       setTimeout(() => {
         setIsExpanded(false);
+        updateSettings({ isToolbarExpanded: false });
       }, 500);
     };
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed bottom-10 inset-x-0 flex justify-center pointer-events-none z-[2147483640]", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { all: "initial", boxSizing: "border-box" }, className: "pointer-events-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed bottom-10 inset-x-0 flex justify-center pointer-events-none z-[300]", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { all: "initial", boxSizing: "border-box" }, className: "pointer-events-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
       {
-        className: `bg-gray-900 shadow-[0_20px_60px_rgba(0,0,0,0.6),0_0_25px_rgba(255,213,79,0.2)] border-2 border-brand-primary flex items-center box-border text-white whitespace-nowrap transition-all duration-500 ease-in-out ${isVisible ? "max-w-[min(800px,94vw)] h-18 rounded-3xl p-3 px-4 gap-3" : "max-w-[64px] h-16 rounded-full p-0 gap-0 border-brand-primary border-4"}`,
+        className: `bg-gray-900 shadow-[0_20px_60px_rgba(0,0,0,0.6),0_0_25px_rgba(255,213,79,0.2)] border-2 border-brand-primary flex items-center box-border text-white whitespace-nowrap transition-all duration-500 ease-in-out ${settings.isCleanView ? "opacity-40 hover:opacity-100" : "opacity-100"} ${isVisible ? "w-fit max-w-[98vw] h-18 rounded-3xl p-1.5 px-2.5 gap-1.5" : "max-w-[64px] h-16 rounded-full p-0 gap-0 border-brand-primary border-4"}`,
         style: {
           fontStyle: "normal",
           fontFamily: "Pretendard, system-ui, sans-serif",
           position: "relative",
-          overflow: isVisible ? "visible" : "hidden"
+          overflow: isVisible || !isExpanded ? "visible" : "hidden"
         },
         children: [
           isExpanded && isVisible && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -13873,15 +13933,50 @@
               children: /* @__PURE__ */ jsxRuntimeExports.jsx(X, { size: 14, strokeWidth: 3 })
             }
           ),
-          !isExpanded && !isVisible ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              onClick: () => setIsExpanded(true),
-              className: "w-16 h-16 text-brand-primary flex items-center justify-center hover:scale-110 transition-all group cursor-pointer shrink-0",
-              title: "툴바 열기",
-              children: /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronRight, { size: 32, className: "group-hover:scale-125 transition-transform" })
-            }
-          ) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `flex items-center gap-3 transition-all duration-500 ${isVisible ? "opacity-100" : "opacity-0 translate-y-4"}`, children: [
+          !isExpanded && !isVisible ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative group/collapsed", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: () => {
+                  setIsExpanded(true);
+                  updateSettings({ isToolbarExpanded: true });
+                },
+                className: "w-16 h-16 text-brand-primary flex items-center justify-center hover:scale-110 transition-all group cursor-pointer shrink-0",
+                title: "툴바 열기",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronRight, { size: 32, className: "group-hover:scale-125 transition-transform" })
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: (e) => {
+                  e.stopPropagation();
+                  if (confirm("툴바를 숨기시겠습니까? 설정에서 다시 켤 수 있습니다.")) updateSettings({ showToolbar: false });
+                },
+                style: {
+                  position: "absolute",
+                  top: "-10px",
+                  right: "-10px",
+                  width: "28px",
+                  height: "28px",
+                  backgroundColor: "white",
+                  border: "2px solid #111827",
+                  borderRadius: "50%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#111827",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                  zIndex: 101,
+                  transition: "all 0.2s"
+                },
+                className: "hover:scale-110 hover:text-red-600",
+                title: "툴바 닫기",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(X, { size: 14, strokeWidth: 3 })
+              }
+            )
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `flex items-center gap-2 transition-all duration-500 ${isVisible ? "opacity-100" : "opacity-0 translate-y-4"}`, children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex bg-white/10 rounded-xl p-1 border border-white/5 shrink-0", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(
                 "button",
@@ -13909,8 +14004,26 @@
                   title: "캡쳐 모드",
                   children: /* @__PURE__ */ jsxRuntimeExports.jsx(Camera, { size: 20 })
                 }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  onClick: () => setMode("review"),
+                  className: `p-2 rounded-lg transition-all ${mode === "review" ? "bg-brand-primary shadow-sm text-gray-900" : "text-gray-400 hover:text-white hover:bg-white/5"}`,
+                  title: "리뷰 모드",
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(LayoutList, { size: 20 })
+                }
               )
             ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: () => updateSettings({ isCleanView: !settings.isCleanView }),
+                className: `p-2.5 rounded-xl transition-all border shrink-0 ${settings.isCleanView ? "bg-brand-primary/20 border-brand-primary text-brand-primary" : "bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10"}`,
+                title: settings.isCleanView ? "클린 뷰 끄기" : "클린 뷰 켜기 (요소 투명화)",
+                children: settings.isCleanView ? /* @__PURE__ */ jsxRuntimeExports.jsx(EyeOff, { size: 20 }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Eye, { size: 20 })
+              }
+            ),
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-px h-8 bg-white/10 mx-1 shrink-0" }),
             mode === "note" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2 items-center", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
@@ -13970,184 +14083,199 @@
                 }
               ) }) })
             ] }),
-            mode === "markup" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2 items-center", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "button",
-                {
-                  onClick: () => setTool("pen"),
-                  className: `p-2 rounded-lg transition-all ${currentTool === "pen" ? "bg-brand-primary text-gray-900" : "text-gray-400 hover:bg-white/5 hover:text-white"}`,
-                  title: "펜",
-                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(PenTool, { size: 20 })
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "button",
-                {
-                  onClick: () => setTool("highlight"),
-                  className: `p-2 rounded-lg transition-all ${currentTool === "highlight" ? "bg-brand-primary text-gray-900" : "text-gray-400 hover:bg-white/5 hover:text-white"}`,
-                  title: "형광펜",
-                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(Highlighter, { size: 20 })
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "button",
-                {
-                  onClick: () => setTool("eraser"),
-                  className: `p-2 rounded-lg transition-all ${currentTool === "eraser" ? "bg-red-500 text-white" : "text-gray-400 hover:bg-white/5 hover:text-white"}`,
-                  title: "지우개",
-                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(Eraser, { size: 20 })
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "button",
-                {
-                  onClick: () => setTool("select"),
-                  className: `p-2 rounded-lg transition-all ${currentTool === "select" ? "bg-brand-primary text-gray-900" : "text-gray-400 hover:bg-white/5 hover:text-white"}`,
-                  title: "선택 및 수정",
-                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(MousePointer2, { size: 20 })
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-px h-8 bg-white/10 mx-1" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+            mode === "markup" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-1 items-center", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex bg-white/5 rounded-xl p-1 border border-white/5 items-center", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
                   "button",
                   {
-                    onClick: () => setIsShapePickerOpen(!isShapePickerOpen),
-                    className: `p-2 rounded-lg transition-all ${["rect", "circle", "arrow"].includes(currentTool) ? "bg-brand-primary text-gray-900" : "text-gray-400 hover:bg-white/5 hover:text-white"}`,
-                    title: "도형",
-                    children: shapes.find((s) => s.id === selectedShape)?.icon || /* @__PURE__ */ jsxRuntimeExports.jsx(Square, { size: 20 })
+                    onClick: () => setTool("pen"),
+                    className: `p-1.5 rounded-lg transition-all ${currentTool === "pen" ? "bg-brand-primary text-gray-900" : "text-gray-400 hover:bg-white/5 hover:text-white"}`,
+                    title: "펜",
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(PenTool, { size: 18 })
                   }
                 ),
-                isShapePickerOpen && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute bottom-full left-1/2 -translate-x-1/2 mb-4 bg-gray-800 shadow-2xl border border-white/10 rounded-2xl p-2 grid grid-cols-4 gap-1 backdrop-blur-xl z-[100] w-48", children: shapes.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
                   "button",
                   {
-                    onClick: () => {
-                      setSelectedShape(s.id);
-                      setTool(s.id);
-                      setIsShapePickerOpen(false);
-                    },
-                    className: `p-2 rounded-xl transition-all ${currentTool === s.id ? "bg-brand-primary text-gray-900" : "text-gray-400 hover:bg-white/10 hover:text-white"}`,
-                    title: s.label,
-                    children: s.icon
-                  },
-                  s.id
-                )) })
+                    onClick: () => setTool("highlight"),
+                    className: `p-1.5 rounded-lg transition-all ${currentTool === "highlight" ? "bg-brand-primary text-gray-900" : "text-gray-400 hover:bg-white/5 hover:text-white"}`,
+                    title: "형광펜",
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(Highlighter, { size: 18 })
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    onClick: () => setTool("eraser"),
+                    className: `p-1.5 rounded-lg transition-all ${currentTool === "eraser" ? "bg-red-500 text-white" : "text-gray-400 hover:bg-white/5 hover:text-white"}`,
+                    title: "지우개",
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(Eraser, { size: 18 })
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    onClick: () => setTool("select"),
+                    className: `p-1.5 rounded-lg transition-all ${currentTool === "select" ? "bg-brand-primary text-gray-900" : "text-gray-400 hover:bg-white/5 hover:text-white"}`,
+                    title: "선택 및 수정",
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(MousePointer2, { size: 18 })
+                  }
+                )
               ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-px h-8 bg-white/10 mx-1" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "button",
-                  {
-                    onClick: () => setIsStickerPickerOpen(!isStickerPickerOpen),
-                    className: `p-2 rounded-lg transition-all ${currentTool === "sticker" ? "bg-brand-primary text-gray-900" : "text-gray-400 hover:bg-white/5 hover:text-white"}`,
-                    title: "스티커",
-                    children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xl leading-none", children: currentTool === "sticker" ? selectedSticker : /* @__PURE__ */ jsxRuntimeExports.jsx(Smile, { size: 20 }) })
-                  }
-                ),
-                isStickerPickerOpen && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute bottom-full left-1/2 -translate-x-1/2 mb-4 bg-gray-800 shadow-2xl border border-white/10 rounded-2xl p-3 grid grid-cols-4 gap-2 w-48 backdrop-blur-xl z-[100]", children: stickers.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "button",
-                  {
-                    onClick: () => {
-                      setSelectedSticker(s);
-                      setTool("sticker");
-                      setIsStickerPickerOpen(false);
-                      window.__pagepost_selected_sticker = s;
-                    },
-                    className: "text-2xl hover:bg-white/10 p-2 rounded-xl transition-all hover:scale-125",
-                    children: s
-                  },
-                  s
-                )) })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-px h-8 bg-white/10 mx-1" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "button",
-                {
-                  onClick: () => undoMarkup(),
-                  className: "p-2 text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-all",
-                  title: "실행 취소 (Undo)",
-                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(Undo2, { size: 20 })
-                }
-              ),
-              currentTool !== "eraser" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1 bg-white/5 rounded-xl p-1 border border-white/5", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "button",
-                  {
-                    onClick: () => {
-                      const key = currentTool === "highlight" ? "highlightWidth" : "penWidth";
-                      const min = currentTool === "highlight" ? 5 : 1;
-                      const newValue = Math.max(min, settings[key] - (currentTool === "highlight" ? 5 : 1));
-                      updateSettings({ [key]: newValue });
-                      if (selectedMarkupId) {
-                        const markup = markups.find((m) => m.id === selectedMarkupId);
-                        if (markup) {
-                          updateMarkup(selectedMarkupId, { style: { ...markup.style, strokeWidth: newValue } });
-                        }
-                      }
-                    },
-                    className: "w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-all shadow-sm",
-                    title: "두께 감소",
-                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(Minus, { size: 14 })
-                  }
-                ),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center justify-center w-6 gap-0.5", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex bg-white/5 rounded-xl p-1 border border-white/5 items-center gap-0.5", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "div",
+                    "button",
                     {
-                      className: "bg-brand-primary rounded-full",
-                      style: {
-                        width: Math.min(10, currentTool === "highlight" ? settings.highlightWidth / 4 : settings.penWidth * 1.5),
-                        height: Math.min(10, currentTool === "highlight" ? settings.highlightWidth / 4 : settings.penWidth * 1.5)
-                      }
+                      onClick: () => setIsShapePickerOpen(!isShapePickerOpen),
+                      className: `p-1.5 rounded-lg transition-all ${["rect", "circle", "arrow"].includes(currentTool) ? "bg-brand-primary text-gray-900" : "text-gray-400 hover:bg-white/5 hover:text-white"}`,
+                      title: "도형",
+                      children: shapes.find((s) => s.id === selectedShape)?.icon || /* @__PURE__ */ jsxRuntimeExports.jsx(Square, { size: 18 })
                     }
                   ),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[9px] font-bold text-brand-primary leading-none", children: currentTool === "highlight" ? settings.highlightWidth : settings.penWidth })
+                  isShapePickerOpen && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute bottom-full left-1/2 -translate-x-1/2 mb-4 bg-gray-800 shadow-2xl border border-white/10 rounded-2xl p-2 grid grid-cols-4 gap-1 backdrop-blur-xl z-[100] w-48", children: shapes.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "button",
+                    {
+                      onClick: () => {
+                        setSelectedShape(s.id);
+                        setTool(s.id);
+                        setIsShapePickerOpen(false);
+                      },
+                      className: `p-2 rounded-xl transition-all ${currentTool === s.id ? "bg-brand-primary text-gray-900" : "text-gray-400 hover:bg-white/10 hover:text-white"}`,
+                      title: s.label,
+                      children: s.icon
+                    },
+                    s.id
+                  )) })
                 ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "button",
+                    {
+                      onClick: () => setIsStickerPickerOpen(!isStickerPickerOpen),
+                      className: `p-1.5 rounded-lg transition-all ${currentTool === "sticker" ? "bg-brand-primary text-gray-900" : "text-gray-400 hover:bg-white/5 hover:text-white"}`,
+                      title: "스티커",
+                      children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-lg leading-none", children: currentTool === "sticker" ? selectedSticker : /* @__PURE__ */ jsxRuntimeExports.jsx(Smile, { size: 18 }) })
+                    }
+                  ),
+                  isStickerPickerOpen && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute bottom-full left-1/2 -translate-x-1/2 mb-4 bg-gray-800 shadow-2xl border border-white/10 rounded-2xl p-3 grid grid-cols-4 gap-2 w-48 backdrop-blur-xl z-[100]", children: stickers.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "button",
+                    {
+                      onClick: () => {
+                        setSelectedSticker(s);
+                        setTool("sticker");
+                        setIsStickerPickerOpen(false);
+                        window.__pagepost_selected_sticker = s;
+                      },
+                      className: "text-2xl hover:bg-white/10 p-2 rounded-xl transition-all hover:scale-125",
+                      children: s
+                    },
+                    s
+                  )) })
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex bg-white/5 rounded-xl p-1 border border-white/5 items-center gap-1", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    onClick: () => undoMarkup(),
+                    className: "p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-all shrink-0",
+                    title: "실행 취소 (Undo)",
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(Undo2, { size: 18 })
+                  }
+                ),
+                currentTool !== "eraser" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-0.5 bg-white/10 rounded-lg p-0.5 border border-white/5 shadow-inner shrink-0", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "button",
+                    {
+                      onClick: () => {
+                        const key = currentTool === "highlight" ? "highlightWidth" : "penWidth";
+                        const min = currentTool === "highlight" ? 5 : 1;
+                        const newValue = Math.max(min, settings[key] - (currentTool === "highlight" ? 5 : 1));
+                        updateSettings({ [key]: newValue });
+                        if (selectedMarkupId) {
+                          const markup = markups.find((m) => m.id === selectedMarkupId);
+                          if (markup) {
+                            updateMarkup(selectedMarkupId, { style: { ...markup.style, strokeWidth: newValue } });
+                          }
+                        }
+                      },
+                      className: "w-6 h-6 flex items-center justify-center text-gray-400 hover:text-white rounded-md hover:bg-white/10 transition-all",
+                      title: "두께 감소",
+                      children: /* @__PURE__ */ jsxRuntimeExports.jsx(Minus, { size: 12 })
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col items-center justify-center w-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[9px] font-bold text-brand-primary leading-none", children: currentTool === "highlight" ? settings.highlightWidth : settings.penWidth }) }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "button",
+                    {
+                      onClick: () => {
+                        const key = currentTool === "highlight" ? "highlightWidth" : "penWidth";
+                        const max = currentTool === "highlight" ? 100 : 20;
+                        const newValue = Math.min(max, settings[key] + (currentTool === "highlight" ? 5 : 1));
+                        updateSettings({ [key]: newValue });
+                        if (selectedMarkupId) {
+                          const markup = markups.find((m) => m.id === selectedMarkupId);
+                          if (markup) {
+                            updateMarkup(selectedMarkupId, { style: { ...markup.style, strokeWidth: newValue } });
+                          }
+                        }
+                      },
+                      className: "w-6 h-6 flex items-center justify-center text-gray-400 hover:text-white rounded-md hover:bg-white/10 transition-all",
+                      title: "두께 증가",
+                      children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-bold", children: "+" })
+                    }
+                  )
+                ] }),
+                currentTool !== "eraser" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-0.5 bg-white/10 rounded-lg p-0.5 border border-white/5 shadow-inner shrink-0", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "button",
+                    {
+                      onClick: () => setOpacity(Math.max(0.1, settings.markupOpacity - 0.1)),
+                      className: "w-6 h-6 flex items-center justify-center text-gray-400 hover:text-white rounded-md hover:bg-white/10 transition-all",
+                      title: "투명도 감소",
+                      children: /* @__PURE__ */ jsxRuntimeExports.jsx(Minus, { size: 12 })
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col items-center justify-center w-7", title: "마크업 투명도", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[9px] font-bold text-brand-primary leading-none", children: [
+                    Math.round(settings.markupOpacity * 100),
+                    "%"
+                  ] }) }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "button",
+                    {
+                      onClick: () => setOpacity(Math.min(1, settings.markupOpacity + 0.1)),
+                      className: "w-6 h-6 flex items-center justify-center text-gray-400 hover:text-white rounded-md hover:bg-white/10 transition-all",
+                      title: "투명도 증가",
+                      children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-bold", children: "+" })
+                    }
+                  )
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center px-0.5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative w-8 h-8 rounded-full border border-brand-primary/50 flex items-center justify-center overflow-hidden transition-transform hover:scale-110 shrink-0", style: { backgroundColor: currentColor }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(Palette, { size: 14, className: "text-white mix-blend-difference pointer-events-none" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      type: "color",
+                      value: currentColor,
+                      onChange: (e) => setColor(e.target.value),
+                      className: "absolute inset-0 w-full h-full opacity-0 cursor-pointer",
+                      title: "마크업 색상"
+                    }
+                  )
+                ] }) }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
                   "button",
                   {
                     onClick: () => {
-                      const key = currentTool === "highlight" ? "highlightWidth" : "penWidth";
-                      const max = currentTool === "highlight" ? 100 : 20;
-                      const newValue = Math.min(max, settings[key] + (currentTool === "highlight" ? 5 : 1));
-                      updateSettings({ [key]: newValue });
-                      if (selectedMarkupId) {
-                        const markup = markups.find((m) => m.id === selectedMarkupId);
-                        if (markup) {
-                          updateMarkup(selectedMarkupId, { style: { ...markup.style, strokeWidth: newValue } });
-                        }
-                      }
+                      if (confirm("이 페이지의 모든 마킹을 지우시겠습니까?")) clearAllMarkups();
                     },
-                    className: "w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-all shadow-sm",
-                    title: "두께 증가",
-                    children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-bold", children: "+" })
+                    className: "p-1.5 text-gray-400 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-all shrink-0",
+                    title: "모두 지우기",
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(Trash2, { size: 18 })
                   }
                 )
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center ml-1", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative w-8 h-8 rounded-full border-2 border-brand-primary/50 shadow-[0_0_10px_rgba(255,213,79,0.2)] flex items-center justify-center overflow-hidden transition-transform hover:scale-110", style: { backgroundColor: currentColor }, children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Palette, { size: 14, className: "text-white mix-blend-difference pointer-events-none" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "input",
-                  {
-                    type: "color",
-                    value: currentColor,
-                    onChange: (e) => setColor(e.target.value),
-                    className: "absolute inset-0 w-full h-full opacity-0 cursor-pointer",
-                    title: "마크업 색상"
-                  }
-                )
-              ] }) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "button",
-                {
-                  onClick: () => {
-                    if (confirm("이 페이지의 모든 마킹을 지우시겠습니까?")) clearAllMarkups();
-                  },
-                  className: "p-2 text-gray-500 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-all",
-                  title: "모두 지우기",
-                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(Trash2, { size: 20 })
-                }
-              )
+              ] })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
@@ -14162,6 +14290,47 @@
         ]
       }
     ) }) });
+  };
+  const ReviewSidebar = ({ notes, onNoteClick }) => {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "fixed top-0 right-0 w-80 h-full bg-white/90 backdrop-blur-xl border-l border-gray-200 shadow-2xl z-[400] flex flex-col pointer-events-auto animate-in slide-in-from-right duration-300", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-6 bg-brand-primary/10 border-b border-brand-primary/20", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 mb-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(LayoutList, { className: "text-brand-primary", size: 24 }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-black text-gray-900 tracking-tight", children: "Review Mode" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] text-gray-500 font-bold uppercase tracking-widest", children: [
+          "Current Page: ",
+          notes.length,
+          " Notes"
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar", children: notes.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "h-64 flex flex-col items-center justify-center text-gray-400 gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(MessageSquare, { size: 48, strokeWidth: 1, className: "opacity-20" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium", children: "작성된 메모가 없습니다." })
+      ] }) : notes.map((note) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          onClick: () => onNoteClick(note.id),
+          className: "bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:border-brand-primary hover:shadow-md transition-all cursor-pointer group",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 mb-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-1.5 h-4 rounded-full", style: { backgroundColor: note.color } }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-black text-gray-400 uppercase", children: new Date(note.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-700 line-clamp-2 leading-relaxed font-medium", children: note.content || /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "italic text-gray-300", children: "내용 없음" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex items-center justify-between", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-1", children: note.tags.slice(0, 2).map((tag) => /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[9px] px-1.5 py-0.5 bg-gray-50 text-gray-500 rounded-md font-bold", children: [
+                "#",
+                tag
+              ] }, tag)) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronRight, { size: 14, className: "text-brand-primary opacity-0 group-hover:opacity-100 transition-all translate-x-1" })
+            ] })
+          ]
+        },
+        note.id
+      )) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-4 border-t border-gray-100 bg-gray-50/50", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] text-center text-gray-400 font-bold", children: "리스트를 클릭하면 해당 위치로 이동합니다." }) })
+    ] });
   };
   const NoteContainer = () => {
     const { notes, fetchNotesForUrl, fetchMarkupsForUrl, settings, loadSettings, isSettingsLoaded, mode, setActiveNoteId } = useNoteStore();
@@ -14178,14 +14347,34 @@
       window.addEventListener("mousedown", handleBackgroundClick);
       return () => window.removeEventListener("mousedown", handleBackgroundClick);
     }, [fetchNotesForUrl, fetchMarkupsForUrl, loadSettings, setActiveNoteId]);
-    const isExtensionPage = window.location.protocol === "chrome-extension:";
+    const handleNoteClick = (noteId) => {
+      console.log("PagePost: Review sidebar clicked for note:", noteId);
+      const host = document.getElementById("pagepost-extension-host");
+      const rootContainer = host?.shadowRoot?.getElementById("pagepost-root-container");
+      const noteElement = rootContainer?.querySelector(`[data-note-id="${noteId}"]`);
+      if (noteElement) {
+        console.log("PagePost: Found note element, scrolling...");
+        noteElement.scrollIntoView({ behavior: "smooth", block: "center" });
+        setActiveNoteId(noteId);
+        noteElement.style.transition = "all 0.4s ease-out";
+        noteElement.classList.add("ring-8", "ring-brand-primary", "scale-105", "z-[1000]");
+        setTimeout(() => {
+          noteElement.classList.remove("ring-8", "ring-brand-primary", "scale-105", "z-[1000]");
+        }, 1500);
+      } else {
+        console.error("PagePost: Could not find note element in DOM. RootContainer found:", !!rootContainer);
+        setActiveNoteId(noteId);
+      }
+    };
+    const isExtensionPage = typeof window !== "undefined" && window.location.protocol === "chrome-extension:";
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { id: "pagepost-notes-root", className: "pointer-events-none", children: [
       isSettingsLoaded && settings.showToolbar && mode !== "capture" && !isExtensionPage && /* @__PURE__ */ jsxRuntimeExports.jsx(FloatingToolbar, {}),
+      mode === "review" && /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewSidebar, { notes, onNoteClick: handleNoteClick }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pointer-events-none", children: notes.map((note) => /* @__PURE__ */ jsxRuntimeExports.jsx(NoteCard, { note }, note.id)) })
     ] });
   };
   const MarkupLayer = () => {
-    const { mode, notes, markups, addMarkup, deleteMarkup, currentTool, currentColor, settings, activeNoteId, selectedMarkupId, setSelectedMarkupId } = useNoteStore();
+    const { mode, notes, markups, addMarkup, deleteMarkup, currentTool, currentColor, settings, activeNoteId, setActiveNoteId, selectedMarkupId, setSelectedMarkupId } = useNoteStore();
     const canvasRef = reactExports.useRef(null);
     const drawingRef = reactExports.useRef(false);
     const [isDrawing, setIsDrawing] = reactExports.useState(false);
@@ -14194,16 +14383,7 @@
     const getPagePoints = (markup) => {
       let points = markup.points || [];
       if (points.length < 1) return [];
-      if (markup.linkedNoteId) {
-        const linkedNote = notes.find((n) => n.id === markup.linkedNoteId);
-        if (linkedNote) {
-          return points.map((p) => ({
-            x: linkedNote.notePosition.x + p.x,
-            y: linkedNote.notePosition.y + p.y
-          }));
-        }
-        return [];
-      } else if (markup.anchor) {
+      if (markup.anchor) {
         const el = restoreElement(markup.anchor);
         if (el) {
           return points.map((p) => getAbsolutePoint(el, p.x, p.y));
@@ -14242,21 +14422,18 @@
           ctx.strokeStyle = markup.style.strokeColor;
           ctx.lineWidth = markup.style.strokeWidth;
           ctx.globalAlpha = markup.style.opacity;
-          const isActive = markup.linkedNoteId === activeNoteId;
           const isSelected = markup.id === selectedMarkupId;
-          if (isActive || isSelected) {
-            ctx.shadowColor = isSelected ? "#ffffff" : markup.style.strokeColor;
-            ctx.shadowBlur = isSelected ? 20 : 10;
-            ctx.globalAlpha = 1;
-            if (isSelected) {
-              ctx.lineWidth = markup.style.strokeWidth + 3;
-            }
+          if (isSelected) {
+            ctx.shadowColor = "#ffffff";
+            ctx.shadowBlur = 25;
+            ctx.globalAlpha = Math.min(1, markup.style.opacity + 0.1);
+            ctx.lineWidth = markup.style.strokeWidth + 3;
           } else {
             ctx.shadowBlur = 0;
             ctx.shadowColor = "transparent";
+            ctx.globalAlpha = markup.style.opacity;
           }
           if (markup.type === "pen" || markup.type === "highlight") {
-            if (markup.type === "highlight") ctx.globalAlpha = 0.4;
             ctx.moveTo(points[0].x, points[0].y);
             for (let i = 1; i < points.length; i++) {
               ctx.lineTo(points[i].x, points[i].y);
@@ -14410,7 +14587,7 @@
           ctx.lineWidth = currentTool === "highlight" ? settings.highlightWidth : settings.penWidth;
           ctx.lineCap = "round";
           ctx.lineJoin = "round";
-          ctx.globalAlpha = currentTool === "highlight" ? 0.4 : 1;
+          ctx.globalAlpha = settings.markupOpacity;
           if (currentTool === "pen" || currentTool === "highlight") {
             ctx.moveTo(currentPoints[0].x, currentPoints[0].y);
             for (let i = 1; i < currentPoints.length; i++) {
@@ -14593,7 +14770,31 @@
       const x = e.clientX + window.scrollX;
       const y = e.clientY + window.scrollY;
       if (currentTool === "select") {
-        checkAndSelect(x, y);
+        const markup = checkAndSelect(x, y);
+        if (!markup) {
+          const root = canvasRef.current?.getRootNode();
+          if (root && root.elementFromPoint) {
+            const canvas = canvasRef.current;
+            if (canvas) {
+              canvas.style.pointerEvents = "none";
+              const el = root.elementFromPoint(e.clientX, e.clientY);
+              canvas.style.pointerEvents = "auto";
+              if (el && el !== root.getElementById("pagepost-root-container")) {
+                const newEvent = new MouseEvent("mousedown", {
+                  bubbles: true,
+                  cancelable: true,
+                  clientX: e.clientX,
+                  clientY: e.clientY,
+                  button: e.button,
+                  buttons: e.buttons,
+                  view: window
+                });
+                el.dispatchEvent(newEvent);
+              }
+            }
+          }
+          setActiveNoteId(null);
+        }
         return;
       }
       e.preventDefault();
@@ -14603,18 +14804,10 @@
         checkAndErase(x, y);
       } else if (currentTool === "sticker") {
         const sticker = window.__pagepost_selected_sticker || "✅";
-        const element = document.elementFromPoint(e.clientX, e.clientY);
         let anchor = void 0;
         let finalPoints = [{ x, y }];
-        if (activeNoteId) {
-          const activeNote = notes.find((n) => n.id === activeNoteId);
-          if (activeNote) {
-            finalPoints = [{
-              x: x - activeNote.notePosition.x,
-              y: y - activeNote.notePosition.y
-            }];
-          }
-        } else if (element && element !== document.body && element !== document.documentElement) {
+        const element = document.elementFromPoint(e.clientX, e.clientY);
+        if (element && element !== document.body && element !== document.documentElement) {
           anchor = captureAnchor(element, x, y);
           finalPoints = [{ x: getRelativePoint(element, x, y).x, y: getRelativePoint(element, x, y).y }];
         }
@@ -14625,7 +14818,6 @@
           points: finalPoints,
           content: sticker,
           anchor,
-          linkedNoteId: activeNoteId || void 0,
           style: {
             strokeColor: currentColor,
             strokeWidth: 1,
@@ -14703,18 +14895,10 @@
           return;
         }
         const startPoint = rawPoints[0];
-        const element = document.elementFromPoint(startPoint.x, startPoint.y - window.scrollY);
         let anchor = void 0;
         let finalPoints = rawPoints;
-        if (activeNoteId) {
-          const activeNote = notes.find((n) => n.id === activeNoteId);
-          if (activeNote) {
-            finalPoints = rawPoints.map((p) => ({
-              x: p.x - activeNote.notePosition.x,
-              y: p.y - activeNote.notePosition.y
-            }));
-          }
-        } else if (element && element !== document.body && element !== document.documentElement) {
+        const element = document.elementFromPoint(startPoint.x, startPoint.y - window.scrollY);
+        if (element && element !== document.body && element !== document.documentElement) {
           anchor = captureAnchor(element, startPoint.x, startPoint.y);
           finalPoints = rawPoints.map((p) => getRelativePoint(element, p.x, p.y));
         }
@@ -14725,11 +14909,10 @@
           points: finalPoints,
           anchor,
           // Store anchor info
-          linkedNoteId: activeNoteId || void 0,
           style: {
             strokeColor: currentColor,
             strokeWidth: settings[`${currentTool}Width`] || settings.penWidth || 2,
-            opacity: currentTool === "highlight" ? 0.3 : 1
+            opacity: settings.markupOpacity
           },
           createdAt: Date.now(),
           updatedAt: Date.now()
@@ -14747,10 +14930,12 @@
           top: 0,
           left: 0,
           cursor: mode === "markup" ? currentTool === "select" ? "pointer" : currentTool === "highlight" ? "cell" : currentTool === "eraser" ? "not-allowed" : "crosshair" : "default",
-          zIndex: 10,
+          zIndex: 200,
           maxWidth: "100%",
           display: "block",
-          pointerEvents: mode === "markup" ? "auto" : "none"
+          pointerEvents: mode === "markup" ? "auto" : "none",
+          opacity: settings.isCleanView ? 0.2 : 1,
+          transition: "opacity 0.3s ease-in-out"
         },
         onMouseDown: handleMouseDown,
         onMouseMove: handleMouseMove,
@@ -14881,7 +15066,7 @@
         style: {
           position: "fixed",
           inset: 0,
-          zIndex: 2147483646,
+          zIndex: 400,
           backgroundColor: "rgba(0, 0, 0, 0.4)",
           cursor: "crosshair",
           overflow: "hidden",
@@ -14967,7 +15152,7 @@
       }
     );
   };
-  const tailwindStyles = '/*! tailwindcss v4.2.1 | MIT License | https://tailwindcss.com */\n@layer properties {\n  @supports (((-webkit-hyphens: none)) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color: rgb(from red r g b)))) {\n    *, :before, :after, ::backdrop {\n      --tw-translate-x: 0;\n      --tw-translate-y: 0;\n      --tw-translate-z: 0;\n      --tw-scale-x: 1;\n      --tw-scale-y: 1;\n      --tw-scale-z: 1;\n      --tw-rotate-x: initial;\n      --tw-rotate-y: initial;\n      --tw-rotate-z: initial;\n      --tw-skew-x: initial;\n      --tw-skew-y: initial;\n      --tw-space-y-reverse: 0;\n      --tw-divide-y-reverse: 0;\n      --tw-border-style: solid;\n      --tw-leading: initial;\n      --tw-font-weight: initial;\n      --tw-tracking: initial;\n      --tw-shadow: 0 0 #0000;\n      --tw-shadow-color: initial;\n      --tw-shadow-alpha: 100%;\n      --tw-inset-shadow: 0 0 #0000;\n      --tw-inset-shadow-color: initial;\n      --tw-inset-shadow-alpha: 100%;\n      --tw-ring-color: initial;\n      --tw-ring-shadow: 0 0 #0000;\n      --tw-inset-ring-color: initial;\n      --tw-inset-ring-shadow: 0 0 #0000;\n      --tw-ring-inset: initial;\n      --tw-ring-offset-width: 0px;\n      --tw-ring-offset-color: #fff;\n      --tw-ring-offset-shadow: 0 0 #0000;\n      --tw-outline-style: solid;\n      --tw-blur: initial;\n      --tw-brightness: initial;\n      --tw-contrast: initial;\n      --tw-grayscale: initial;\n      --tw-hue-rotate: initial;\n      --tw-invert: initial;\n      --tw-opacity: initial;\n      --tw-saturate: initial;\n      --tw-sepia: initial;\n      --tw-drop-shadow: initial;\n      --tw-drop-shadow-color: initial;\n      --tw-drop-shadow-alpha: 100%;\n      --tw-drop-shadow-size: initial;\n      --tw-backdrop-blur: initial;\n      --tw-backdrop-brightness: initial;\n      --tw-backdrop-contrast: initial;\n      --tw-backdrop-grayscale: initial;\n      --tw-backdrop-hue-rotate: initial;\n      --tw-backdrop-invert: initial;\n      --tw-backdrop-opacity: initial;\n      --tw-backdrop-saturate: initial;\n      --tw-backdrop-sepia: initial;\n      --tw-duration: initial;\n      --tw-ease: initial;\n    }\n  }\n}\n\n@layer theme {\n  :root, :host {\n    --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",\n      "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";\n    --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;\n    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",\n      "Courier New", monospace;\n    --color-red-50: oklch(97.1% .013 17.38);\n    --color-red-100: oklch(93.6% .032 17.717);\n    --color-red-400: oklch(70.4% .191 22.216);\n    --color-red-500: oklch(63.7% .237 25.331);\n    --color-red-600: oklch(57.7% .245 27.325);\n    --color-amber-50: oklch(98.7% .022 95.277);\n    --color-amber-100: oklch(96.2% .059 95.617);\n    --color-amber-500: oklch(76.9% .188 70.08);\n    --color-amber-600: oklch(66.6% .179 58.318);\n    --color-green-500: oklch(72.3% .219 149.579);\n    --color-green-600: oklch(62.7% .194 149.214);\n    --color-emerald-50: oklch(97.9% .021 166.113);\n    --color-emerald-100: oklch(95% .052 163.051);\n    --color-emerald-500: oklch(69.6% .17 162.48);\n    --color-emerald-600: oklch(59.6% .145 163.225);\n    --color-blue-50: oklch(97% .014 254.604);\n    --color-blue-100: oklch(93.2% .032 255.585);\n    --color-blue-500: oklch(62.3% .214 259.815);\n    --color-blue-600: oklch(54.6% .245 262.881);\n    --color-indigo-50: oklch(96.2% .018 272.314);\n    --color-indigo-500: oklch(58.5% .233 277.117);\n    --color-slate-50: oklch(98.4% .003 247.858);\n    --color-slate-100: oklch(96.8% .007 247.896);\n    --color-slate-200: oklch(92.9% .013 255.508);\n    --color-slate-300: oklch(86.9% .022 252.894);\n    --color-slate-400: oklch(70.4% .04 256.788);\n    --color-slate-500: oklch(55.4% .046 257.417);\n    --color-slate-600: oklch(44.6% .043 257.281);\n    --color-slate-700: oklch(37.2% .044 257.287);\n    --color-slate-800: oklch(27.9% .041 260.031);\n    --color-slate-900: oklch(20.8% .042 265.755);\n    --color-gray-50: oklch(98.5% .002 247.839);\n    --color-gray-100: oklch(96.7% .003 264.542);\n    --color-gray-200: oklch(92.8% .006 264.531);\n    --color-gray-300: oklch(87.2% .01 258.338);\n    --color-gray-400: oklch(70.7% .022 261.325);\n    --color-gray-500: oklch(55.1% .027 264.364);\n    --color-gray-600: oklch(44.6% .03 256.802);\n    --color-gray-700: oklch(37.3% .034 259.733);\n    --color-gray-800: oklch(27.8% .033 256.848);\n    --color-gray-900: oklch(21% .034 264.665);\n    --color-black: #000;\n    --color-white: #fff;\n    --spacing: .25rem;\n    --container-7xl: 80rem;\n    --text-xs: .75rem;\n    --text-xs--line-height: calc(1 / .75);\n    --text-sm: .875rem;\n    --text-sm--line-height: calc(1.25 / .875);\n    --text-base: 1rem;\n    --text-base--line-height: calc(1.5 / 1);\n    --text-lg: 1.125rem;\n    --text-lg--line-height: calc(1.75 / 1.125);\n    --text-xl: 1.25rem;\n    --text-xl--line-height: calc(1.75 / 1.25);\n    --text-2xl: 1.5rem;\n    --text-2xl--line-height: calc(2 / 1.5);\n    --text-3xl: 1.875rem;\n    --text-3xl--line-height: calc(2.25 / 1.875);\n    --font-weight-medium: 500;\n    --font-weight-semibold: 600;\n    --font-weight-bold: 700;\n    --font-weight-black: 900;\n    --tracking-tighter: -.05em;\n    --tracking-tight: -.025em;\n    --tracking-wide: .025em;\n    --tracking-wider: .05em;\n    --tracking-widest: .1em;\n    --leading-relaxed: 1.625;\n    --radius-md: .375rem;\n    --radius-lg: .5rem;\n    --radius-xl: .75rem;\n    --radius-2xl: 1rem;\n    --radius-3xl: 1.5rem;\n    --ease-in-out: cubic-bezier(.4, 0, .2, 1);\n    --animate-pulse: pulse 2s cubic-bezier(.4, 0, .6, 1) infinite;\n    --animate-bounce: bounce 1s infinite;\n    --blur-md: 12px;\n    --blur-xl: 24px;\n    --default-transition-duration: .15s;\n    --default-transition-timing-function: cubic-bezier(.4, 0, .2, 1);\n    --default-font-family: var(--font-sans);\n    --default-mono-font-family: var(--font-mono);\n    --color-brand-primary: #ffd54f;\n    --color-brand-accent: #ff6f61;\n    --color-note-yellow: #fff9c4;\n    --color-note-green: #b2dfdb;\n    --color-note-pink: #f8bbd0;\n    --color-note-lavender: #e1bee7;\n    --color-note-blue: #bbdefb;\n  }\n}\n\n@layer base {\n  *, :after, :before, ::backdrop {\n    box-sizing: border-box;\n    border: 0 solid;\n    margin: 0;\n    padding: 0;\n  }\n\n  ::file-selector-button {\n    box-sizing: border-box;\n    border: 0 solid;\n    margin: 0;\n    padding: 0;\n  }\n\n  html, :host {\n    -webkit-text-size-adjust: 100%;\n    tab-size: 4;\n    line-height: 1.5;\n    font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");\n    font-feature-settings: var(--default-font-feature-settings, normal);\n    font-variation-settings: var(--default-font-variation-settings, normal);\n    -webkit-tap-highlight-color: transparent;\n  }\n\n  hr {\n    height: 0;\n    color: inherit;\n    border-top-width: 1px;\n  }\n\n  abbr:where([title]) {\n    -webkit-text-decoration: underline dotted;\n    text-decoration: underline dotted;\n  }\n\n  h1, h2, h3, h4, h5, h6 {\n    font-size: inherit;\n    font-weight: inherit;\n  }\n\n  a {\n    color: inherit;\n    -webkit-text-decoration: inherit;\n    -webkit-text-decoration: inherit;\n    -webkit-text-decoration: inherit;\n    text-decoration: inherit;\n  }\n\n  b, strong {\n    font-weight: bolder;\n  }\n\n  code, kbd, samp, pre {\n    font-family: var(--default-mono-font-family, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);\n    font-feature-settings: var(--default-mono-font-feature-settings, normal);\n    font-variation-settings: var(--default-mono-font-variation-settings, normal);\n    font-size: 1em;\n  }\n\n  small {\n    font-size: 80%;\n  }\n\n  sub, sup {\n    vertical-align: baseline;\n    font-size: 75%;\n    line-height: 0;\n    position: relative;\n  }\n\n  sub {\n    bottom: -.25em;\n  }\n\n  sup {\n    top: -.5em;\n  }\n\n  table {\n    text-indent: 0;\n    border-color: inherit;\n    border-collapse: collapse;\n  }\n\n  :-moz-focusring {\n    outline: auto;\n  }\n\n  progress {\n    vertical-align: baseline;\n  }\n\n  summary {\n    display: list-item;\n  }\n\n  ol, ul, menu {\n    list-style: none;\n  }\n\n  img, svg, video, canvas, audio, iframe, embed, object {\n    vertical-align: middle;\n    display: block;\n  }\n\n  img, video {\n    max-width: 100%;\n    height: auto;\n  }\n\n  button, input, select, optgroup, textarea {\n    font: inherit;\n    font-feature-settings: inherit;\n    font-variation-settings: inherit;\n    letter-spacing: inherit;\n    color: inherit;\n    opacity: 1;\n    background-color: #0000;\n    border-radius: 0;\n  }\n\n  ::file-selector-button {\n    font: inherit;\n    font-feature-settings: inherit;\n    font-variation-settings: inherit;\n    letter-spacing: inherit;\n    color: inherit;\n    opacity: 1;\n    background-color: #0000;\n    border-radius: 0;\n  }\n\n  :where(select:is([multiple], [size])) optgroup {\n    font-weight: bolder;\n  }\n\n  :where(select:is([multiple], [size])) optgroup option {\n    padding-inline-start: 20px;\n  }\n\n  ::file-selector-button {\n    margin-inline-end: 4px;\n  }\n\n  ::placeholder {\n    opacity: 1;\n  }\n\n  @supports (not ((-webkit-appearance: -apple-pay-button))) or (contain-intrinsic-size: 1px) {\n    ::placeholder {\n      color: currentColor;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      ::placeholder {\n        color: color-mix(in oklab, currentcolor 50%, transparent);\n      }\n    }\n  }\n\n  textarea {\n    resize: vertical;\n  }\n\n  ::-webkit-search-decoration {\n    -webkit-appearance: none;\n  }\n\n  ::-webkit-date-and-time-value {\n    min-height: 1lh;\n    text-align: inherit;\n  }\n\n  ::-webkit-datetime-edit {\n    display: inline-flex;\n  }\n\n  ::-webkit-datetime-edit-fields-wrapper {\n    padding: 0;\n  }\n\n  ::-webkit-datetime-edit {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-year-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-month-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-day-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-hour-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-minute-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-second-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-millisecond-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-meridiem-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-calendar-picker-indicator {\n    line-height: 1;\n  }\n\n  :-moz-ui-invalid {\n    box-shadow: none;\n  }\n\n  button, input:where([type="button"], [type="reset"], [type="submit"]) {\n    appearance: button;\n  }\n\n  ::file-selector-button {\n    appearance: button;\n  }\n\n  ::-webkit-inner-spin-button {\n    height: auto;\n  }\n\n  ::-webkit-outer-spin-button {\n    height: auto;\n  }\n\n  [hidden]:where(:not([hidden="until-found"])) {\n    display: none !important;\n  }\n}\n\n@layer components;\n\n@layer utilities {\n  .pointer-events-auto {\n    pointer-events: auto;\n  }\n\n  .pointer-events-none {\n    pointer-events: none;\n  }\n\n  .visible {\n    visibility: visible;\n  }\n\n  .absolute {\n    position: absolute;\n  }\n\n  .fixed {\n    position: fixed;\n  }\n\n  .relative {\n    position: relative;\n  }\n\n  .sticky {\n    position: sticky;\n  }\n\n  .inset-0 {\n    inset: calc(var(--spacing) * 0);\n  }\n\n  .inset-x-0 {\n    inset-inline: calc(var(--spacing) * 0);\n  }\n\n  .start {\n    inset-inline-start: var(--spacing);\n  }\n\n  .end {\n    inset-inline-end: var(--spacing);\n  }\n\n  .-top-4 {\n    top: calc(var(--spacing) * -4);\n  }\n\n  .top-1 {\n    top: calc(var(--spacing) * 1);\n  }\n\n  .top-1\\/2 {\n    top: 50%;\n  }\n\n  .top-10 {\n    top: calc(var(--spacing) * 10);\n  }\n\n  .-right-4 {\n    right: calc(var(--spacing) * -4);\n  }\n\n  .right-0 {\n    right: calc(var(--spacing) * 0);\n  }\n\n  .bottom-10 {\n    bottom: calc(var(--spacing) * 10);\n  }\n\n  .bottom-full {\n    bottom: 100%;\n  }\n\n  .left-0 {\n    left: calc(var(--spacing) * 0);\n  }\n\n  .left-1 {\n    left: calc(var(--spacing) * 1);\n  }\n\n  .left-1\\/2 {\n    left: 50%;\n  }\n\n  .left-2 {\n    left: calc(var(--spacing) * 2);\n  }\n\n  .left-2\\.5 {\n    left: calc(var(--spacing) * 2.5);\n  }\n\n  .left-3 {\n    left: calc(var(--spacing) * 3);\n  }\n\n  .z-20 {\n    z-index: 20;\n  }\n\n  .z-50 {\n    z-index: 50;\n  }\n\n  .z-\\[100\\] {\n    z-index: 100;\n  }\n\n  .z-\\[2147483640\\] {\n    z-index: 2147483640;\n  }\n\n  .col-span-full {\n    grid-column: 1 / -1;\n  }\n\n  .container {\n    width: 100%;\n  }\n\n  @media (min-width: 40rem) {\n    .container {\n      max-width: 40rem;\n    }\n  }\n\n  @media (min-width: 48rem) {\n    .container {\n      max-width: 48rem;\n    }\n  }\n\n  @media (min-width: 64rem) {\n    .container {\n      max-width: 64rem;\n    }\n  }\n\n  @media (min-width: 80rem) {\n    .container {\n      max-width: 80rem;\n    }\n  }\n\n  @media (min-width: 96rem) {\n    .container {\n      max-width: 96rem;\n    }\n  }\n\n  .mx-0 {\n    margin-inline: calc(var(--spacing) * 0);\n  }\n\n  .mx-1 {\n    margin-inline: calc(var(--spacing) * 1);\n  }\n\n  .mx-auto {\n    margin-inline: auto;\n  }\n\n  .mt-0 {\n    margin-top: calc(var(--spacing) * 0);\n  }\n\n  .mt-0\\.5 {\n    margin-top: calc(var(--spacing) * .5);\n  }\n\n  .mt-2 {\n    margin-top: calc(var(--spacing) * 2);\n  }\n\n  .mr-1 {\n    margin-right: calc(var(--spacing) * 1);\n  }\n\n  .mb-1 {\n    margin-bottom: calc(var(--spacing) * 1);\n  }\n\n  .mb-2 {\n    margin-bottom: calc(var(--spacing) * 2);\n  }\n\n  .mb-3 {\n    margin-bottom: calc(var(--spacing) * 3);\n  }\n\n  .mb-4 {\n    margin-bottom: calc(var(--spacing) * 4);\n  }\n\n  .mb-8 {\n    margin-bottom: calc(var(--spacing) * 8);\n  }\n\n  .mb-10 {\n    margin-bottom: calc(var(--spacing) * 10);\n  }\n\n  .ml-1 {\n    margin-left: calc(var(--spacing) * 1);\n  }\n\n  .box-border {\n    box-sizing: border-box;\n  }\n\n  .line-clamp-3 {\n    -webkit-line-clamp: 3;\n    -webkit-box-orient: vertical;\n    display: -webkit-box;\n    overflow: hidden;\n  }\n\n  .line-clamp-6 {\n    -webkit-line-clamp: 6;\n    -webkit-box-orient: vertical;\n    display: -webkit-box;\n    overflow: hidden;\n  }\n\n  .block {\n    display: block;\n  }\n\n  .flex {\n    display: flex;\n  }\n\n  .grid {\n    display: grid;\n  }\n\n  .hidden {\n    display: none;\n  }\n\n  .inline {\n    display: inline;\n  }\n\n  .table {\n    display: table;\n  }\n\n  .h-1 {\n    height: calc(var(--spacing) * 1);\n  }\n\n  .h-3 {\n    height: calc(var(--spacing) * 3);\n  }\n\n  .h-4 {\n    height: calc(var(--spacing) * 4);\n  }\n\n  .h-5 {\n    height: calc(var(--spacing) * 5);\n  }\n\n  .h-6 {\n    height: calc(var(--spacing) * 6);\n  }\n\n  .h-7 {\n    height: calc(var(--spacing) * 7);\n  }\n\n  .h-8 {\n    height: calc(var(--spacing) * 8);\n  }\n\n  .h-10 {\n    height: calc(var(--spacing) * 10);\n  }\n\n  .h-16 {\n    height: calc(var(--spacing) * 16);\n  }\n\n  .h-18 {\n    height: calc(var(--spacing) * 18);\n  }\n\n  .h-\\[480px\\] {\n    height: 480px;\n  }\n\n  .h-full {\n    height: 100%;\n  }\n\n  .max-h-\\[70vh\\] {\n    max-height: 70vh;\n  }\n\n  .max-h-\\[500px\\] {\n    max-height: 500px;\n  }\n\n  .min-h-screen {\n    min-height: 100vh;\n  }\n\n  .w-1 {\n    width: calc(var(--spacing) * 1);\n  }\n\n  .w-2 {\n    width: calc(var(--spacing) * 2);\n  }\n\n  .w-2\\.5 {\n    width: calc(var(--spacing) * 2.5);\n  }\n\n  .w-3 {\n    width: calc(var(--spacing) * 3);\n  }\n\n  .w-4 {\n    width: calc(var(--spacing) * 4);\n  }\n\n  .w-6 {\n    width: calc(var(--spacing) * 6);\n  }\n\n  .w-7 {\n    width: calc(var(--spacing) * 7);\n  }\n\n  .w-8 {\n    width: calc(var(--spacing) * 8);\n  }\n\n  .w-10 {\n    width: calc(var(--spacing) * 10);\n  }\n\n  .w-16 {\n    width: calc(var(--spacing) * 16);\n  }\n\n  .w-40 {\n    width: calc(var(--spacing) * 40);\n  }\n\n  .w-48 {\n    width: calc(var(--spacing) * 48);\n  }\n\n  .w-\\[320px\\] {\n    width: 320px;\n  }\n\n  .w-full {\n    width: 100%;\n  }\n\n  .w-px {\n    width: 1px;\n  }\n\n  .max-w-7xl {\n    max-width: var(--container-7xl);\n  }\n\n  .max-w-\\[64px\\] {\n    max-width: 64px;\n  }\n\n  .max-w-\\[120px\\] {\n    max-width: 120px;\n  }\n\n  .max-w-\\[200px\\] {\n    max-width: 200px;\n  }\n\n  .max-w-\\[min\\(800px\\,94vw\\)\\] {\n    max-width: min(800px, 94vw);\n  }\n\n  .max-w-full {\n    max-width: 100%;\n  }\n\n  .flex-1 {\n    flex: 1;\n  }\n\n  .flex-shrink {\n    flex-shrink: 1;\n  }\n\n  .flex-shrink-0, .shrink-0 {\n    flex-shrink: 0;\n  }\n\n  .border-collapse {\n    border-collapse: collapse;\n  }\n\n  .-translate-x-1 {\n    --tw-translate-x: calc(var(--spacing) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .-translate-x-1\\/2 {\n    --tw-translate-x: calc(calc(1 / 2 * 100%) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .translate-x-0 {\n    --tw-translate-x: calc(var(--spacing) * 0);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .translate-x-2 {\n    --tw-translate-x: calc(var(--spacing) * 2);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .translate-x-5 {\n    --tw-translate-x: calc(var(--spacing) * 5);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .-translate-y-1 {\n    --tw-translate-y: calc(var(--spacing) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .-translate-y-1\\/2 {\n    --tw-translate-y: calc(calc(1 / 2 * 100%) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .-translate-y-2 {\n    --tw-translate-y: calc(var(--spacing) * -2);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .translate-y-4 {\n    --tw-translate-y: calc(var(--spacing) * 4);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .scale-110 {\n    --tw-scale-x: 110%;\n    --tw-scale-y: 110%;\n    --tw-scale-z: 110%;\n    scale: var(--tw-scale-x) var(--tw-scale-y);\n  }\n\n  .rotate-90 {\n    rotate: 90deg;\n  }\n\n  .transform {\n    transform: var(--tw-rotate-x,  ) var(--tw-rotate-y,  ) var(--tw-rotate-z,  ) var(--tw-skew-x,  ) var(--tw-skew-y,  );\n  }\n\n  .animate-bounce {\n    animation: var(--animate-bounce);\n  }\n\n  .animate-pulse {\n    animation: var(--animate-pulse);\n  }\n\n  .cursor-crosshair {\n    cursor: crosshair;\n  }\n\n  .cursor-grab {\n    cursor: grab;\n  }\n\n  .cursor-nwse-resize {\n    cursor: nwse-resize;\n  }\n\n  .cursor-pointer {\n    cursor: pointer;\n  }\n\n  .cursor-text {\n    cursor: text;\n  }\n\n  .resize {\n    resize: both;\n  }\n\n  .resize-none {\n    resize: none;\n  }\n\n  .appearance-none {\n    appearance: none;\n  }\n\n  .grid-cols-1 {\n    grid-template-columns: repeat(1, minmax(0, 1fr));\n  }\n\n  .grid-cols-4 {\n    grid-template-columns: repeat(4, minmax(0, 1fr));\n  }\n\n  .flex-col {\n    flex-direction: column;\n  }\n\n  .flex-wrap {\n    flex-wrap: wrap;\n  }\n\n  .items-center {\n    align-items: center;\n  }\n\n  .items-start {\n    align-items: flex-start;\n  }\n\n  .justify-between {\n    justify-content: space-between;\n  }\n\n  .justify-center {\n    justify-content: center;\n  }\n\n  .gap-0 {\n    gap: calc(var(--spacing) * 0);\n  }\n\n  .gap-0\\.5 {\n    gap: calc(var(--spacing) * .5);\n  }\n\n  .gap-1 {\n    gap: calc(var(--spacing) * 1);\n  }\n\n  .gap-1\\.5 {\n    gap: calc(var(--spacing) * 1.5);\n  }\n\n  .gap-2 {\n    gap: calc(var(--spacing) * 2);\n  }\n\n  .gap-3 {\n    gap: calc(var(--spacing) * 3);\n  }\n\n  .gap-4 {\n    gap: calc(var(--spacing) * 4);\n  }\n\n  .gap-5 {\n    gap: calc(var(--spacing) * 5);\n  }\n\n  .gap-6 {\n    gap: calc(var(--spacing) * 6);\n  }\n\n  .gap-10 {\n    gap: calc(var(--spacing) * 10);\n  }\n\n  :where(.space-y-1 > :not(:last-child)) {\n    --tw-space-y-reverse: 0;\n    margin-block-start: calc(calc(var(--spacing) * 1) * var(--tw-space-y-reverse));\n    margin-block-end: calc(calc(var(--spacing) * 1) * calc(1 - var(--tw-space-y-reverse)));\n  }\n\n  :where(.space-y-2 > :not(:last-child)) {\n    --tw-space-y-reverse: 0;\n    margin-block-start: calc(calc(var(--spacing) * 2) * var(--tw-space-y-reverse));\n    margin-block-end: calc(calc(var(--spacing) * 2) * calc(1 - var(--tw-space-y-reverse)));\n  }\n\n  :where(.space-y-6 > :not(:last-child)) {\n    --tw-space-y-reverse: 0;\n    margin-block-start: calc(calc(var(--spacing) * 6) * var(--tw-space-y-reverse));\n    margin-block-end: calc(calc(var(--spacing) * 6) * calc(1 - var(--tw-space-y-reverse)));\n  }\n\n  :where(.space-y-8 > :not(:last-child)) {\n    --tw-space-y-reverse: 0;\n    margin-block-start: calc(calc(var(--spacing) * 8) * var(--tw-space-y-reverse));\n    margin-block-end: calc(calc(var(--spacing) * 8) * calc(1 - var(--tw-space-y-reverse)));\n  }\n\n  :where(.divide-y > :not(:last-child)) {\n    --tw-divide-y-reverse: 0;\n    border-bottom-style: var(--tw-border-style);\n    border-top-style: var(--tw-border-style);\n    border-top-width: calc(1px * var(--tw-divide-y-reverse));\n    border-bottom-width: calc(1px * calc(1 - var(--tw-divide-y-reverse)));\n  }\n\n  :where(.divide-slate-50 > :not(:last-child)) {\n    border-color: var(--color-slate-50);\n  }\n\n  .truncate {\n    text-overflow: ellipsis;\n    white-space: nowrap;\n    overflow: hidden;\n  }\n\n  .overflow-hidden {\n    overflow: hidden;\n  }\n\n  .overflow-visible {\n    overflow: visible;\n  }\n\n  .overflow-y-auto {\n    overflow-y: auto;\n  }\n\n  .rounded {\n    border-radius: .25rem;\n  }\n\n  .rounded-2xl {\n    border-radius: var(--radius-2xl);\n  }\n\n  .rounded-3xl {\n    border-radius: var(--radius-3xl);\n  }\n\n  .rounded-full {\n    border-radius: 3.40282e38px;\n  }\n\n  .rounded-lg {\n    border-radius: var(--radius-lg);\n  }\n\n  .rounded-md {\n    border-radius: var(--radius-md);\n  }\n\n  .rounded-xl {\n    border-radius: var(--radius-xl);\n  }\n\n  .border {\n    border-style: var(--tw-border-style);\n    border-width: 1px;\n  }\n\n  .border-2 {\n    border-style: var(--tw-border-style);\n    border-width: 2px;\n  }\n\n  .border-4 {\n    border-style: var(--tw-border-style);\n    border-width: 4px;\n  }\n\n  .border-y {\n    border-block-style: var(--tw-border-style);\n    border-block-width: 1px;\n  }\n\n  .border-t {\n    border-top-style: var(--tw-border-style);\n    border-top-width: 1px;\n  }\n\n  .border-b {\n    border-bottom-style: var(--tw-border-style);\n    border-bottom-width: 1px;\n  }\n\n  .border-l-4 {\n    border-left-style: var(--tw-border-style);\n    border-left-width: 4px;\n  }\n\n  .border-dashed {\n    --tw-border-style: dashed;\n    border-style: dashed;\n  }\n\n  .border-none {\n    --tw-border-style: none;\n    border-style: none;\n  }\n\n  .border-black {\n    border-color: var(--color-black);\n  }\n\n  .border-black\\/5 {\n    border-color: #0000000d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-black\\/5 {\n      border-color: color-mix(in oklab, var(--color-black) 5%, transparent);\n    }\n  }\n\n  .border-black\\/10 {\n    border-color: #0000001a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-black\\/10 {\n      border-color: color-mix(in oklab, var(--color-black) 10%, transparent);\n    }\n  }\n\n  .border-brand-primary {\n    border-color: var(--color-brand-primary);\n  }\n\n  .border-brand-primary\\/20 {\n    border-color: #ffd54f33;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-brand-primary\\/20 {\n      border-color: color-mix(in oklab, var(--color-brand-primary) 20%, transparent);\n    }\n  }\n\n  .border-brand-primary\\/50 {\n    border-color: #ffd54f80;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-brand-primary\\/50 {\n      border-color: color-mix(in oklab, var(--color-brand-primary) 50%, transparent);\n    }\n  }\n\n  .border-gray-100 {\n    border-color: var(--color-gray-100);\n  }\n\n  .border-gray-200 {\n    border-color: var(--color-gray-200);\n  }\n\n  .border-red-100 {\n    border-color: var(--color-red-100);\n  }\n\n  .border-slate-50 {\n    border-color: var(--color-slate-50);\n  }\n\n  .border-slate-100 {\n    border-color: var(--color-slate-100);\n  }\n\n  .border-slate-200 {\n    border-color: var(--color-slate-200);\n  }\n\n  .border-white {\n    border-color: var(--color-white);\n  }\n\n  .border-white\\/5 {\n    border-color: #ffffff0d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-white\\/5 {\n      border-color: color-mix(in oklab, var(--color-white) 5%, transparent);\n    }\n  }\n\n  .border-white\\/10 {\n    border-color: #ffffff1a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-white\\/10 {\n      border-color: color-mix(in oklab, var(--color-white) 10%, transparent);\n    }\n  }\n\n  .border-white\\/20 {\n    border-color: #fff3;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-white\\/20 {\n      border-color: color-mix(in oklab, var(--color-white) 20%, transparent);\n    }\n  }\n\n  .bg-\\[\\#f8fafc\\] {\n    background-color: #f8fafc;\n  }\n\n  .bg-amber-50 {\n    background-color: var(--color-amber-50);\n  }\n\n  .bg-amber-100 {\n    background-color: var(--color-amber-100);\n  }\n\n  .bg-black {\n    background-color: var(--color-black);\n  }\n\n  .bg-black\\/5 {\n    background-color: #0000000d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-black\\/5 {\n      background-color: color-mix(in oklab, var(--color-black) 5%, transparent);\n    }\n  }\n\n  .bg-black\\/10 {\n    background-color: #0000001a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-black\\/10 {\n      background-color: color-mix(in oklab, var(--color-black) 10%, transparent);\n    }\n  }\n\n  .bg-black\\/80 {\n    background-color: #000c;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-black\\/80 {\n      background-color: color-mix(in oklab, var(--color-black) 80%, transparent);\n    }\n  }\n\n  .bg-blue-50 {\n    background-color: var(--color-blue-50);\n  }\n\n  .bg-blue-100 {\n    background-color: var(--color-blue-100);\n  }\n\n  .bg-blue-500 {\n    background-color: var(--color-blue-500);\n  }\n\n  .bg-blue-500\\/10 {\n    background-color: #3080ff1a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-blue-500\\/10 {\n      background-color: color-mix(in oklab, var(--color-blue-500) 10%, transparent);\n    }\n  }\n\n  .bg-brand-primary {\n    background-color: var(--color-brand-primary);\n  }\n\n  .bg-brand-primary\\/5 {\n    background-color: #ffd54f0d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-brand-primary\\/5 {\n      background-color: color-mix(in oklab, var(--color-brand-primary) 5%, transparent);\n    }\n  }\n\n  .bg-brand-primary\\/10 {\n    background-color: #ffd54f1a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-brand-primary\\/10 {\n      background-color: color-mix(in oklab, var(--color-brand-primary) 10%, transparent);\n    }\n  }\n\n  .bg-emerald-50 {\n    background-color: var(--color-emerald-50);\n  }\n\n  .bg-emerald-100 {\n    background-color: var(--color-emerald-100);\n  }\n\n  .bg-gray-50 {\n    background-color: var(--color-gray-50);\n  }\n\n  .bg-gray-100 {\n    background-color: var(--color-gray-100);\n  }\n\n  .bg-gray-200 {\n    background-color: var(--color-gray-200);\n  }\n\n  .bg-gray-300 {\n    background-color: var(--color-gray-300);\n  }\n\n  .bg-gray-800 {\n    background-color: var(--color-gray-800);\n  }\n\n  .bg-gray-900 {\n    background-color: var(--color-gray-900);\n  }\n\n  .bg-green-500 {\n    background-color: var(--color-green-500);\n  }\n\n  .bg-green-500\\/10 {\n    background-color: #00c7581a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-green-500\\/10 {\n      background-color: color-mix(in oklab, var(--color-green-500) 10%, transparent);\n    }\n  }\n\n  .bg-indigo-50 {\n    background-color: var(--color-indigo-50);\n  }\n\n  .bg-note-blue {\n    background-color: var(--color-note-blue);\n  }\n\n  .bg-note-green {\n    background-color: var(--color-note-green);\n  }\n\n  .bg-note-lavender {\n    background-color: var(--color-note-lavender);\n  }\n\n  .bg-note-pink {\n    background-color: var(--color-note-pink);\n  }\n\n  .bg-note-yellow {\n    background-color: var(--color-note-yellow);\n  }\n\n  .bg-red-50 {\n    background-color: var(--color-red-50);\n  }\n\n  .bg-red-500 {\n    background-color: var(--color-red-500);\n  }\n\n  .bg-slate-50 {\n    background-color: var(--color-slate-50);\n  }\n\n  .bg-slate-50\\/30 {\n    background-color: #f8fafc4d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-slate-50\\/30 {\n      background-color: color-mix(in oklab, var(--color-slate-50) 30%, transparent);\n    }\n  }\n\n  .bg-slate-50\\/50 {\n    background-color: #f8fafc80;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-slate-50\\/50 {\n      background-color: color-mix(in oklab, var(--color-slate-50) 50%, transparent);\n    }\n  }\n\n  .bg-transparent {\n    background-color: #0000;\n  }\n\n  .bg-white {\n    background-color: var(--color-white);\n  }\n\n  .bg-white\\/5 {\n    background-color: #ffffff0d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-white\\/5 {\n      background-color: color-mix(in oklab, var(--color-white) 5%, transparent);\n    }\n  }\n\n  .bg-white\\/10 {\n    background-color: #ffffff1a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-white\\/10 {\n      background-color: color-mix(in oklab, var(--color-white) 10%, transparent);\n    }\n  }\n\n  .fill-current {\n    fill: currentColor;\n  }\n\n  .p-0 {\n    padding: calc(var(--spacing) * 0);\n  }\n\n  .p-1 {\n    padding: calc(var(--spacing) * 1);\n  }\n\n  .p-2 {\n    padding: calc(var(--spacing) * 2);\n  }\n\n  .p-3 {\n    padding: calc(var(--spacing) * 3);\n  }\n\n  .p-4 {\n    padding: calc(var(--spacing) * 4);\n  }\n\n  .p-5 {\n    padding: calc(var(--spacing) * 5);\n  }\n\n  .p-6 {\n    padding: calc(var(--spacing) * 6);\n  }\n\n  .p-10 {\n    padding: calc(var(--spacing) * 10);\n  }\n\n  .px-1 {\n    padding-inline: calc(var(--spacing) * 1);\n  }\n\n  .px-1\\.5 {\n    padding-inline: calc(var(--spacing) * 1.5);\n  }\n\n  .px-2 {\n    padding-inline: calc(var(--spacing) * 2);\n  }\n\n  .px-2\\.5 {\n    padding-inline: calc(var(--spacing) * 2.5);\n  }\n\n  .px-3 {\n    padding-inline: calc(var(--spacing) * 3);\n  }\n\n  .px-4 {\n    padding-inline: calc(var(--spacing) * 4);\n  }\n\n  .px-5 {\n    padding-inline: calc(var(--spacing) * 5);\n  }\n\n  .px-6 {\n    padding-inline: calc(var(--spacing) * 6);\n  }\n\n  .px-8 {\n    padding-inline: calc(var(--spacing) * 8);\n  }\n\n  .py-0 {\n    padding-block: calc(var(--spacing) * 0);\n  }\n\n  .py-0\\.5 {\n    padding-block: calc(var(--spacing) * .5);\n  }\n\n  .py-1 {\n    padding-block: calc(var(--spacing) * 1);\n  }\n\n  .py-1\\.5 {\n    padding-block: calc(var(--spacing) * 1.5);\n  }\n\n  .py-2 {\n    padding-block: calc(var(--spacing) * 2);\n  }\n\n  .py-2\\.5 {\n    padding-block: calc(var(--spacing) * 2.5);\n  }\n\n  .py-3 {\n    padding-block: calc(var(--spacing) * 3);\n  }\n\n  .py-3\\.5 {\n    padding-block: calc(var(--spacing) * 3.5);\n  }\n\n  .py-4 {\n    padding-block: calc(var(--spacing) * 4);\n  }\n\n  .py-20 {\n    padding-block: calc(var(--spacing) * 20);\n  }\n\n  .pr-2 {\n    padding-right: calc(var(--spacing) * 2);\n  }\n\n  .pr-3 {\n    padding-right: calc(var(--spacing) * 3);\n  }\n\n  .pr-4 {\n    padding-right: calc(var(--spacing) * 4);\n  }\n\n  .pb-5 {\n    padding-bottom: calc(var(--spacing) * 5);\n  }\n\n  .pl-8 {\n    padding-left: calc(var(--spacing) * 8);\n  }\n\n  .pl-10 {\n    padding-left: calc(var(--spacing) * 10);\n  }\n\n  .text-center {\n    text-align: center;\n  }\n\n  .text-left {\n    text-align: left;\n  }\n\n  .font-sans {\n    font-family: var(--font-sans);\n  }\n\n  .font-serif {\n    font-family: var(--font-serif);\n  }\n\n  .text-2xl {\n    font-size: var(--text-2xl);\n    line-height: var(--tw-leading, var(--text-2xl--line-height));\n  }\n\n  .text-3xl {\n    font-size: var(--text-3xl);\n    line-height: var(--tw-leading, var(--text-3xl--line-height));\n  }\n\n  .text-lg {\n    font-size: var(--text-lg);\n    line-height: var(--tw-leading, var(--text-lg--line-height));\n  }\n\n  .text-sm {\n    font-size: var(--text-sm);\n    line-height: var(--tw-leading, var(--text-sm--line-height));\n  }\n\n  .text-xl {\n    font-size: var(--text-xl);\n    line-height: var(--tw-leading, var(--text-xl--line-height));\n  }\n\n  .text-xs {\n    font-size: var(--text-xs);\n    line-height: var(--tw-leading, var(--text-xs--line-height));\n  }\n\n  .text-\\[8px\\] {\n    font-size: 8px;\n  }\n\n  .text-\\[9px\\] {\n    font-size: 9px;\n  }\n\n  .text-\\[10px\\] {\n    font-size: 10px;\n  }\n\n  .text-\\[11px\\] {\n    font-size: 11px;\n  }\n\n  .leading-none {\n    --tw-leading: 1;\n    line-height: 1;\n  }\n\n  .leading-relaxed {\n    --tw-leading: var(--leading-relaxed);\n    line-height: var(--leading-relaxed);\n  }\n\n  .font-black {\n    --tw-font-weight: var(--font-weight-black);\n    font-weight: var(--font-weight-black);\n  }\n\n  .font-bold {\n    --tw-font-weight: var(--font-weight-bold);\n    font-weight: var(--font-weight-bold);\n  }\n\n  .font-medium {\n    --tw-font-weight: var(--font-weight-medium);\n    font-weight: var(--font-weight-medium);\n  }\n\n  .font-semibold {\n    --tw-font-weight: var(--font-weight-semibold);\n    font-weight: var(--font-weight-semibold);\n  }\n\n  .tracking-tight {\n    --tw-tracking: var(--tracking-tight);\n    letter-spacing: var(--tracking-tight);\n  }\n\n  .tracking-tighter {\n    --tw-tracking: var(--tracking-tighter);\n    letter-spacing: var(--tracking-tighter);\n  }\n\n  .tracking-wide {\n    --tw-tracking: var(--tracking-wide);\n    letter-spacing: var(--tracking-wide);\n  }\n\n  .tracking-wider {\n    --tw-tracking: var(--tracking-wider);\n    letter-spacing: var(--tracking-wider);\n  }\n\n  .tracking-widest {\n    --tw-tracking: var(--tracking-widest);\n    letter-spacing: var(--tracking-widest);\n  }\n\n  .whitespace-nowrap {\n    white-space: nowrap;\n  }\n\n  .whitespace-pre-wrap {\n    white-space: pre-wrap;\n  }\n\n  .text-amber-500 {\n    color: var(--color-amber-500);\n  }\n\n  .text-amber-600 {\n    color: var(--color-amber-600);\n  }\n\n  .text-black {\n    color: var(--color-black);\n  }\n\n  .text-black\\/30 {\n    color: #0000004d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .text-black\\/30 {\n      color: color-mix(in oklab, var(--color-black) 30%, transparent);\n    }\n  }\n\n  .text-black\\/40 {\n    color: #0006;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .text-black\\/40 {\n      color: color-mix(in oklab, var(--color-black) 40%, transparent);\n    }\n  }\n\n  .text-black\\/50 {\n    color: #00000080;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .text-black\\/50 {\n      color: color-mix(in oklab, var(--color-black) 50%, transparent);\n    }\n  }\n\n  .text-black\\/60 {\n    color: #0009;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .text-black\\/60 {\n      color: color-mix(in oklab, var(--color-black) 60%, transparent);\n    }\n  }\n\n  .text-blue-500 {\n    color: var(--color-blue-500);\n  }\n\n  .text-blue-600 {\n    color: var(--color-blue-600);\n  }\n\n  .text-brand-primary {\n    color: var(--color-brand-primary);\n  }\n\n  .text-emerald-500 {\n    color: var(--color-emerald-500);\n  }\n\n  .text-emerald-600 {\n    color: var(--color-emerald-600);\n  }\n\n  .text-gray-300 {\n    color: var(--color-gray-300);\n  }\n\n  .text-gray-400 {\n    color: var(--color-gray-400);\n  }\n\n  .text-gray-500 {\n    color: var(--color-gray-500);\n  }\n\n  .text-gray-700 {\n    color: var(--color-gray-700);\n  }\n\n  .text-gray-800 {\n    color: var(--color-gray-800);\n  }\n\n  .text-gray-900 {\n    color: var(--color-gray-900);\n  }\n\n  .text-green-600 {\n    color: var(--color-green-600);\n  }\n\n  .text-indigo-500 {\n    color: var(--color-indigo-500);\n  }\n\n  .text-red-400 {\n    color: var(--color-red-400);\n  }\n\n  .text-red-500 {\n    color: var(--color-red-500);\n  }\n\n  .text-red-600 {\n    color: var(--color-red-600);\n  }\n\n  .text-slate-300 {\n    color: var(--color-slate-300);\n  }\n\n  .text-slate-400 {\n    color: var(--color-slate-400);\n  }\n\n  .text-slate-500 {\n    color: var(--color-slate-500);\n  }\n\n  .text-slate-600 {\n    color: var(--color-slate-600);\n  }\n\n  .text-slate-700 {\n    color: var(--color-slate-700);\n  }\n\n  .text-slate-800 {\n    color: var(--color-slate-800);\n  }\n\n  .text-slate-900 {\n    color: var(--color-slate-900);\n  }\n\n  .text-white {\n    color: var(--color-white);\n  }\n\n  .uppercase {\n    text-transform: uppercase;\n  }\n\n  .italic {\n    font-style: italic;\n  }\n\n  .underline {\n    text-decoration-line: underline;\n  }\n\n  .accent-brand-primary {\n    accent-color: var(--color-brand-primary);\n  }\n\n  .opacity-0 {\n    opacity: 0;\n  }\n\n  .opacity-50 {\n    opacity: .5;\n  }\n\n  .opacity-80 {\n    opacity: .8;\n  }\n\n  .opacity-100 {\n    opacity: 1;\n  }\n\n  .mix-blend-difference {\n    mix-blend-mode: difference;\n  }\n\n  .shadow {\n    --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, #0000001a), 0 1px 2px -1px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-2xl {\n    --tw-shadow: 0 25px 50px -12px var(--tw-shadow-color, #00000040);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-\\[0_0_10px_rgba\\(255\\,213\\,79\\,0\\.2\\)\\] {\n    --tw-shadow: 0 0 10px var(--tw-shadow-color, #ffd54f33);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-\\[0_0_30px_rgba\\(255\\,213\\,79\\,0\\.5\\)\\] {\n    --tw-shadow: 0 0 30px var(--tw-shadow-color, #ffd54f80);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-\\[0_20px_60px_rgba\\(0\\,0\\,0\\,0\\.6\\)\\,0_0_25px_rgba\\(255\\,213\\,79\\,0\\.2\\)\\] {\n    --tw-shadow: 0 20px 60px var(--tw-shadow-color, #0009), 0 0 25px var(--tw-shadow-color, #ffd54f33);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-lg {\n    --tw-shadow: 0 10px 15px -3px var(--tw-shadow-color, #0000001a), 0 4px 6px -4px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-md {\n    --tw-shadow: 0 4px 6px -1px var(--tw-shadow-color, #0000001a), 0 2px 4px -2px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-sm {\n    --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, #0000001a), 0 1px 2px -1px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-xl {\n    --tw-shadow: 0 20px 25px -5px var(--tw-shadow-color, #0000001a), 0 8px 10px -6px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-1 {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-2 {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-4 {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(4px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-brand-primary {\n    --tw-ring-color: var(--color-brand-primary);\n  }\n\n  .outline {\n    outline-style: var(--tw-outline-style);\n    outline-width: 1px;\n  }\n\n  .blur {\n    --tw-blur: blur(8px);\n    filter: var(--tw-blur,  ) var(--tw-brightness,  ) var(--tw-contrast,  ) var(--tw-grayscale,  ) var(--tw-hue-rotate,  ) var(--tw-invert,  ) var(--tw-saturate,  ) var(--tw-sepia,  ) var(--tw-drop-shadow,  );\n  }\n\n  .filter {\n    filter: var(--tw-blur,  ) var(--tw-brightness,  ) var(--tw-contrast,  ) var(--tw-grayscale,  ) var(--tw-hue-rotate,  ) var(--tw-invert,  ) var(--tw-saturate,  ) var(--tw-sepia,  ) var(--tw-drop-shadow,  );\n  }\n\n  .backdrop-blur-md {\n    --tw-backdrop-blur: blur(var(--blur-md));\n    -webkit-backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n    backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n  }\n\n  .backdrop-blur-xl {\n    --tw-backdrop-blur: blur(var(--blur-xl));\n    -webkit-backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n    backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n  }\n\n  .backdrop-filter {\n    -webkit-backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n    backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n  }\n\n  .transition {\n    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-all {\n    transition-property: all;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-colors {\n    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-opacity {\n    transition-property: opacity;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-transform {\n    transition-property: transform, translate, scale, rotate;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .duration-200 {\n    --tw-duration: .2s;\n    transition-duration: .2s;\n  }\n\n  .duration-300 {\n    --tw-duration: .3s;\n    transition-duration: .3s;\n  }\n\n  .duration-500 {\n    --tw-duration: .5s;\n    transition-duration: .5s;\n  }\n\n  .ease-in-out {\n    --tw-ease: var(--ease-in-out);\n    transition-timing-function: var(--ease-in-out);\n  }\n\n  .outline-none {\n    --tw-outline-style: none;\n    outline-style: none;\n  }\n\n  .group-focus-within\\:text-brand-primary:is(:where(.group):focus-within *) {\n    color: var(--color-brand-primary);\n  }\n\n  @media (hover: hover) {\n    .group-hover\\:scale-125:is(:where(.group):hover *) {\n      --tw-scale-x: 125%;\n      --tw-scale-y: 125%;\n      --tw-scale-z: 125%;\n      scale: var(--tw-scale-x) var(--tw-scale-y);\n    }\n\n    .group-hover\\:text-brand-primary:is(:where(.group):hover *) {\n      color: var(--color-brand-primary);\n    }\n\n    .group-hover\\:opacity-100:is(:where(.group):hover *) {\n      opacity: 1;\n    }\n\n    .hover\\:scale-105:hover {\n      --tw-scale-x: 105%;\n      --tw-scale-y: 105%;\n      --tw-scale-z: 105%;\n      scale: var(--tw-scale-x) var(--tw-scale-y);\n    }\n\n    .hover\\:scale-110:hover {\n      --tw-scale-x: 110%;\n      --tw-scale-y: 110%;\n      --tw-scale-z: 110%;\n      scale: var(--tw-scale-x) var(--tw-scale-y);\n    }\n\n    .hover\\:scale-125:hover {\n      --tw-scale-x: 125%;\n      --tw-scale-y: 125%;\n      --tw-scale-z: 125%;\n      scale: var(--tw-scale-x) var(--tw-scale-y);\n    }\n\n    .hover\\:scale-\\[1\\.02\\]:hover {\n      scale: 1.02;\n    }\n\n    .hover\\:border-brand-primary:hover {\n      border-color: var(--color-brand-primary);\n    }\n\n    .hover\\:border-brand-primary\\/20:hover {\n      border-color: #ffd54f33;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:border-brand-primary\\/20:hover {\n        border-color: color-mix(in oklab, var(--color-brand-primary) 20%, transparent);\n      }\n    }\n\n    .hover\\:bg-black\\/5:hover {\n      background-color: #0000000d;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-black\\/5:hover {\n        background-color: color-mix(in oklab, var(--color-black) 5%, transparent);\n      }\n    }\n\n    .hover\\:bg-black\\/10:hover {\n      background-color: #0000001a;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-black\\/10:hover {\n        background-color: color-mix(in oklab, var(--color-black) 10%, transparent);\n      }\n    }\n\n    .hover\\:bg-brand-primary:hover {\n      background-color: var(--color-brand-primary);\n    }\n\n    .hover\\:bg-gray-100:hover {\n      background-color: var(--color-gray-100);\n    }\n\n    .hover\\:bg-gray-700:hover {\n      background-color: var(--color-gray-700);\n    }\n\n    .hover\\:bg-red-50:hover {\n      background-color: var(--color-red-50);\n    }\n\n    .hover\\:bg-red-100:hover {\n      background-color: var(--color-red-100);\n    }\n\n    .hover\\:bg-red-500\\/10:hover {\n      background-color: #fb2c361a;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-red-500\\/10:hover {\n        background-color: color-mix(in oklab, var(--color-red-500) 10%, transparent);\n      }\n    }\n\n    .hover\\:bg-slate-50:hover {\n      background-color: var(--color-slate-50);\n    }\n\n    .hover\\:bg-slate-100:hover {\n      background-color: var(--color-slate-100);\n    }\n\n    .hover\\:bg-white\\/5:hover {\n      background-color: #ffffff0d;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-white\\/5:hover {\n        background-color: color-mix(in oklab, var(--color-white) 5%, transparent);\n      }\n    }\n\n    .hover\\:bg-white\\/10:hover {\n      background-color: #ffffff1a;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-white\\/10:hover {\n        background-color: color-mix(in oklab, var(--color-white) 10%, transparent);\n      }\n    }\n\n    .hover\\:bg-white\\/20:hover {\n      background-color: #fff3;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-white\\/20:hover {\n        background-color: color-mix(in oklab, var(--color-white) 20%, transparent);\n      }\n    }\n\n    .hover\\:text-brand-accent:hover {\n      color: var(--color-brand-accent);\n    }\n\n    .hover\\:text-brand-primary:hover {\n      color: var(--color-brand-primary);\n    }\n\n    .hover\\:text-gray-300:hover {\n      color: var(--color-gray-300);\n    }\n\n    .hover\\:text-gray-600:hover {\n      color: var(--color-gray-600);\n    }\n\n    .hover\\:text-red-400:hover {\n      color: var(--color-red-400);\n    }\n\n    .hover\\:text-red-500:hover {\n      color: var(--color-red-500);\n    }\n\n    .hover\\:text-red-600:hover {\n      color: var(--color-red-600);\n    }\n\n    .hover\\:text-white:hover {\n      color: var(--color-white);\n    }\n\n    .hover\\:shadow-md:hover {\n      --tw-shadow: 0 4px 6px -1px var(--tw-shadow-color, #0000001a), 0 2px 4px -2px var(--tw-shadow-color, #0000001a);\n      box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n    }\n  }\n\n  .focus\\:border-brand-primary:focus {\n    border-color: var(--color-brand-primary);\n  }\n\n  .focus\\:ring-1:focus {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .focus\\:ring-2:focus {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .focus\\:ring-brand-primary:focus {\n    --tw-ring-color: var(--color-brand-primary);\n  }\n\n  .focus\\:ring-brand-primary\\/20:focus {\n    --tw-ring-color: #ffd54f33;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .focus\\:ring-brand-primary\\/20:focus {\n      --tw-ring-color: color-mix(in oklab, var(--color-brand-primary) 20%, transparent);\n    }\n  }\n\n  .active\\:scale-95:active {\n    --tw-scale-x: 95%;\n    --tw-scale-y: 95%;\n    --tw-scale-z: 95%;\n    scale: var(--tw-scale-x) var(--tw-scale-y);\n  }\n\n  .active\\:cursor-grabbing:active {\n    cursor: grabbing;\n  }\n\n  @media (min-width: 40rem) {\n    .sm\\:grid-cols-2 {\n      grid-template-columns: repeat(2, minmax(0, 1fr));\n    }\n  }\n\n  @media (min-width: 48rem) {\n    .md\\:w-80 {\n      width: calc(var(--spacing) * 80);\n    }\n\n    .md\\:grid-cols-2 {\n      grid-template-columns: repeat(2, minmax(0, 1fr));\n    }\n\n    .md\\:flex-row {\n      flex-direction: row;\n    }\n\n    .md\\:items-center {\n      align-items: center;\n    }\n  }\n\n  @media (min-width: 64rem) {\n    .lg\\:col-span-3 {\n      grid-column: span 3 / span 3;\n    }\n\n    .lg\\:col-span-9 {\n      grid-column: span 9 / span 9;\n    }\n\n    .lg\\:grid-cols-4 {\n      grid-template-columns: repeat(4, minmax(0, 1fr));\n    }\n\n    .lg\\:grid-cols-12 {\n      grid-template-columns: repeat(12, minmax(0, 1fr));\n    }\n\n    .lg\\:p-10 {\n      padding: calc(var(--spacing) * 10);\n    }\n\n    .lg\\:text-base {\n      font-size: var(--text-base);\n      line-height: var(--tw-leading, var(--text-base--line-height));\n    }\n  }\n}\n\n:root {\n  font-family: Pretendard Variable, system-ui, -apple-system, sans-serif;\n}\n\nbody {\n  margin: 0;\n  overflow-x: hidden;\n}\n\n@property --tw-translate-x {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-translate-y {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-translate-z {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-scale-x {\n  syntax: "*";\n  inherits: false;\n  initial-value: 1;\n}\n\n@property --tw-scale-y {\n  syntax: "*";\n  inherits: false;\n  initial-value: 1;\n}\n\n@property --tw-scale-z {\n  syntax: "*";\n  inherits: false;\n  initial-value: 1;\n}\n\n@property --tw-rotate-x {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-rotate-y {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-rotate-z {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-skew-x {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-skew-y {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-space-y-reverse {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-divide-y-reverse {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-border-style {\n  syntax: "*";\n  inherits: false;\n  initial-value: solid;\n}\n\n@property --tw-leading {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-font-weight {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-tracking {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-shadow-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-shadow-alpha {\n  syntax: "<percentage>";\n  inherits: false;\n  initial-value: 100%;\n}\n\n@property --tw-inset-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-inset-shadow-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-inset-shadow-alpha {\n  syntax: "<percentage>";\n  inherits: false;\n  initial-value: 100%;\n}\n\n@property --tw-ring-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-ring-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-inset-ring-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-inset-ring-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-ring-inset {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-ring-offset-width {\n  syntax: "<length>";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-ring-offset-color {\n  syntax: "*";\n  inherits: false;\n  initial-value: #fff;\n}\n\n@property --tw-ring-offset-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-outline-style {\n  syntax: "*";\n  inherits: false;\n  initial-value: solid;\n}\n\n@property --tw-blur {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-brightness {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-contrast {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-grayscale {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-hue-rotate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-invert {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-opacity {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-saturate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-sepia {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-drop-shadow {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-drop-shadow-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-drop-shadow-alpha {\n  syntax: "<percentage>";\n  inherits: false;\n  initial-value: 100%;\n}\n\n@property --tw-drop-shadow-size {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-blur {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-brightness {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-contrast {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-grayscale {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-hue-rotate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-invert {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-opacity {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-saturate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-sepia {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-duration {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-ease {\n  syntax: "*";\n  inherits: false\n}\n\n@keyframes pulse {\n  50% {\n    opacity: .5;\n  }\n}\n\n@keyframes bounce {\n  0%, 100% {\n    animation-timing-function: cubic-bezier(.8, 0, 1, 1);\n    transform: translateY(-25%);\n  }\n\n  50% {\n    animation-timing-function: cubic-bezier(0, 0, .2, 1);\n    transform: none;\n  }\n}\n';
+  const tailwindStyles = '/*! tailwindcss v4.2.1 | MIT License | https://tailwindcss.com */\n@layer properties {\n  @supports (((-webkit-hyphens: none)) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color: rgb(from red r g b)))) {\n    *, :before, :after, ::backdrop {\n      --tw-translate-x: 0;\n      --tw-translate-y: 0;\n      --tw-translate-z: 0;\n      --tw-scale-x: 1;\n      --tw-scale-y: 1;\n      --tw-scale-z: 1;\n      --tw-rotate-x: initial;\n      --tw-rotate-y: initial;\n      --tw-rotate-z: initial;\n      --tw-skew-x: initial;\n      --tw-skew-y: initial;\n      --tw-space-y-reverse: 0;\n      --tw-divide-y-reverse: 0;\n      --tw-border-style: solid;\n      --tw-leading: initial;\n      --tw-font-weight: initial;\n      --tw-tracking: initial;\n      --tw-shadow: 0 0 #0000;\n      --tw-shadow-color: initial;\n      --tw-shadow-alpha: 100%;\n      --tw-inset-shadow: 0 0 #0000;\n      --tw-inset-shadow-color: initial;\n      --tw-inset-shadow-alpha: 100%;\n      --tw-ring-color: initial;\n      --tw-ring-shadow: 0 0 #0000;\n      --tw-inset-ring-color: initial;\n      --tw-inset-ring-shadow: 0 0 #0000;\n      --tw-ring-inset: initial;\n      --tw-ring-offset-width: 0px;\n      --tw-ring-offset-color: #fff;\n      --tw-ring-offset-shadow: 0 0 #0000;\n      --tw-outline-style: solid;\n      --tw-blur: initial;\n      --tw-brightness: initial;\n      --tw-contrast: initial;\n      --tw-grayscale: initial;\n      --tw-hue-rotate: initial;\n      --tw-invert: initial;\n      --tw-opacity: initial;\n      --tw-saturate: initial;\n      --tw-sepia: initial;\n      --tw-drop-shadow: initial;\n      --tw-drop-shadow-color: initial;\n      --tw-drop-shadow-alpha: 100%;\n      --tw-drop-shadow-size: initial;\n      --tw-backdrop-blur: initial;\n      --tw-backdrop-brightness: initial;\n      --tw-backdrop-contrast: initial;\n      --tw-backdrop-grayscale: initial;\n      --tw-backdrop-hue-rotate: initial;\n      --tw-backdrop-invert: initial;\n      --tw-backdrop-opacity: initial;\n      --tw-backdrop-saturate: initial;\n      --tw-backdrop-sepia: initial;\n      --tw-duration: initial;\n      --tw-ease: initial;\n    }\n  }\n}\n\n@layer theme {\n  :root, :host {\n    --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",\n      "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";\n    --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;\n    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",\n      "Courier New", monospace;\n    --color-red-50: oklch(97.1% .013 17.38);\n    --color-red-100: oklch(93.6% .032 17.717);\n    --color-red-400: oklch(70.4% .191 22.216);\n    --color-red-500: oklch(63.7% .237 25.331);\n    --color-red-600: oklch(57.7% .245 27.325);\n    --color-amber-50: oklch(98.7% .022 95.277);\n    --color-amber-100: oklch(96.2% .059 95.617);\n    --color-amber-500: oklch(76.9% .188 70.08);\n    --color-amber-600: oklch(66.6% .179 58.318);\n    --color-green-500: oklch(72.3% .219 149.579);\n    --color-green-600: oklch(62.7% .194 149.214);\n    --color-emerald-50: oklch(97.9% .021 166.113);\n    --color-emerald-100: oklch(95% .052 163.051);\n    --color-emerald-500: oklch(69.6% .17 162.48);\n    --color-emerald-600: oklch(59.6% .145 163.225);\n    --color-blue-50: oklch(97% .014 254.604);\n    --color-blue-100: oklch(93.2% .032 255.585);\n    --color-blue-500: oklch(62.3% .214 259.815);\n    --color-blue-600: oklch(54.6% .245 262.881);\n    --color-indigo-50: oklch(96.2% .018 272.314);\n    --color-indigo-500: oklch(58.5% .233 277.117);\n    --color-slate-50: oklch(98.4% .003 247.858);\n    --color-slate-100: oklch(96.8% .007 247.896);\n    --color-slate-200: oklch(92.9% .013 255.508);\n    --color-slate-300: oklch(86.9% .022 252.894);\n    --color-slate-400: oklch(70.4% .04 256.788);\n    --color-slate-500: oklch(55.4% .046 257.417);\n    --color-slate-600: oklch(44.6% .043 257.281);\n    --color-slate-700: oklch(37.2% .044 257.287);\n    --color-slate-800: oklch(27.9% .041 260.031);\n    --color-slate-900: oklch(20.8% .042 265.755);\n    --color-gray-50: oklch(98.5% .002 247.839);\n    --color-gray-100: oklch(96.7% .003 264.542);\n    --color-gray-200: oklch(92.8% .006 264.531);\n    --color-gray-300: oklch(87.2% .01 258.338);\n    --color-gray-400: oklch(70.7% .022 261.325);\n    --color-gray-500: oklch(55.1% .027 264.364);\n    --color-gray-600: oklch(44.6% .03 256.802);\n    --color-gray-700: oklch(37.3% .034 259.733);\n    --color-gray-800: oklch(27.8% .033 256.848);\n    --color-gray-900: oklch(21% .034 264.665);\n    --color-black: #000;\n    --color-white: #fff;\n    --spacing: .25rem;\n    --container-7xl: 80rem;\n    --text-xs: .75rem;\n    --text-xs--line-height: calc(1 / .75);\n    --text-sm: .875rem;\n    --text-sm--line-height: calc(1.25 / .875);\n    --text-base: 1rem;\n    --text-base--line-height: calc(1.5 / 1);\n    --text-lg: 1.125rem;\n    --text-lg--line-height: calc(1.75 / 1.125);\n    --text-xl: 1.25rem;\n    --text-xl--line-height: calc(1.75 / 1.25);\n    --text-2xl: 1.5rem;\n    --text-2xl--line-height: calc(2 / 1.5);\n    --text-3xl: 1.875rem;\n    --text-3xl--line-height: calc(2.25 / 1.875);\n    --font-weight-medium: 500;\n    --font-weight-semibold: 600;\n    --font-weight-bold: 700;\n    --font-weight-black: 900;\n    --tracking-tighter: -.05em;\n    --tracking-tight: -.025em;\n    --tracking-wide: .025em;\n    --tracking-wider: .05em;\n    --tracking-widest: .1em;\n    --leading-relaxed: 1.625;\n    --radius-md: .375rem;\n    --radius-lg: .5rem;\n    --radius-xl: .75rem;\n    --radius-2xl: 1rem;\n    --radius-3xl: 1.5rem;\n    --ease-out: cubic-bezier(0, 0, .2, 1);\n    --ease-in-out: cubic-bezier(.4, 0, .2, 1);\n    --animate-pulse: pulse 2s cubic-bezier(.4, 0, .6, 1) infinite;\n    --animate-bounce: bounce 1s infinite;\n    --blur-md: 12px;\n    --blur-xl: 24px;\n    --default-transition-duration: .15s;\n    --default-transition-timing-function: cubic-bezier(.4, 0, .2, 1);\n    --default-font-family: var(--font-sans);\n    --default-mono-font-family: var(--font-mono);\n    --color-brand-primary: #ffd54f;\n    --color-brand-accent: #ff6f61;\n    --color-note-yellow: #fff9c4;\n    --color-note-green: #b2dfdb;\n    --color-note-pink: #f8bbd0;\n    --color-note-lavender: #e1bee7;\n    --color-note-blue: #bbdefb;\n  }\n}\n\n@layer base {\n  *, :after, :before, ::backdrop {\n    box-sizing: border-box;\n    border: 0 solid;\n    margin: 0;\n    padding: 0;\n  }\n\n  ::file-selector-button {\n    box-sizing: border-box;\n    border: 0 solid;\n    margin: 0;\n    padding: 0;\n  }\n\n  html, :host {\n    -webkit-text-size-adjust: 100%;\n    tab-size: 4;\n    line-height: 1.5;\n    font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");\n    font-feature-settings: var(--default-font-feature-settings, normal);\n    font-variation-settings: var(--default-font-variation-settings, normal);\n    -webkit-tap-highlight-color: transparent;\n  }\n\n  hr {\n    height: 0;\n    color: inherit;\n    border-top-width: 1px;\n  }\n\n  abbr:where([title]) {\n    -webkit-text-decoration: underline dotted;\n    text-decoration: underline dotted;\n  }\n\n  h1, h2, h3, h4, h5, h6 {\n    font-size: inherit;\n    font-weight: inherit;\n  }\n\n  a {\n    color: inherit;\n    -webkit-text-decoration: inherit;\n    -webkit-text-decoration: inherit;\n    -webkit-text-decoration: inherit;\n    text-decoration: inherit;\n  }\n\n  b, strong {\n    font-weight: bolder;\n  }\n\n  code, kbd, samp, pre {\n    font-family: var(--default-mono-font-family, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);\n    font-feature-settings: var(--default-mono-font-feature-settings, normal);\n    font-variation-settings: var(--default-mono-font-variation-settings, normal);\n    font-size: 1em;\n  }\n\n  small {\n    font-size: 80%;\n  }\n\n  sub, sup {\n    vertical-align: baseline;\n    font-size: 75%;\n    line-height: 0;\n    position: relative;\n  }\n\n  sub {\n    bottom: -.25em;\n  }\n\n  sup {\n    top: -.5em;\n  }\n\n  table {\n    text-indent: 0;\n    border-color: inherit;\n    border-collapse: collapse;\n  }\n\n  :-moz-focusring {\n    outline: auto;\n  }\n\n  progress {\n    vertical-align: baseline;\n  }\n\n  summary {\n    display: list-item;\n  }\n\n  ol, ul, menu {\n    list-style: none;\n  }\n\n  img, svg, video, canvas, audio, iframe, embed, object {\n    vertical-align: middle;\n    display: block;\n  }\n\n  img, video {\n    max-width: 100%;\n    height: auto;\n  }\n\n  button, input, select, optgroup, textarea {\n    font: inherit;\n    font-feature-settings: inherit;\n    font-variation-settings: inherit;\n    letter-spacing: inherit;\n    color: inherit;\n    opacity: 1;\n    background-color: #0000;\n    border-radius: 0;\n  }\n\n  ::file-selector-button {\n    font: inherit;\n    font-feature-settings: inherit;\n    font-variation-settings: inherit;\n    letter-spacing: inherit;\n    color: inherit;\n    opacity: 1;\n    background-color: #0000;\n    border-radius: 0;\n  }\n\n  :where(select:is([multiple], [size])) optgroup {\n    font-weight: bolder;\n  }\n\n  :where(select:is([multiple], [size])) optgroup option {\n    padding-inline-start: 20px;\n  }\n\n  ::file-selector-button {\n    margin-inline-end: 4px;\n  }\n\n  ::placeholder {\n    opacity: 1;\n  }\n\n  @supports (not ((-webkit-appearance: -apple-pay-button))) or (contain-intrinsic-size: 1px) {\n    ::placeholder {\n      color: currentColor;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      ::placeholder {\n        color: color-mix(in oklab, currentcolor 50%, transparent);\n      }\n    }\n  }\n\n  textarea {\n    resize: vertical;\n  }\n\n  ::-webkit-search-decoration {\n    -webkit-appearance: none;\n  }\n\n  ::-webkit-date-and-time-value {\n    min-height: 1lh;\n    text-align: inherit;\n  }\n\n  ::-webkit-datetime-edit {\n    display: inline-flex;\n  }\n\n  ::-webkit-datetime-edit-fields-wrapper {\n    padding: 0;\n  }\n\n  ::-webkit-datetime-edit {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-year-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-month-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-day-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-hour-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-minute-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-second-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-millisecond-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-datetime-edit-meridiem-field {\n    padding-block: 0;\n  }\n\n  ::-webkit-calendar-picker-indicator {\n    line-height: 1;\n  }\n\n  :-moz-ui-invalid {\n    box-shadow: none;\n  }\n\n  button, input:where([type="button"], [type="reset"], [type="submit"]) {\n    appearance: button;\n  }\n\n  ::file-selector-button {\n    appearance: button;\n  }\n\n  ::-webkit-inner-spin-button {\n    height: auto;\n  }\n\n  ::-webkit-outer-spin-button {\n    height: auto;\n  }\n\n  [hidden]:where(:not([hidden="until-found"])) {\n    display: none !important;\n  }\n}\n\n@layer components;\n\n@layer utilities {\n  .pointer-events-auto {\n    pointer-events: auto;\n  }\n\n  .pointer-events-none {\n    pointer-events: none;\n  }\n\n  .visible {\n    visibility: visible;\n  }\n\n  .absolute {\n    position: absolute;\n  }\n\n  .fixed {\n    position: fixed;\n  }\n\n  .relative {\n    position: relative;\n  }\n\n  .sticky {\n    position: sticky;\n  }\n\n  .inset-0 {\n    inset: calc(var(--spacing) * 0);\n  }\n\n  .inset-x-0 {\n    inset-inline: calc(var(--spacing) * 0);\n  }\n\n  .start {\n    inset-inline-start: var(--spacing);\n  }\n\n  .end {\n    inset-inline-end: var(--spacing);\n  }\n\n  .-top-1 {\n    top: calc(var(--spacing) * -1);\n  }\n\n  .-top-4 {\n    top: calc(var(--spacing) * -4);\n  }\n\n  .top-0 {\n    top: calc(var(--spacing) * 0);\n  }\n\n  .top-1 {\n    top: calc(var(--spacing) * 1);\n  }\n\n  .top-1\\/2 {\n    top: 50%;\n  }\n\n  .top-10 {\n    top: calc(var(--spacing) * 10);\n  }\n\n  .-right-1 {\n    right: calc(var(--spacing) * -1);\n  }\n\n  .-right-4 {\n    right: calc(var(--spacing) * -4);\n  }\n\n  .right-0 {\n    right: calc(var(--spacing) * 0);\n  }\n\n  .bottom-10 {\n    bottom: calc(var(--spacing) * 10);\n  }\n\n  .bottom-full {\n    bottom: 100%;\n  }\n\n  .left-0 {\n    left: calc(var(--spacing) * 0);\n  }\n\n  .left-1 {\n    left: calc(var(--spacing) * 1);\n  }\n\n  .left-1\\/2 {\n    left: 50%;\n  }\n\n  .left-2 {\n    left: calc(var(--spacing) * 2);\n  }\n\n  .left-2\\.5 {\n    left: calc(var(--spacing) * 2.5);\n  }\n\n  .left-3 {\n    left: calc(var(--spacing) * 3);\n  }\n\n  .z-20 {\n    z-index: 20;\n  }\n\n  .z-50 {\n    z-index: 50;\n  }\n\n  .z-\\[100\\] {\n    z-index: 100;\n  }\n\n  .z-\\[300\\] {\n    z-index: 300;\n  }\n\n  .z-\\[400\\] {\n    z-index: 400;\n  }\n\n  .z-\\[1000\\] {\n    z-index: 1000;\n  }\n\n  .col-span-full {\n    grid-column: 1 / -1;\n  }\n\n  .container {\n    width: 100%;\n  }\n\n  @media (min-width: 40rem) {\n    .container {\n      max-width: 40rem;\n    }\n  }\n\n  @media (min-width: 48rem) {\n    .container {\n      max-width: 48rem;\n    }\n  }\n\n  @media (min-width: 64rem) {\n    .container {\n      max-width: 64rem;\n    }\n  }\n\n  @media (min-width: 80rem) {\n    .container {\n      max-width: 80rem;\n    }\n  }\n\n  @media (min-width: 96rem) {\n    .container {\n      max-width: 96rem;\n    }\n  }\n\n  .mx-0 {\n    margin-inline: calc(var(--spacing) * 0);\n  }\n\n  .mx-1 {\n    margin-inline: calc(var(--spacing) * 1);\n  }\n\n  .mx-auto {\n    margin-inline: auto;\n  }\n\n  .mt-0 {\n    margin-top: calc(var(--spacing) * 0);\n  }\n\n  .mt-0\\.5 {\n    margin-top: calc(var(--spacing) * .5);\n  }\n\n  .mt-2 {\n    margin-top: calc(var(--spacing) * 2);\n  }\n\n  .mt-3 {\n    margin-top: calc(var(--spacing) * 3);\n  }\n\n  .mr-1 {\n    margin-right: calc(var(--spacing) * 1);\n  }\n\n  .mb-1 {\n    margin-bottom: calc(var(--spacing) * 1);\n  }\n\n  .mb-2 {\n    margin-bottom: calc(var(--spacing) * 2);\n  }\n\n  .mb-3 {\n    margin-bottom: calc(var(--spacing) * 3);\n  }\n\n  .mb-4 {\n    margin-bottom: calc(var(--spacing) * 4);\n  }\n\n  .mb-8 {\n    margin-bottom: calc(var(--spacing) * 8);\n  }\n\n  .mb-10 {\n    margin-bottom: calc(var(--spacing) * 10);\n  }\n\n  .ml-1 {\n    margin-left: calc(var(--spacing) * 1);\n  }\n\n  .box-border {\n    box-sizing: border-box;\n  }\n\n  .line-clamp-2 {\n    -webkit-line-clamp: 2;\n    -webkit-box-orient: vertical;\n    display: -webkit-box;\n    overflow: hidden;\n  }\n\n  .line-clamp-3 {\n    -webkit-line-clamp: 3;\n    -webkit-box-orient: vertical;\n    display: -webkit-box;\n    overflow: hidden;\n  }\n\n  .line-clamp-6 {\n    -webkit-line-clamp: 6;\n    -webkit-box-orient: vertical;\n    display: -webkit-box;\n    overflow: hidden;\n  }\n\n  .block {\n    display: block;\n  }\n\n  .flex {\n    display: flex;\n  }\n\n  .grid {\n    display: grid;\n  }\n\n  .hidden {\n    display: none;\n  }\n\n  .inline {\n    display: inline;\n  }\n\n  .table {\n    display: table;\n  }\n\n  .h-1 {\n    height: calc(var(--spacing) * 1);\n  }\n\n  .h-3 {\n    height: calc(var(--spacing) * 3);\n  }\n\n  .h-4 {\n    height: calc(var(--spacing) * 4);\n  }\n\n  .h-5 {\n    height: calc(var(--spacing) * 5);\n  }\n\n  .h-6 {\n    height: calc(var(--spacing) * 6);\n  }\n\n  .h-7 {\n    height: calc(var(--spacing) * 7);\n  }\n\n  .h-8 {\n    height: calc(var(--spacing) * 8);\n  }\n\n  .h-10 {\n    height: calc(var(--spacing) * 10);\n  }\n\n  .h-16 {\n    height: calc(var(--spacing) * 16);\n  }\n\n  .h-18 {\n    height: calc(var(--spacing) * 18);\n  }\n\n  .h-64 {\n    height: calc(var(--spacing) * 64);\n  }\n\n  .h-\\[480px\\] {\n    height: 480px;\n  }\n\n  .h-full {\n    height: 100%;\n  }\n\n  .max-h-\\[70vh\\] {\n    max-height: 70vh;\n  }\n\n  .max-h-\\[500px\\] {\n    max-height: 500px;\n  }\n\n  .min-h-screen {\n    min-height: 100vh;\n  }\n\n  .w-1 {\n    width: calc(var(--spacing) * 1);\n  }\n\n  .w-1\\.5 {\n    width: calc(var(--spacing) * 1.5);\n  }\n\n  .w-2 {\n    width: calc(var(--spacing) * 2);\n  }\n\n  .w-2\\.5 {\n    width: calc(var(--spacing) * 2.5);\n  }\n\n  .w-3 {\n    width: calc(var(--spacing) * 3);\n  }\n\n  .w-4 {\n    width: calc(var(--spacing) * 4);\n  }\n\n  .w-5 {\n    width: calc(var(--spacing) * 5);\n  }\n\n  .w-6 {\n    width: calc(var(--spacing) * 6);\n  }\n\n  .w-7 {\n    width: calc(var(--spacing) * 7);\n  }\n\n  .w-8 {\n    width: calc(var(--spacing) * 8);\n  }\n\n  .w-10 {\n    width: calc(var(--spacing) * 10);\n  }\n\n  .w-16 {\n    width: calc(var(--spacing) * 16);\n  }\n\n  .w-40 {\n    width: calc(var(--spacing) * 40);\n  }\n\n  .w-48 {\n    width: calc(var(--spacing) * 48);\n  }\n\n  .w-80 {\n    width: calc(var(--spacing) * 80);\n  }\n\n  .w-\\[320px\\] {\n    width: 320px;\n  }\n\n  .w-fit {\n    width: fit-content;\n  }\n\n  .w-full {\n    width: 100%;\n  }\n\n  .w-px {\n    width: 1px;\n  }\n\n  .max-w-7xl {\n    max-width: var(--container-7xl);\n  }\n\n  .max-w-\\[64px\\] {\n    max-width: 64px;\n  }\n\n  .max-w-\\[98vw\\] {\n    max-width: 98vw;\n  }\n\n  .max-w-\\[120px\\] {\n    max-width: 120px;\n  }\n\n  .max-w-\\[200px\\] {\n    max-width: 200px;\n  }\n\n  .max-w-full {\n    max-width: 100%;\n  }\n\n  .flex-1 {\n    flex: 1;\n  }\n\n  .flex-shrink {\n    flex-shrink: 1;\n  }\n\n  .flex-shrink-0, .shrink-0 {\n    flex-shrink: 0;\n  }\n\n  .border-collapse {\n    border-collapse: collapse;\n  }\n\n  .-translate-x-1 {\n    --tw-translate-x: calc(var(--spacing) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .-translate-x-1\\/2 {\n    --tw-translate-x: calc(calc(1 / 2 * 100%) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .translate-x-0 {\n    --tw-translate-x: calc(var(--spacing) * 0);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .translate-x-1 {\n    --tw-translate-x: calc(var(--spacing) * 1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .translate-x-2 {\n    --tw-translate-x: calc(var(--spacing) * 2);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .translate-x-5 {\n    --tw-translate-x: calc(var(--spacing) * 5);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .-translate-y-1 {\n    --tw-translate-y: calc(var(--spacing) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .-translate-y-1\\/2 {\n    --tw-translate-y: calc(calc(1 / 2 * 100%) * -1);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .-translate-y-2 {\n    --tw-translate-y: calc(var(--spacing) * -2);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .translate-y-4 {\n    --tw-translate-y: calc(var(--spacing) * 4);\n    translate: var(--tw-translate-x) var(--tw-translate-y);\n  }\n\n  .scale-95 {\n    --tw-scale-x: 95%;\n    --tw-scale-y: 95%;\n    --tw-scale-z: 95%;\n    scale: var(--tw-scale-x) var(--tw-scale-y);\n  }\n\n  .scale-100 {\n    --tw-scale-x: 100%;\n    --tw-scale-y: 100%;\n    --tw-scale-z: 100%;\n    scale: var(--tw-scale-x) var(--tw-scale-y);\n  }\n\n  .scale-105 {\n    --tw-scale-x: 105%;\n    --tw-scale-y: 105%;\n    --tw-scale-z: 105%;\n    scale: var(--tw-scale-x) var(--tw-scale-y);\n  }\n\n  .scale-110 {\n    --tw-scale-x: 110%;\n    --tw-scale-y: 110%;\n    --tw-scale-z: 110%;\n    scale: var(--tw-scale-x) var(--tw-scale-y);\n  }\n\n  .rotate-90 {\n    rotate: 90deg;\n  }\n\n  .transform {\n    transform: var(--tw-rotate-x,  ) var(--tw-rotate-y,  ) var(--tw-rotate-z,  ) var(--tw-skew-x,  ) var(--tw-skew-y,  );\n  }\n\n  .animate-bounce {\n    animation: var(--animate-bounce);\n  }\n\n  .animate-pulse {\n    animation: var(--animate-pulse);\n  }\n\n  .cursor-crosshair {\n    cursor: crosshair;\n  }\n\n  .cursor-grab {\n    cursor: grab;\n  }\n\n  .cursor-nwse-resize {\n    cursor: nwse-resize;\n  }\n\n  .cursor-pointer {\n    cursor: pointer;\n  }\n\n  .cursor-text {\n    cursor: text;\n  }\n\n  .resize {\n    resize: both;\n  }\n\n  .resize-none {\n    resize: none;\n  }\n\n  .appearance-none {\n    appearance: none;\n  }\n\n  .grid-cols-1 {\n    grid-template-columns: repeat(1, minmax(0, 1fr));\n  }\n\n  .grid-cols-4 {\n    grid-template-columns: repeat(4, minmax(0, 1fr));\n  }\n\n  .flex-col {\n    flex-direction: column;\n  }\n\n  .flex-wrap {\n    flex-wrap: wrap;\n  }\n\n  .items-center {\n    align-items: center;\n  }\n\n  .items-start {\n    align-items: flex-start;\n  }\n\n  .justify-between {\n    justify-content: space-between;\n  }\n\n  .justify-center {\n    justify-content: center;\n  }\n\n  .gap-0 {\n    gap: calc(var(--spacing) * 0);\n  }\n\n  .gap-0\\.5 {\n    gap: calc(var(--spacing) * .5);\n  }\n\n  .gap-1 {\n    gap: calc(var(--spacing) * 1);\n  }\n\n  .gap-1\\.5 {\n    gap: calc(var(--spacing) * 1.5);\n  }\n\n  .gap-2 {\n    gap: calc(var(--spacing) * 2);\n  }\n\n  .gap-3 {\n    gap: calc(var(--spacing) * 3);\n  }\n\n  .gap-4 {\n    gap: calc(var(--spacing) * 4);\n  }\n\n  .gap-5 {\n    gap: calc(var(--spacing) * 5);\n  }\n\n  .gap-6 {\n    gap: calc(var(--spacing) * 6);\n  }\n\n  .gap-10 {\n    gap: calc(var(--spacing) * 10);\n  }\n\n  :where(.space-y-1 > :not(:last-child)) {\n    --tw-space-y-reverse: 0;\n    margin-block-start: calc(calc(var(--spacing) * 1) * var(--tw-space-y-reverse));\n    margin-block-end: calc(calc(var(--spacing) * 1) * calc(1 - var(--tw-space-y-reverse)));\n  }\n\n  :where(.space-y-2 > :not(:last-child)) {\n    --tw-space-y-reverse: 0;\n    margin-block-start: calc(calc(var(--spacing) * 2) * var(--tw-space-y-reverse));\n    margin-block-end: calc(calc(var(--spacing) * 2) * calc(1 - var(--tw-space-y-reverse)));\n  }\n\n  :where(.space-y-3 > :not(:last-child)) {\n    --tw-space-y-reverse: 0;\n    margin-block-start: calc(calc(var(--spacing) * 3) * var(--tw-space-y-reverse));\n    margin-block-end: calc(calc(var(--spacing) * 3) * calc(1 - var(--tw-space-y-reverse)));\n  }\n\n  :where(.space-y-6 > :not(:last-child)) {\n    --tw-space-y-reverse: 0;\n    margin-block-start: calc(calc(var(--spacing) * 6) * var(--tw-space-y-reverse));\n    margin-block-end: calc(calc(var(--spacing) * 6) * calc(1 - var(--tw-space-y-reverse)));\n  }\n\n  :where(.space-y-8 > :not(:last-child)) {\n    --tw-space-y-reverse: 0;\n    margin-block-start: calc(calc(var(--spacing) * 8) * var(--tw-space-y-reverse));\n    margin-block-end: calc(calc(var(--spacing) * 8) * calc(1 - var(--tw-space-y-reverse)));\n  }\n\n  :where(.divide-y > :not(:last-child)) {\n    --tw-divide-y-reverse: 0;\n    border-bottom-style: var(--tw-border-style);\n    border-top-style: var(--tw-border-style);\n    border-top-width: calc(1px * var(--tw-divide-y-reverse));\n    border-bottom-width: calc(1px * calc(1 - var(--tw-divide-y-reverse)));\n  }\n\n  :where(.divide-slate-50 > :not(:last-child)) {\n    border-color: var(--color-slate-50);\n  }\n\n  .truncate {\n    text-overflow: ellipsis;\n    white-space: nowrap;\n    overflow: hidden;\n  }\n\n  .overflow-hidden {\n    overflow: hidden;\n  }\n\n  .overflow-visible {\n    overflow: visible;\n  }\n\n  .overflow-y-auto {\n    overflow-y: auto;\n  }\n\n  .rounded {\n    border-radius: .25rem;\n  }\n\n  .rounded-2xl {\n    border-radius: var(--radius-2xl);\n  }\n\n  .rounded-3xl {\n    border-radius: var(--radius-3xl);\n  }\n\n  .rounded-full {\n    border-radius: 3.40282e38px;\n  }\n\n  .rounded-lg {\n    border-radius: var(--radius-lg);\n  }\n\n  .rounded-md {\n    border-radius: var(--radius-md);\n  }\n\n  .rounded-xl {\n    border-radius: var(--radius-xl);\n  }\n\n  .border {\n    border-style: var(--tw-border-style);\n    border-width: 1px;\n  }\n\n  .border-2 {\n    border-style: var(--tw-border-style);\n    border-width: 2px;\n  }\n\n  .border-4 {\n    border-style: var(--tw-border-style);\n    border-width: 4px;\n  }\n\n  .border-y {\n    border-block-style: var(--tw-border-style);\n    border-block-width: 1px;\n  }\n\n  .border-t {\n    border-top-style: var(--tw-border-style);\n    border-top-width: 1px;\n  }\n\n  .border-b {\n    border-bottom-style: var(--tw-border-style);\n    border-bottom-width: 1px;\n  }\n\n  .border-l {\n    border-left-style: var(--tw-border-style);\n    border-left-width: 1px;\n  }\n\n  .border-l-4 {\n    border-left-style: var(--tw-border-style);\n    border-left-width: 4px;\n  }\n\n  .border-dashed {\n    --tw-border-style: dashed;\n    border-style: dashed;\n  }\n\n  .border-none {\n    --tw-border-style: none;\n    border-style: none;\n  }\n\n  .border-black {\n    border-color: var(--color-black);\n  }\n\n  .border-black\\/5 {\n    border-color: #0000000d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-black\\/5 {\n      border-color: color-mix(in oklab, var(--color-black) 5%, transparent);\n    }\n  }\n\n  .border-black\\/10 {\n    border-color: #0000001a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-black\\/10 {\n      border-color: color-mix(in oklab, var(--color-black) 10%, transparent);\n    }\n  }\n\n  .border-brand-primary {\n    border-color: var(--color-brand-primary);\n  }\n\n  .border-brand-primary\\/20 {\n    border-color: #ffd54f33;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-brand-primary\\/20 {\n      border-color: color-mix(in oklab, var(--color-brand-primary) 20%, transparent);\n    }\n  }\n\n  .border-brand-primary\\/50 {\n    border-color: #ffd54f80;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-brand-primary\\/50 {\n      border-color: color-mix(in oklab, var(--color-brand-primary) 50%, transparent);\n    }\n  }\n\n  .border-gray-100 {\n    border-color: var(--color-gray-100);\n  }\n\n  .border-gray-200 {\n    border-color: var(--color-gray-200);\n  }\n\n  .border-gray-900 {\n    border-color: var(--color-gray-900);\n  }\n\n  .border-red-100 {\n    border-color: var(--color-red-100);\n  }\n\n  .border-slate-50 {\n    border-color: var(--color-slate-50);\n  }\n\n  .border-slate-100 {\n    border-color: var(--color-slate-100);\n  }\n\n  .border-slate-200 {\n    border-color: var(--color-slate-200);\n  }\n\n  .border-white {\n    border-color: var(--color-white);\n  }\n\n  .border-white\\/5 {\n    border-color: #ffffff0d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-white\\/5 {\n      border-color: color-mix(in oklab, var(--color-white) 5%, transparent);\n    }\n  }\n\n  .border-white\\/10 {\n    border-color: #ffffff1a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-white\\/10 {\n      border-color: color-mix(in oklab, var(--color-white) 10%, transparent);\n    }\n  }\n\n  .border-white\\/20 {\n    border-color: #fff3;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .border-white\\/20 {\n      border-color: color-mix(in oklab, var(--color-white) 20%, transparent);\n    }\n  }\n\n  .bg-\\[\\#f8fafc\\] {\n    background-color: #f8fafc;\n  }\n\n  .bg-amber-50 {\n    background-color: var(--color-amber-50);\n  }\n\n  .bg-amber-100 {\n    background-color: var(--color-amber-100);\n  }\n\n  .bg-black {\n    background-color: var(--color-black);\n  }\n\n  .bg-black\\/5 {\n    background-color: #0000000d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-black\\/5 {\n      background-color: color-mix(in oklab, var(--color-black) 5%, transparent);\n    }\n  }\n\n  .bg-black\\/10 {\n    background-color: #0000001a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-black\\/10 {\n      background-color: color-mix(in oklab, var(--color-black) 10%, transparent);\n    }\n  }\n\n  .bg-black\\/80 {\n    background-color: #000c;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-black\\/80 {\n      background-color: color-mix(in oklab, var(--color-black) 80%, transparent);\n    }\n  }\n\n  .bg-blue-50 {\n    background-color: var(--color-blue-50);\n  }\n\n  .bg-blue-100 {\n    background-color: var(--color-blue-100);\n  }\n\n  .bg-blue-500 {\n    background-color: var(--color-blue-500);\n  }\n\n  .bg-blue-500\\/10 {\n    background-color: #3080ff1a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-blue-500\\/10 {\n      background-color: color-mix(in oklab, var(--color-blue-500) 10%, transparent);\n    }\n  }\n\n  .bg-brand-primary {\n    background-color: var(--color-brand-primary);\n  }\n\n  .bg-brand-primary\\/5 {\n    background-color: #ffd54f0d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-brand-primary\\/5 {\n      background-color: color-mix(in oklab, var(--color-brand-primary) 5%, transparent);\n    }\n  }\n\n  .bg-brand-primary\\/10 {\n    background-color: #ffd54f1a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-brand-primary\\/10 {\n      background-color: color-mix(in oklab, var(--color-brand-primary) 10%, transparent);\n    }\n  }\n\n  .bg-brand-primary\\/20 {\n    background-color: #ffd54f33;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-brand-primary\\/20 {\n      background-color: color-mix(in oklab, var(--color-brand-primary) 20%, transparent);\n    }\n  }\n\n  .bg-emerald-50 {\n    background-color: var(--color-emerald-50);\n  }\n\n  .bg-emerald-100 {\n    background-color: var(--color-emerald-100);\n  }\n\n  .bg-gray-50 {\n    background-color: var(--color-gray-50);\n  }\n\n  .bg-gray-50\\/50 {\n    background-color: #f9fafb80;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-gray-50\\/50 {\n      background-color: color-mix(in oklab, var(--color-gray-50) 50%, transparent);\n    }\n  }\n\n  .bg-gray-100 {\n    background-color: var(--color-gray-100);\n  }\n\n  .bg-gray-200 {\n    background-color: var(--color-gray-200);\n  }\n\n  .bg-gray-300 {\n    background-color: var(--color-gray-300);\n  }\n\n  .bg-gray-800 {\n    background-color: var(--color-gray-800);\n  }\n\n  .bg-gray-900 {\n    background-color: var(--color-gray-900);\n  }\n\n  .bg-green-500 {\n    background-color: var(--color-green-500);\n  }\n\n  .bg-green-500\\/10 {\n    background-color: #00c7581a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-green-500\\/10 {\n      background-color: color-mix(in oklab, var(--color-green-500) 10%, transparent);\n    }\n  }\n\n  .bg-indigo-50 {\n    background-color: var(--color-indigo-50);\n  }\n\n  .bg-note-blue {\n    background-color: var(--color-note-blue);\n  }\n\n  .bg-note-green {\n    background-color: var(--color-note-green);\n  }\n\n  .bg-note-lavender {\n    background-color: var(--color-note-lavender);\n  }\n\n  .bg-note-pink {\n    background-color: var(--color-note-pink);\n  }\n\n  .bg-note-yellow {\n    background-color: var(--color-note-yellow);\n  }\n\n  .bg-red-50 {\n    background-color: var(--color-red-50);\n  }\n\n  .bg-red-500 {\n    background-color: var(--color-red-500);\n  }\n\n  .bg-slate-50 {\n    background-color: var(--color-slate-50);\n  }\n\n  .bg-slate-50\\/30 {\n    background-color: #f8fafc4d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-slate-50\\/30 {\n      background-color: color-mix(in oklab, var(--color-slate-50) 30%, transparent);\n    }\n  }\n\n  .bg-slate-50\\/50 {\n    background-color: #f8fafc80;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-slate-50\\/50 {\n      background-color: color-mix(in oklab, var(--color-slate-50) 50%, transparent);\n    }\n  }\n\n  .bg-transparent {\n    background-color: #0000;\n  }\n\n  .bg-white {\n    background-color: var(--color-white);\n  }\n\n  .bg-white\\/5 {\n    background-color: #ffffff0d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-white\\/5 {\n      background-color: color-mix(in oklab, var(--color-white) 5%, transparent);\n    }\n  }\n\n  .bg-white\\/10 {\n    background-color: #ffffff1a;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-white\\/10 {\n      background-color: color-mix(in oklab, var(--color-white) 10%, transparent);\n    }\n  }\n\n  .bg-white\\/90 {\n    background-color: #ffffffe6;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .bg-white\\/90 {\n      background-color: color-mix(in oklab, var(--color-white) 90%, transparent);\n    }\n  }\n\n  .fill-current {\n    fill: currentColor;\n  }\n\n  .p-0 {\n    padding: calc(var(--spacing) * 0);\n  }\n\n  .p-0\\.5 {\n    padding: calc(var(--spacing) * .5);\n  }\n\n  .p-1 {\n    padding: calc(var(--spacing) * 1);\n  }\n\n  .p-1\\.5 {\n    padding: calc(var(--spacing) * 1.5);\n  }\n\n  .p-2 {\n    padding: calc(var(--spacing) * 2);\n  }\n\n  .p-2\\.5 {\n    padding: calc(var(--spacing) * 2.5);\n  }\n\n  .p-3 {\n    padding: calc(var(--spacing) * 3);\n  }\n\n  .p-4 {\n    padding: calc(var(--spacing) * 4);\n  }\n\n  .p-5 {\n    padding: calc(var(--spacing) * 5);\n  }\n\n  .p-6 {\n    padding: calc(var(--spacing) * 6);\n  }\n\n  .p-10 {\n    padding: calc(var(--spacing) * 10);\n  }\n\n  .px-0 {\n    padding-inline: calc(var(--spacing) * 0);\n  }\n\n  .px-0\\.5 {\n    padding-inline: calc(var(--spacing) * .5);\n  }\n\n  .px-1 {\n    padding-inline: calc(var(--spacing) * 1);\n  }\n\n  .px-1\\.5 {\n    padding-inline: calc(var(--spacing) * 1.5);\n  }\n\n  .px-2 {\n    padding-inline: calc(var(--spacing) * 2);\n  }\n\n  .px-2\\.5 {\n    padding-inline: calc(var(--spacing) * 2.5);\n  }\n\n  .px-3 {\n    padding-inline: calc(var(--spacing) * 3);\n  }\n\n  .px-4 {\n    padding-inline: calc(var(--spacing) * 4);\n  }\n\n  .px-5 {\n    padding-inline: calc(var(--spacing) * 5);\n  }\n\n  .px-6 {\n    padding-inline: calc(var(--spacing) * 6);\n  }\n\n  .px-8 {\n    padding-inline: calc(var(--spacing) * 8);\n  }\n\n  .py-0 {\n    padding-block: calc(var(--spacing) * 0);\n  }\n\n  .py-0\\.5 {\n    padding-block: calc(var(--spacing) * .5);\n  }\n\n  .py-1 {\n    padding-block: calc(var(--spacing) * 1);\n  }\n\n  .py-1\\.5 {\n    padding-block: calc(var(--spacing) * 1.5);\n  }\n\n  .py-2 {\n    padding-block: calc(var(--spacing) * 2);\n  }\n\n  .py-2\\.5 {\n    padding-block: calc(var(--spacing) * 2.5);\n  }\n\n  .py-3 {\n    padding-block: calc(var(--spacing) * 3);\n  }\n\n  .py-3\\.5 {\n    padding-block: calc(var(--spacing) * 3.5);\n  }\n\n  .py-4 {\n    padding-block: calc(var(--spacing) * 4);\n  }\n\n  .py-20 {\n    padding-block: calc(var(--spacing) * 20);\n  }\n\n  .pr-2 {\n    padding-right: calc(var(--spacing) * 2);\n  }\n\n  .pr-3 {\n    padding-right: calc(var(--spacing) * 3);\n  }\n\n  .pr-4 {\n    padding-right: calc(var(--spacing) * 4);\n  }\n\n  .pb-5 {\n    padding-bottom: calc(var(--spacing) * 5);\n  }\n\n  .pl-8 {\n    padding-left: calc(var(--spacing) * 8);\n  }\n\n  .pl-10 {\n    padding-left: calc(var(--spacing) * 10);\n  }\n\n  .text-center {\n    text-align: center;\n  }\n\n  .text-left {\n    text-align: left;\n  }\n\n  .font-sans {\n    font-family: var(--font-sans);\n  }\n\n  .font-serif {\n    font-family: var(--font-serif);\n  }\n\n  .text-2xl {\n    font-size: var(--text-2xl);\n    line-height: var(--tw-leading, var(--text-2xl--line-height));\n  }\n\n  .text-3xl {\n    font-size: var(--text-3xl);\n    line-height: var(--tw-leading, var(--text-3xl--line-height));\n  }\n\n  .text-lg {\n    font-size: var(--text-lg);\n    line-height: var(--tw-leading, var(--text-lg--line-height));\n  }\n\n  .text-sm {\n    font-size: var(--text-sm);\n    line-height: var(--tw-leading, var(--text-sm--line-height));\n  }\n\n  .text-xl {\n    font-size: var(--text-xl);\n    line-height: var(--tw-leading, var(--text-xl--line-height));\n  }\n\n  .text-xs {\n    font-size: var(--text-xs);\n    line-height: var(--tw-leading, var(--text-xs--line-height));\n  }\n\n  .text-\\[8px\\] {\n    font-size: 8px;\n  }\n\n  .text-\\[9px\\] {\n    font-size: 9px;\n  }\n\n  .text-\\[10px\\] {\n    font-size: 10px;\n  }\n\n  .text-\\[11px\\] {\n    font-size: 11px;\n  }\n\n  .leading-none {\n    --tw-leading: 1;\n    line-height: 1;\n  }\n\n  .leading-relaxed {\n    --tw-leading: var(--leading-relaxed);\n    line-height: var(--leading-relaxed);\n  }\n\n  .font-black {\n    --tw-font-weight: var(--font-weight-black);\n    font-weight: var(--font-weight-black);\n  }\n\n  .font-bold {\n    --tw-font-weight: var(--font-weight-bold);\n    font-weight: var(--font-weight-bold);\n  }\n\n  .font-medium {\n    --tw-font-weight: var(--font-weight-medium);\n    font-weight: var(--font-weight-medium);\n  }\n\n  .font-semibold {\n    --tw-font-weight: var(--font-weight-semibold);\n    font-weight: var(--font-weight-semibold);\n  }\n\n  .tracking-tight {\n    --tw-tracking: var(--tracking-tight);\n    letter-spacing: var(--tracking-tight);\n  }\n\n  .tracking-tighter {\n    --tw-tracking: var(--tracking-tighter);\n    letter-spacing: var(--tracking-tighter);\n  }\n\n  .tracking-wide {\n    --tw-tracking: var(--tracking-wide);\n    letter-spacing: var(--tracking-wide);\n  }\n\n  .tracking-wider {\n    --tw-tracking: var(--tracking-wider);\n    letter-spacing: var(--tracking-wider);\n  }\n\n  .tracking-widest {\n    --tw-tracking: var(--tracking-widest);\n    letter-spacing: var(--tracking-widest);\n  }\n\n  .whitespace-nowrap {\n    white-space: nowrap;\n  }\n\n  .whitespace-pre-wrap {\n    white-space: pre-wrap;\n  }\n\n  .text-amber-500 {\n    color: var(--color-amber-500);\n  }\n\n  .text-amber-600 {\n    color: var(--color-amber-600);\n  }\n\n  .text-black {\n    color: var(--color-black);\n  }\n\n  .text-black\\/30 {\n    color: #0000004d;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .text-black\\/30 {\n      color: color-mix(in oklab, var(--color-black) 30%, transparent);\n    }\n  }\n\n  .text-black\\/40 {\n    color: #0006;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .text-black\\/40 {\n      color: color-mix(in oklab, var(--color-black) 40%, transparent);\n    }\n  }\n\n  .text-black\\/50 {\n    color: #00000080;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .text-black\\/50 {\n      color: color-mix(in oklab, var(--color-black) 50%, transparent);\n    }\n  }\n\n  .text-black\\/60 {\n    color: #0009;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .text-black\\/60 {\n      color: color-mix(in oklab, var(--color-black) 60%, transparent);\n    }\n  }\n\n  .text-blue-500 {\n    color: var(--color-blue-500);\n  }\n\n  .text-blue-600 {\n    color: var(--color-blue-600);\n  }\n\n  .text-brand-primary {\n    color: var(--color-brand-primary);\n  }\n\n  .text-emerald-500 {\n    color: var(--color-emerald-500);\n  }\n\n  .text-emerald-600 {\n    color: var(--color-emerald-600);\n  }\n\n  .text-gray-300 {\n    color: var(--color-gray-300);\n  }\n\n  .text-gray-400 {\n    color: var(--color-gray-400);\n  }\n\n  .text-gray-500 {\n    color: var(--color-gray-500);\n  }\n\n  .text-gray-700 {\n    color: var(--color-gray-700);\n  }\n\n  .text-gray-800 {\n    color: var(--color-gray-800);\n  }\n\n  .text-gray-900 {\n    color: var(--color-gray-900);\n  }\n\n  .text-green-600 {\n    color: var(--color-green-600);\n  }\n\n  .text-indigo-500 {\n    color: var(--color-indigo-500);\n  }\n\n  .text-red-400 {\n    color: var(--color-red-400);\n  }\n\n  .text-red-500 {\n    color: var(--color-red-500);\n  }\n\n  .text-red-600 {\n    color: var(--color-red-600);\n  }\n\n  .text-slate-300 {\n    color: var(--color-slate-300);\n  }\n\n  .text-slate-400 {\n    color: var(--color-slate-400);\n  }\n\n  .text-slate-500 {\n    color: var(--color-slate-500);\n  }\n\n  .text-slate-600 {\n    color: var(--color-slate-600);\n  }\n\n  .text-slate-700 {\n    color: var(--color-slate-700);\n  }\n\n  .text-slate-800 {\n    color: var(--color-slate-800);\n  }\n\n  .text-slate-900 {\n    color: var(--color-slate-900);\n  }\n\n  .text-white {\n    color: var(--color-white);\n  }\n\n  .uppercase {\n    text-transform: uppercase;\n  }\n\n  .italic {\n    font-style: italic;\n  }\n\n  .underline {\n    text-decoration-line: underline;\n  }\n\n  .accent-brand-primary {\n    accent-color: var(--color-brand-primary);\n  }\n\n  .opacity-0 {\n    opacity: 0;\n  }\n\n  .opacity-20 {\n    opacity: .2;\n  }\n\n  .opacity-40 {\n    opacity: .4;\n  }\n\n  .opacity-50 {\n    opacity: .5;\n  }\n\n  .opacity-60 {\n    opacity: .6;\n  }\n\n  .opacity-80 {\n    opacity: .8;\n  }\n\n  .opacity-100 {\n    opacity: 1;\n  }\n\n  .mix-blend-difference {\n    mix-blend-mode: difference;\n  }\n\n  .shadow {\n    --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, #0000001a), 0 1px 2px -1px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-2xl {\n    --tw-shadow: 0 25px 50px -12px var(--tw-shadow-color, #00000040);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-\\[0_0_10px_rgba\\(255\\,213\\,79\\,0\\.2\\)\\] {\n    --tw-shadow: 0 0 10px var(--tw-shadow-color, #ffd54f33);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-\\[0_0_30px_rgba\\(255\\,213\\,79\\,0\\.5\\)\\] {\n    --tw-shadow: 0 0 30px var(--tw-shadow-color, #ffd54f80);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-\\[0_20px_60px_rgba\\(0\\,0\\,0\\,0\\.6\\)\\,0_0_25px_rgba\\(255\\,213\\,79\\,0\\.2\\)\\] {\n    --tw-shadow: 0 20px 60px var(--tw-shadow-color, #0009), 0 0 25px var(--tw-shadow-color, #ffd54f33);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-inner {\n    --tw-shadow: inset 0 2px 4px 0 var(--tw-shadow-color, #0000000d);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-lg {\n    --tw-shadow: 0 10px 15px -3px var(--tw-shadow-color, #0000001a), 0 4px 6px -4px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-md {\n    --tw-shadow: 0 4px 6px -1px var(--tw-shadow-color, #0000001a), 0 2px 4px -2px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-sm {\n    --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, #0000001a), 0 1px 2px -1px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .shadow-xl {\n    --tw-shadow: 0 20px 25px -5px var(--tw-shadow-color, #0000001a), 0 8px 10px -6px var(--tw-shadow-color, #0000001a);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-1 {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-2 {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-4 {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(4px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-8 {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(8px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .ring-brand-primary {\n    --tw-ring-color: var(--color-brand-primary);\n  }\n\n  .outline {\n    outline-style: var(--tw-outline-style);\n    outline-width: 1px;\n  }\n\n  .blur {\n    --tw-blur: blur(8px);\n    filter: var(--tw-blur,  ) var(--tw-brightness,  ) var(--tw-contrast,  ) var(--tw-grayscale,  ) var(--tw-hue-rotate,  ) var(--tw-invert,  ) var(--tw-saturate,  ) var(--tw-sepia,  ) var(--tw-drop-shadow,  );\n  }\n\n  .filter {\n    filter: var(--tw-blur,  ) var(--tw-brightness,  ) var(--tw-contrast,  ) var(--tw-grayscale,  ) var(--tw-hue-rotate,  ) var(--tw-invert,  ) var(--tw-saturate,  ) var(--tw-sepia,  ) var(--tw-drop-shadow,  );\n  }\n\n  .backdrop-blur-md {\n    --tw-backdrop-blur: blur(var(--blur-md));\n    -webkit-backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n    backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n  }\n\n  .backdrop-blur-xl {\n    --tw-backdrop-blur: blur(var(--blur-xl));\n    -webkit-backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n    backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n  }\n\n  .backdrop-filter {\n    -webkit-backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n    backdrop-filter: var(--tw-backdrop-blur,  ) var(--tw-backdrop-brightness,  ) var(--tw-backdrop-contrast,  ) var(--tw-backdrop-grayscale,  ) var(--tw-backdrop-hue-rotate,  ) var(--tw-backdrop-invert,  ) var(--tw-backdrop-opacity,  ) var(--tw-backdrop-saturate,  ) var(--tw-backdrop-sepia,  );\n  }\n\n  .transition {\n    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-\\[opacity\\,transform\\,filter\\,ring-width\\] {\n    transition-property: opacity, transform, filter, ring-width;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-all {\n    transition-property: all;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-colors {\n    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-opacity {\n    transition-property: opacity;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .transition-transform {\n    transition-property: transform, translate, scale, rotate;\n    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));\n    transition-duration: var(--tw-duration, var(--default-transition-duration));\n  }\n\n  .duration-200 {\n    --tw-duration: .2s;\n    transition-duration: .2s;\n  }\n\n  .duration-300 {\n    --tw-duration: .3s;\n    transition-duration: .3s;\n  }\n\n  .duration-500 {\n    --tw-duration: .5s;\n    transition-duration: .5s;\n  }\n\n  .ease-in-out {\n    --tw-ease: var(--ease-in-out);\n    transition-timing-function: var(--ease-in-out);\n  }\n\n  .ease-out {\n    --tw-ease: var(--ease-out);\n    transition-timing-function: var(--ease-out);\n  }\n\n  .outline-none {\n    --tw-outline-style: none;\n    outline-style: none;\n  }\n\n  .group-focus-within\\:text-brand-primary:is(:where(.group):focus-within *) {\n    color: var(--color-brand-primary);\n  }\n\n  @media (hover: hover) {\n    .group-hover\\:scale-125:is(:where(.group):hover *) {\n      --tw-scale-x: 125%;\n      --tw-scale-y: 125%;\n      --tw-scale-z: 125%;\n      scale: var(--tw-scale-x) var(--tw-scale-y);\n    }\n\n    .group-hover\\:text-brand-primary:is(:where(.group):hover *) {\n      color: var(--color-brand-primary);\n    }\n\n    .group-hover\\:opacity-100:is(:where(.group):hover *) {\n      opacity: 1;\n    }\n\n    .hover\\:scale-105:hover {\n      --tw-scale-x: 105%;\n      --tw-scale-y: 105%;\n      --tw-scale-z: 105%;\n      scale: var(--tw-scale-x) var(--tw-scale-y);\n    }\n\n    .hover\\:scale-110:hover {\n      --tw-scale-x: 110%;\n      --tw-scale-y: 110%;\n      --tw-scale-z: 110%;\n      scale: var(--tw-scale-x) var(--tw-scale-y);\n    }\n\n    .hover\\:scale-125:hover {\n      --tw-scale-x: 125%;\n      --tw-scale-y: 125%;\n      --tw-scale-z: 125%;\n      scale: var(--tw-scale-x) var(--tw-scale-y);\n    }\n\n    .hover\\:scale-\\[1\\.02\\]:hover {\n      scale: 1.02;\n    }\n\n    .hover\\:border-brand-primary:hover {\n      border-color: var(--color-brand-primary);\n    }\n\n    .hover\\:border-brand-primary\\/20:hover {\n      border-color: #ffd54f33;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:border-brand-primary\\/20:hover {\n        border-color: color-mix(in oklab, var(--color-brand-primary) 20%, transparent);\n      }\n    }\n\n    .hover\\:bg-black\\/5:hover {\n      background-color: #0000000d;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-black\\/5:hover {\n        background-color: color-mix(in oklab, var(--color-black) 5%, transparent);\n      }\n    }\n\n    .hover\\:bg-black\\/10:hover {\n      background-color: #0000001a;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-black\\/10:hover {\n        background-color: color-mix(in oklab, var(--color-black) 10%, transparent);\n      }\n    }\n\n    .hover\\:bg-brand-primary:hover {\n      background-color: var(--color-brand-primary);\n    }\n\n    .hover\\:bg-gray-100:hover {\n      background-color: var(--color-gray-100);\n    }\n\n    .hover\\:bg-gray-700:hover {\n      background-color: var(--color-gray-700);\n    }\n\n    .hover\\:bg-red-50:hover {\n      background-color: var(--color-red-50);\n    }\n\n    .hover\\:bg-red-100:hover {\n      background-color: var(--color-red-100);\n    }\n\n    .hover\\:bg-red-500\\/10:hover {\n      background-color: #fb2c361a;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-red-500\\/10:hover {\n        background-color: color-mix(in oklab, var(--color-red-500) 10%, transparent);\n      }\n    }\n\n    .hover\\:bg-slate-50:hover {\n      background-color: var(--color-slate-50);\n    }\n\n    .hover\\:bg-slate-100:hover {\n      background-color: var(--color-slate-100);\n    }\n\n    .hover\\:bg-white\\/5:hover {\n      background-color: #ffffff0d;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-white\\/5:hover {\n        background-color: color-mix(in oklab, var(--color-white) 5%, transparent);\n      }\n    }\n\n    .hover\\:bg-white\\/10:hover {\n      background-color: #ffffff1a;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-white\\/10:hover {\n        background-color: color-mix(in oklab, var(--color-white) 10%, transparent);\n      }\n    }\n\n    .hover\\:bg-white\\/20:hover {\n      background-color: #fff3;\n    }\n\n    @supports (color: color-mix(in lab, red, red)) {\n      .hover\\:bg-white\\/20:hover {\n        background-color: color-mix(in oklab, var(--color-white) 20%, transparent);\n      }\n    }\n\n    .hover\\:text-brand-accent:hover {\n      color: var(--color-brand-accent);\n    }\n\n    .hover\\:text-brand-primary:hover {\n      color: var(--color-brand-primary);\n    }\n\n    .hover\\:text-gray-300:hover {\n      color: var(--color-gray-300);\n    }\n\n    .hover\\:text-gray-600:hover {\n      color: var(--color-gray-600);\n    }\n\n    .hover\\:text-red-400:hover {\n      color: var(--color-red-400);\n    }\n\n    .hover\\:text-red-500:hover {\n      color: var(--color-red-500);\n    }\n\n    .hover\\:text-red-600:hover {\n      color: var(--color-red-600);\n    }\n\n    .hover\\:text-white:hover {\n      color: var(--color-white);\n    }\n\n    .hover\\:opacity-100:hover {\n      opacity: 1;\n    }\n\n    .hover\\:shadow-md:hover {\n      --tw-shadow: 0 4px 6px -1px var(--tw-shadow-color, #0000001a), 0 2px 4px -2px var(--tw-shadow-color, #0000001a);\n      box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n    }\n  }\n\n  .focus\\:border-brand-primary:focus {\n    border-color: var(--color-brand-primary);\n  }\n\n  .focus\\:ring-1:focus {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .focus\\:ring-2:focus {\n    --tw-ring-shadow: var(--tw-ring-inset,  ) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);\n    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);\n  }\n\n  .focus\\:ring-brand-primary:focus {\n    --tw-ring-color: var(--color-brand-primary);\n  }\n\n  .focus\\:ring-brand-primary\\/20:focus {\n    --tw-ring-color: #ffd54f33;\n  }\n\n  @supports (color: color-mix(in lab, red, red)) {\n    .focus\\:ring-brand-primary\\/20:focus {\n      --tw-ring-color: color-mix(in oklab, var(--color-brand-primary) 20%, transparent);\n    }\n  }\n\n  .active\\:scale-95:active {\n    --tw-scale-x: 95%;\n    --tw-scale-y: 95%;\n    --tw-scale-z: 95%;\n    scale: var(--tw-scale-x) var(--tw-scale-y);\n  }\n\n  .active\\:cursor-grabbing:active {\n    cursor: grabbing;\n  }\n\n  @media (min-width: 40rem) {\n    .sm\\:grid-cols-2 {\n      grid-template-columns: repeat(2, minmax(0, 1fr));\n    }\n  }\n\n  @media (min-width: 48rem) {\n    .md\\:w-80 {\n      width: calc(var(--spacing) * 80);\n    }\n\n    .md\\:grid-cols-2 {\n      grid-template-columns: repeat(2, minmax(0, 1fr));\n    }\n\n    .md\\:flex-row {\n      flex-direction: row;\n    }\n\n    .md\\:items-center {\n      align-items: center;\n    }\n  }\n\n  @media (min-width: 64rem) {\n    .lg\\:col-span-3 {\n      grid-column: span 3 / span 3;\n    }\n\n    .lg\\:col-span-9 {\n      grid-column: span 9 / span 9;\n    }\n\n    .lg\\:grid-cols-4 {\n      grid-template-columns: repeat(4, minmax(0, 1fr));\n    }\n\n    .lg\\:grid-cols-12 {\n      grid-template-columns: repeat(12, minmax(0, 1fr));\n    }\n\n    .lg\\:p-10 {\n      padding: calc(var(--spacing) * 10);\n    }\n\n    .lg\\:text-base {\n      font-size: var(--text-base);\n      line-height: var(--tw-leading, var(--text-base--line-height));\n    }\n  }\n}\n\n:root {\n  font-family: Pretendard Variable, system-ui, -apple-system, sans-serif;\n}\n\nbody {\n  margin: 0;\n  overflow-x: hidden;\n}\n\n@property --tw-translate-x {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-translate-y {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-translate-z {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-scale-x {\n  syntax: "*";\n  inherits: false;\n  initial-value: 1;\n}\n\n@property --tw-scale-y {\n  syntax: "*";\n  inherits: false;\n  initial-value: 1;\n}\n\n@property --tw-scale-z {\n  syntax: "*";\n  inherits: false;\n  initial-value: 1;\n}\n\n@property --tw-rotate-x {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-rotate-y {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-rotate-z {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-skew-x {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-skew-y {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-space-y-reverse {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-divide-y-reverse {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-border-style {\n  syntax: "*";\n  inherits: false;\n  initial-value: solid;\n}\n\n@property --tw-leading {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-font-weight {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-tracking {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-shadow-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-shadow-alpha {\n  syntax: "<percentage>";\n  inherits: false;\n  initial-value: 100%;\n}\n\n@property --tw-inset-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-inset-shadow-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-inset-shadow-alpha {\n  syntax: "<percentage>";\n  inherits: false;\n  initial-value: 100%;\n}\n\n@property --tw-ring-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-ring-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-inset-ring-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-inset-ring-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-ring-inset {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-ring-offset-width {\n  syntax: "<length>";\n  inherits: false;\n  initial-value: 0;\n}\n\n@property --tw-ring-offset-color {\n  syntax: "*";\n  inherits: false;\n  initial-value: #fff;\n}\n\n@property --tw-ring-offset-shadow {\n  syntax: "*";\n  inherits: false;\n  initial-value: 0 0 #0000;\n}\n\n@property --tw-outline-style {\n  syntax: "*";\n  inherits: false;\n  initial-value: solid;\n}\n\n@property --tw-blur {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-brightness {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-contrast {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-grayscale {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-hue-rotate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-invert {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-opacity {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-saturate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-sepia {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-drop-shadow {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-drop-shadow-color {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-drop-shadow-alpha {\n  syntax: "<percentage>";\n  inherits: false;\n  initial-value: 100%;\n}\n\n@property --tw-drop-shadow-size {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-blur {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-brightness {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-contrast {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-grayscale {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-hue-rotate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-invert {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-opacity {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-saturate {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-backdrop-sepia {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-duration {\n  syntax: "*";\n  inherits: false\n}\n\n@property --tw-ease {\n  syntax: "*";\n  inherits: false\n}\n\n@keyframes pulse {\n  50% {\n    opacity: .5;\n  }\n}\n\n@keyframes bounce {\n  0%, 100% {\n    animation-timing-function: cubic-bezier(.8, 0, 1, 1);\n    transform: translateY(-25%);\n  }\n\n  50% {\n    animation-timing-function: cubic-bezier(0, 0, .2, 1);\n    transform: none;\n  }\n}\n';
   const contentStyles = "/* PagePost Content Styles */\r\n.pagepost-note-container {\r\n    all: initial;\r\n    position: absolute;\r\n    z-index: 2147483647;\r\n}";
   let lastElement = null;
   let lastClickInfo = { x: 0, y: 0 };
@@ -14991,7 +15176,7 @@
         color: "#FFF9C4",
         size: { width: 200, height: 150 },
         notePosition: {
-          x: Math.max(0, lastClickInfo.x),
+          x: Math.max(0, lastClickInfo.x + window.scrollX),
           y: Math.max(0, lastClickInfo.y + window.scrollY)
         },
         tags: [],
@@ -15090,7 +15275,9 @@
       console.error("PagePost: Initialization failed:", err);
     }
   };
-  init();
+  if (window.location.protocol !== "chrome-extension:") {
+    init();
+  }
   chrome.runtime.onMessage.addListener(handleMessage);
   let lastUrl = normalizeUrl(window.location.href);
   const checkUrlChange = (forcedUrl) => {

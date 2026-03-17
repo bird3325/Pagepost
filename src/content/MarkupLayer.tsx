@@ -4,7 +4,7 @@ import { type MarkupType } from '../db';
 import { captureAnchor, restoreElement, getRelativePoint, getAbsolutePoint } from '../utils/anchoring';
 
 export const MarkupLayer: React.FC = () => {
-    const { mode, notes, markups, addMarkup, deleteMarkup, currentTool, currentColor, settings, activeNoteId, selectedMarkupId, setSelectedMarkupId } = useNoteStore();
+    const { mode, notes, markups, addMarkup, deleteMarkup, currentTool, currentColor, settings, activeNoteId, setActiveNoteId, selectedMarkupId, setSelectedMarkupId } = useNoteStore();
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const drawingRef = useRef(false);
     const [isDrawing, setIsDrawing] = useState(false); // Keep for UI/render cycle
@@ -12,20 +12,12 @@ export const MarkupLayer: React.FC = () => {
     const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
 
+
     const getPagePoints = (markup: any) => {
         let points = markup.points || [];
         if (points.length < 1) return [];
 
-        if (markup.linkedNoteId) {
-            const linkedNote = notes.find(n => n.id === markup.linkedNoteId);
-            if (linkedNote) {
-                return points.map((p: any) => ({
-                    x: (linkedNote.notePosition.x + p.x),
-                    y: (linkedNote.notePosition.y + p.y)
-                }));
-            }
-            return [];
-        } else if (markup.anchor) {
+        if (markup.anchor) {
             const el = restoreElement(markup.anchor);
             if (el) {
                 return points.map((p: any) => getAbsolutePoint(el, p.x, p.y));
@@ -78,25 +70,22 @@ export const MarkupLayer: React.FC = () => {
                 ctx.lineWidth = markup.style.strokeWidth;
                 ctx.globalAlpha = markup.style.opacity;
 
-                // Selection / Active highlight
-                const isActive = markup.linkedNoteId === activeNoteId;
+                // Selection highlight
                 const isSelected = markup.id === selectedMarkupId;
 
-                if (isActive || isSelected) {
-                    ctx.shadowColor = isSelected ? '#ffffff' : markup.style.strokeColor;
-                    ctx.shadowBlur = isSelected ? 20 : 10;
-                    ctx.globalAlpha = 1.0;
-                    if (isSelected) {
-                        ctx.lineWidth = markup.style.strokeWidth + 3;
-                    }
+                if (isSelected) {
+                    ctx.shadowColor = '#ffffff';
+                    ctx.shadowBlur = 25;
+                    ctx.globalAlpha = Math.min(1.0, markup.style.opacity + 0.1); // Slightly clearer but still shows transparency
+                    ctx.lineWidth = markup.style.strokeWidth + 3;
                 } else {
                     ctx.shadowBlur = 0;
                     ctx.shadowColor = 'transparent';
+                    ctx.globalAlpha = markup.style.opacity;
                 }
 
                 // Actually draw based on type
                 if (markup.type === 'pen' || markup.type === 'highlight') {
-                    if (markup.type === 'highlight') ctx.globalAlpha = 0.4;
                     ctx.moveTo(points[0].x, points[0].y);
                     for (let i = 1; i < points.length; i++) {
                         ctx.lineTo(points[i].x, points[i].y);
@@ -256,7 +245,7 @@ export const MarkupLayer: React.FC = () => {
                 ctx.lineWidth = currentTool === 'highlight' ? settings.highlightWidth : settings.penWidth;
                 ctx.lineCap = 'round';
                 ctx.lineJoin = 'round';
-                ctx.globalAlpha = currentTool === 'highlight' ? 0.4 : 1.0;
+                ctx.globalAlpha = settings.markupOpacity;
 
                 if (currentTool === 'pen' || currentTool === 'highlight') {
                     ctx.moveTo(currentPoints[0].x, currentPoints[0].y);
@@ -454,8 +443,34 @@ export const MarkupLayer: React.FC = () => {
         const y = e.clientY + window.scrollY;
 
         if (currentTool === 'select') {
-            checkAndSelect(x, y);
-            return; // Don't start drawing
+            const markup = checkAndSelect(x, y);
+            if (!markup) {
+                // Pass-through logic: find what's under the canvas
+                const root = canvasRef.current?.getRootNode() as ShadowRoot;
+                if (root && root.elementFromPoint) {
+                    const canvas = canvasRef.current;
+                    if (canvas) {
+                        canvas.style.pointerEvents = 'none';
+                        const el = root.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
+                        canvas.style.pointerEvents = 'auto';
+
+                        if (el && el !== root.getElementById('pagepost-root-container')) {
+                            const newEvent = new MouseEvent('mousedown', {
+                                bubbles: true,
+                                cancelable: true,
+                                clientX: e.clientX,
+                                clientY: e.clientY,
+                                button: e.button,
+                                buttons: e.buttons,
+                                view: window
+                            });
+                            el.dispatchEvent(newEvent);
+                        }
+                    }
+                }
+                setActiveNoteId(null);
+            }
+            return;
         }
 
         e.preventDefault();
@@ -467,20 +482,11 @@ export const MarkupLayer: React.FC = () => {
         } else if (currentTool === 'sticker') {
             const sticker = (window as any).__pagepost_selected_sticker || '✅';
 
-            // Find element for sticker anchor
-            const element = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
             let anchor = undefined;
             let finalPoints = [{ x, y }];
 
-            if (activeNoteId) {
-                const activeNote = notes.find(n => n.id === activeNoteId);
-                if (activeNote) {
-                    finalPoints = [{
-                        x: x - activeNote.notePosition.x,
-                        y: y - activeNote.notePosition.y
-                    }];
-                }
-            } else if (element && element !== document.body && element !== document.documentElement) {
+            const element = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
+            if (element && element !== document.body && element !== document.documentElement) {
                 anchor = captureAnchor(element, x, y);
                 finalPoints = [{ x: getRelativePoint(element, x, y).x, y: getRelativePoint(element, x, y).y }];
             }
@@ -492,7 +498,6 @@ export const MarkupLayer: React.FC = () => {
                 points: finalPoints,
                 content: sticker,
                 anchor,
-                linkedNoteId: activeNoteId || undefined,
                 style: {
                     strokeColor: currentColor,
                     strokeWidth: 1,
@@ -591,26 +596,13 @@ export const MarkupLayer: React.FC = () => {
                 return;
             }
 
-            // --- Smart Anchoring Logic ---
-            // 1. Find the element under the first point
             const startPoint = rawPoints[0];
-            const element = document.elementFromPoint(startPoint.x, startPoint.y - window.scrollY) as HTMLElement;
-
             let anchor = undefined;
             let finalPoints = rawPoints;
 
-            if (activeNoteId) {
-                const activeNote = notes.find(n => n.id === activeNoteId);
-                if (activeNote) {
-                    // Store points relative to the note's position
-                    // Note: rawPoints are already page-relative
-                    finalPoints = rawPoints.map(p => ({
-                        x: p.x - activeNote.notePosition.x,
-                        y: p.y - activeNote.notePosition.y
-                    }));
-                }
-            } else if (element && element !== document.body && element !== document.documentElement) {
-                // Standard element anchoring
+            // Element anchoring
+            const element = document.elementFromPoint(startPoint.x, startPoint.y - window.scrollY) as HTMLElement;
+            if (element && element !== document.body && element !== document.documentElement) {
                 anchor = captureAnchor(element, startPoint.x, startPoint.y);
                 finalPoints = rawPoints.map((p: any) => getRelativePoint(element, p.x, p.y));
             }
@@ -621,11 +613,10 @@ export const MarkupLayer: React.FC = () => {
                 type: currentTool as MarkupType,
                 points: finalPoints,
                 anchor, // Store anchor info
-                linkedNoteId: activeNoteId || undefined,
                 style: {
                     strokeColor: currentColor,
                     strokeWidth: settings[`${currentTool}Width` as keyof typeof settings] as number || settings.penWidth || 2,
-                    opacity: currentTool === 'highlight' ? 0.3 : 1.0
+                    opacity: settings.markupOpacity
                 },
                 createdAt: Date.now(),
                 updatedAt: Date.now()
@@ -645,10 +636,12 @@ export const MarkupLayer: React.FC = () => {
                 cursor: mode === 'markup'
                     ? (currentTool === 'select' ? 'pointer' : currentTool === 'highlight' ? 'cell' : currentTool === 'eraser' ? 'not-allowed' : 'crosshair')
                     : 'default',
-                zIndex: 10,
+                zIndex: 200,
                 maxWidth: '100%',
                 display: 'block',
-                pointerEvents: mode === 'markup' ? 'auto' : 'none'
+                pointerEvents: mode === 'markup' ? 'auto' : 'none',
+                opacity: settings.isCleanView ? 0.2 : 1.0,
+                transition: 'opacity 0.3s ease-in-out'
             }}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}

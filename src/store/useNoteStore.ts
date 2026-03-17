@@ -11,7 +11,7 @@ interface NoteState {
     currentUrl: string;
     isGlobalView: boolean;
     searchQuery: string;
-    mode: 'note' | 'markup' | 'capture';
+    mode: 'note' | 'markup' | 'capture' | 'review';
     currentTool: MarkupType | 'eraser' | 'select';
     currentColor: string;
     settings: {
@@ -19,8 +19,11 @@ interface NoteState {
         fontSize: number;
         textColor: string;
         showToolbar: boolean;
+        isToolbarExpanded: boolean;
         penWidth: number;
         highlightWidth: number;
+        markupOpacity: number;
+        isCleanView: boolean;
     };
     markups: MarkupObject[];
     fetchRequestId: number;
@@ -44,9 +47,10 @@ interface NoteState {
     setActiveNoteId: (id: string | null) => void;
     setSelectedMarkupId: (id: string | null) => void;
     setSearchQuery: (query: string) => void;
-    setMode: (mode: 'note' | 'markup' | 'capture') => void;
+    setMode: (mode: 'note' | 'markup' | 'capture' | 'review') => void;
     setTool: (tool: MarkupType | 'eraser' | 'select') => void;
     setColor: (color: string) => void;
+    setOpacity: (opacity: number) => void;
     updateSettings: (settings: Partial<NoteState['settings']>) => Promise<void>;
     loadSettings: () => Promise<void>;
 
@@ -80,41 +84,46 @@ export const useNoteStore = create<NoteState>((set, get) => {
     // Listen for storage changes
     if (isContextValid()) {
         chrome.storage.onChanged.addListener((changes, areaName) => {
-            if (areaName === 'local') {
-                if (changes[STORAGE_KEY]) {
-                    const { currentUrl, isGlobalView, fetchNotesForUrl, fetchAllNotes } = get();
-                    const targetUrl = currentUrl || (typeof window !== 'undefined' ? normalizeUrl(window.location.href) : '');
+            if (!isContextValid()) return;
 
-                    if (isGlobalView) fetchAllNotes();
-                    else if (targetUrl) fetchNotesForUrl(targetUrl);
-                }
-                if (changes[MARKUP_STORAGE_KEY]) {
-                    const { currentUrl, fetchMarkupsForUrl } = get();
-                    const targetUrl = currentUrl || (typeof window !== 'undefined' ? normalizeUrl(window.location.href) : '');
-                    if (targetUrl) fetchMarkupsForUrl(targetUrl);
-                }
-                if (changes[SETTINGS_KEY]) {
-                    const { newValue } = changes[SETTINGS_KEY];
-                    if (newValue) {
-                        console.log('PagePost: Settings updated - showToolbar:', (newValue as any).showToolbar);
-                        set((state) => ({
-                            settings: { ...state.settings, ...newValue }
-                        }));
+            if (areaName === 'local') {
+                try {
+                    if (changes[STORAGE_KEY]) {
+                        const { currentUrl, isGlobalView, fetchNotesForUrl, fetchAllNotes } = get();
+                        const targetUrl = currentUrl || (typeof window !== 'undefined' ? normalizeUrl(window.location.href) : '');
+
+                        if (isGlobalView) fetchAllNotes();
+                        else if (targetUrl) fetchNotesForUrl(targetUrl);
                     }
-                }
-                if (changes['pagepost_mode']) {
-                    const newValue = changes['pagepost_mode'].newValue;
-                    if (newValue === 'note' || newValue === 'markup' || newValue === 'capture') {
-                        set({ mode: newValue });
+                    if (changes[MARKUP_STORAGE_KEY]) {
+                        const { currentUrl, fetchMarkupsForUrl } = get();
+                        const targetUrl = currentUrl || (typeof window !== 'undefined' ? normalizeUrl(window.location.href) : '');
+                        if (targetUrl) fetchMarkupsForUrl(targetUrl);
                     }
+                    if (changes[SETTINGS_KEY]) {
+                        const { newValue } = changes[SETTINGS_KEY];
+                        if (newValue) {
+                            set((state) => ({
+                                settings: { ...state.settings, ...newValue }
+                            }));
+                        }
+                    }
+                    if (changes['pagepost_mode']) {
+                        const newValue = changes['pagepost_mode'].newValue;
+                        if (newValue === 'note' || newValue === 'markup' || newValue === 'capture' || newValue === 'review') {
+                            set({ mode: newValue });
+                        }
+                    }
+                } catch (e) {
+                    console.error('PagePost: Error in storage change listener:', e);
                 }
             }
         });
 
         // Supplement with message listener for immediate cross-context sync
         chrome.runtime.onMessage.addListener((message) => {
+            if (!isContextValid()) return;
             if (message.type === 'SETTINGS_UPDATED') {
-                console.log('PagePost: Received direct settings update:', message.settings);
                 set({ settings: { ...get().settings, ...message.settings } });
             }
         });
@@ -144,16 +153,20 @@ export const useNoteStore = create<NoteState>((set, get) => {
             fontSize: 14,
             textColor: '#1a1a1a',
             showToolbar: true,
+            isToolbarExpanded: true,
             penWidth: 3,
-            highlightWidth: 20
+            highlightWidth: 20,
+            markupOpacity: 1.0,
+            isCleanView: false
         },
         markups: [],
         markupFetchRequestId: 0,
 
         loadSettings: async () => {
-            if (!isContextValid()) throw new Error('Extension context invalidated');
+            if (!isContextValid()) return;
             try {
                 const result = await chrome.storage.local.get(SETTINGS_KEY);
+                if (!isContextValid()) return;
                 if (result[SETTINGS_KEY]) {
                     set({ settings: { ...get().settings, ...result[SETTINGS_KEY] }, isSettingsLoaded: true });
                 } else {
@@ -165,34 +178,28 @@ export const useNoteStore = create<NoteState>((set, get) => {
         },
 
         updateSettings: async (newSettings) => {
-            if (!isContextValid()) throw new Error('Extension context invalidated');
+            if (!isContextValid()) return;
             try {
                 const currentSettings = get().settings;
                 const updated = { ...currentSettings, ...newSettings };
                 await chrome.storage.local.set({ [SETTINGS_KEY]: updated });
+                if (!isContextValid()) return;
                 set({ settings: updated });
-
-                // Broadcast to all tabs for immediate synchronization
-                if (isContextValid() && typeof chrome.tabs !== 'undefined') {
-                    chrome.tabs.query({}, (tabs) => {
-                        tabs.forEach(tab => {
-                            if (tab.id) {
-                                chrome.tabs.sendMessage(tab.id, { type: 'SETTINGS_UPDATED', settings: updated }).catch(() => { });
-                            }
-                        });
-                    });
-                }
             } catch (error) {
                 console.error('Failed to update settings:', error);
             }
         },
 
         setSearchQuery: (query: string) => set({ searchQuery: query }),
-        setMode: async (mode: 'note' | 'markup' | 'capture') => {
-            if (isContextValid()) {
+        setMode: async (mode: 'note' | 'markup' | 'capture' | 'review') => {
+            if (!isContextValid()) return;
+            try {
                 await chrome.storage.local.set({ 'pagepost_mode': mode });
+                if (!isContextValid()) return;
+                set({ mode });
+            } catch (e) {
+                set({ mode });
             }
-            set({ mode });
         },
         setActiveNoteId: (id) => set({ activeNoteId: id, selectedMarkupId: null }),
         setSelectedMarkupId: (id) => set({ selectedMarkupId: id }),
@@ -209,11 +216,25 @@ export const useNoteStore = create<NoteState>((set, get) => {
             }
         },
 
+        setOpacity: async (opacity: number) => {
+            const { updateSettings, selectedMarkupId, updateMarkup, markups } = get();
+            await updateSettings({ markupOpacity: opacity });
+
+            // If a markup is selected, update it immediately
+            if (selectedMarkupId) {
+                const markup = markups.find(m => m.id === selectedMarkupId);
+                if (markup) {
+                    updateMarkup(selectedMarkupId, { style: { ...markup.style, opacity } });
+                }
+            }
+        },
+
         fetchAllNotes: async () => {
-            if (!isContextValid()) throw new Error('Extension context invalidated');
+            if (!isContextValid()) return;
             set({ isLoading: true, isGlobalView: true });
             try {
                 const result = await chrome.storage.local.get(STORAGE_KEY);
+                if (!isContextValid()) return;
                 let allNotes = (result[STORAGE_KEY] || []) as Note[];
 
                 // Filter by search query if exists
@@ -239,6 +260,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
             set({ isLoading: true });
             try {
                 const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+                if (!isContextValid()) return;
                 const allMarkups = (result[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
 
                 // Filter by search query if exists (global search)
@@ -251,6 +273,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
 
                 // Update stats after both notes and markups are fetched
                 const notesResult = await chrome.storage.local.get(STORAGE_KEY);
+                if (!isContextValid()) return;
                 const allNotes = (notesResult[STORAGE_KEY] || []) as Note[];
                 const domains = new Set(allNotes.map(n => n.domain));
 
@@ -271,16 +294,11 @@ export const useNoteStore = create<NoteState>((set, get) => {
             if (!isContextValid()) return;
             const normalizedUrl = normalizeUrl(url);
 
-            // Increment request ID to track the latest navigation
             const nextId = get().fetchRequestId + 1;
             const isNewUrl = get().currentUrl !== normalizedUrl;
 
             set({ fetchRequestId: nextId });
 
-            console.log(`PagePost: Fetching notes for URL [ReqID:${nextId}]:`, normalizedUrl);
-
-            // Only clear existing notes if we are actually navigating to a new URL
-            // This prevents flicker on every small update/storage change
             if (isNewUrl) {
                 set({ notes: [], activeNoteId: null, currentUrl: normalizedUrl, isGlobalView: false });
             }
@@ -288,20 +306,11 @@ export const useNoteStore = create<NoteState>((set, get) => {
             set({ isLoading: true });
             try {
                 const result = await chrome.storage.local.get(STORAGE_KEY);
-
-                // If a newer request has started, discard this one
-                if (get().fetchRequestId !== nextId) {
-                    console.log(`PagePost: Discarding outdated fetch [ReqID:${nextId}]`);
-                    return;
-                }
+                if (!isContextValid() || get().fetchRequestId !== nextId) return;
 
                 let allNotes = (result[STORAGE_KEY] || []) as Note[];
-
-                // Ensure strict comparison by normalizing stored URLs too
                 const filteredNotes = allNotes.filter(n => normalizeUrl(n.url) === normalizedUrl);
-                console.log(`PagePost: Found ${filteredNotes.length} notes for this URL [ReqID:${nextId}]`);
 
-                // Filter by search query if exists
                 const query = get().searchQuery.toLowerCase();
                 const processedNotes = query
                     ? filteredNotes.filter(n => n.content.toLowerCase().includes(query))
@@ -309,19 +318,18 @@ export const useNoteStore = create<NoteState>((set, get) => {
 
                 set({ notes: processedNotes, isLoading: false });
             } catch (error) {
-                console.error(`PagePost: Failed to fetch notes [ReqID:${nextId}]:`, error);
+                console.error(`PagePost: Failed to fetch notes:`, error);
                 if (get().fetchRequestId === nextId) {
                     set({ isLoading: false });
                 }
             }
         },
 
-
-
         addNote: async (note: Note) => {
-            if (!isContextValid()) throw new Error('Extension context invalidated');
+            if (!isContextValid()) return;
             try {
                 const result = await chrome.storage.local.get(STORAGE_KEY);
+                if (!isContextValid()) return;
                 const allNotes = (result[STORAGE_KEY] || []) as Note[];
 
                 const normalizedUrl = normalizeUrl(note.url);
@@ -334,15 +342,14 @@ export const useNoteStore = create<NoteState>((set, get) => {
 
                 const updatedAllNotes = [...allNotes, noteWithTags];
                 await chrome.storage.local.set({ [STORAGE_KEY]: updatedAllNotes });
+                if (!isContextValid()) return;
 
-                // Update local state immediately for responsiveness
                 const { currentUrl, isGlobalView, notes } = get();
                 const normalizedCurrentUrl = currentUrl ? normalizeUrl(currentUrl) : (typeof window !== 'undefined' ? normalizeUrl(window.location.href) : '');
 
                 if (isGlobalView) {
                     set({ notes: [...notes, noteWithTags].sort((a, b) => b.updatedAt - a.updatedAt) });
                 } else if (normalizedCurrentUrl === noteWithTags.url) {
-                    // noteWithTags.url is already normalized above
                     set({ notes: [...notes, noteWithTags] });
                 }
             } catch (error) {
@@ -351,9 +358,10 @@ export const useNoteStore = create<NoteState>((set, get) => {
         },
 
         updateNote: async (id: string, updates: Partial<Note>) => {
-            if (!isContextValid()) throw new Error('Extension context invalidated');
+            if (!isContextValid()) return;
             try {
                 const result = await chrome.storage.local.get(STORAGE_KEY);
+                if (!isContextValid()) return;
                 const allNotes = (result[STORAGE_KEY] || []) as Note[];
 
                 const updatedAt = Date.now();
@@ -362,8 +370,8 @@ export const useNoteStore = create<NoteState>((set, get) => {
 
                 const updatedAllNotes = allNotes.map((n) => (n.id === id ? { ...n, ...finalUpdates } : n));
                 await chrome.storage.local.set({ [STORAGE_KEY]: updatedAllNotes });
+                if (!isContextValid()) return;
 
-                // Update local state immediately
                 const { notes } = get();
                 set({ notes: notes.map((n) => (n.id === id ? { ...n, ...finalUpdates } : n)) });
             } catch (error) {
@@ -378,15 +386,16 @@ export const useNoteStore = create<NoteState>((set, get) => {
         },
 
         deleteNote: async (id: string) => {
-            if (!isContextValid()) throw new Error('Extension context invalidated');
+            if (!isContextValid()) return;
             try {
                 const result = await chrome.storage.local.get(STORAGE_KEY);
+                if (!isContextValid()) return;
                 const allNotes = (result[STORAGE_KEY] || []) as Note[];
 
                 const updatedAllNotes = allNotes.filter((n) => n.id !== id);
                 await chrome.storage.local.set({ [STORAGE_KEY]: updatedAllNotes });
+                if (!isContextValid()) return;
 
-                // Update local state immediately
                 const { notes } = get();
                 set((state) => ({
                     notes: notes.filter((n) => n.id !== id),
@@ -398,10 +407,11 @@ export const useNoteStore = create<NoteState>((set, get) => {
         },
 
         deleteAllNotes: async () => {
-            if (!isContextValid()) throw new Error('Extension context invalidated');
+            if (!isContextValid()) return;
             try {
                 if (confirm('정말로 모든 메모를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
                     await chrome.storage.local.set({ [STORAGE_KEY]: [] });
+                    if (!isContextValid()) return;
                     set({ notes: [] });
                 }
             } catch (error) {
@@ -409,41 +419,38 @@ export const useNoteStore = create<NoteState>((set, get) => {
             }
         },
 
-
-        // Markup Implementation
         fetchMarkupsForUrl: async (url: string) => {
             if (!isContextValid()) return;
             const normalizedUrl = normalizeUrl(url);
             const nextId = get().markupFetchRequestId + 1;
             set({ markupFetchRequestId: nextId });
 
-            console.log(`PagePost: Fetching markups for URL [ReqID:${nextId}]:`, normalizedUrl);
             try {
                 const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
-                if (get().markupFetchRequestId !== nextId) return;
+                if (!isContextValid() || get().markupFetchRequestId !== nextId) return;
 
                 const allMarkups = (result[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
                 const filteredMarkups = allMarkups.filter(m => normalizeUrl(m.url) === normalizedUrl);
 
                 set({ markups: filteredMarkups });
             } catch (error) {
-                console.error(`PagePost: Failed to fetch markups [ReqID:${nextId}]:`, error);
+                console.error(`PagePost: Failed to fetch markups:`, error);
             }
         },
 
         addMarkup: async (markup: MarkupObject) => {
-            if (!isContextValid()) throw new Error('Extension context invalidated');
+            if (!isContextValid()) return;
             try {
                 const normalizedUrl = normalizeUrl(markup.url);
                 const markupWithUrl = { ...markup, url: normalizedUrl };
 
-                // 1. Persist to storage
                 const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+                if (!isContextValid()) return;
                 const allMarkups = (result[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
                 const updatedAllMarkups = [...allMarkups, markupWithUrl];
                 await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
+                if (!isContextValid()) return;
 
-                // Update local state and history
                 const { currentUrl, markups } = get();
                 if (currentUrl && normalizeUrl(currentUrl) === normalizedUrl) {
                     set({ markups: [...markups, markupWithUrl] });
@@ -454,16 +461,17 @@ export const useNoteStore = create<NoteState>((set, get) => {
         },
 
         updateMarkup: async (id: string, updates: Partial<MarkupObject>) => {
-            if (!isContextValid()) throw new Error('Extension context invalidated');
+            if (!isContextValid()) return;
             try {
                 const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+                if (!isContextValid()) return;
                 const allMarkups = (result[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
 
                 const updatedAt = Date.now();
                 const updatedAllMarkups = allMarkups.map(m => m.id === id ? { ...m, ...updates, updatedAt } : m);
                 await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
+                if (!isContextValid()) return;
 
-                // Update local state
                 const { markups } = get();
                 set({ markups: markups.map(m => m.id === id ? { ...m, ...updates, updatedAt } : m) });
             } catch (error) {
@@ -472,15 +480,16 @@ export const useNoteStore = create<NoteState>((set, get) => {
         },
 
         deleteMarkup: async (id: string) => {
-            if (!isContextValid()) throw new Error('Extension context invalidated');
+            if (!isContextValid()) return;
             try {
                 const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+                if (!isContextValid()) return;
                 const allMarkups = (result[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
 
                 const updatedAllMarkups = allMarkups.filter(m => m.id !== id);
                 await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
+                if (!isContextValid()) return;
 
-                // Update local state
                 const { markups } = get();
                 set({ markups: markups.filter(m => m.id !== id) });
             } catch (error) {
@@ -496,9 +505,9 @@ export const useNoteStore = create<NoteState>((set, get) => {
             try {
                 const normalizedUrl = normalizeUrl(currentUrl);
                 const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+                if (!isContextValid()) return;
                 const allMarkups = (result[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
 
-                // Find markups for current URL and remove the last one added
                 const urlMarkups = allMarkups.filter(m => normalizeUrl(m.url) === normalizedUrl);
                 if (urlMarkups.length === 0) return;
 
@@ -506,6 +515,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
                 const updatedAllMarkups = allMarkups.filter(m => m.id !== lastMarkupId);
 
                 await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
+                if (!isContextValid()) return;
                 set({ markups: markups.filter(m => m.id !== lastMarkupId) });
             } catch (error) {
                 console.error('Failed to undo markup:', error);
@@ -513,23 +523,23 @@ export const useNoteStore = create<NoteState>((set, get) => {
         },
 
         redoMarkup: async () => {
-            // REDO is complex with persistent storage unless we have a trash/history table.
-            // For now, focusing on UNDO as it's the most requested per-session feature.
-            console.log('Redo not yet implemented for persistent storage');
+            console.log('Redo not yet implemented');
         },
 
         clearAllMarkups: async () => {
-            if (!isContextValid()) throw new Error('Extension context invalidated');
+            if (!isContextValid()) return;
             try {
                 const { currentUrl } = get();
                 if (!currentUrl) return;
 
                 const normalizedCurrentUrl = normalizeUrl(currentUrl);
                 const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+                if (!isContextValid()) return;
                 const allMarkups = (result[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
 
                 const updatedAllMarkups = allMarkups.filter(m => normalizeUrl(m.url) !== normalizedCurrentUrl);
                 await chrome.storage.local.set({ [MARKUP_STORAGE_KEY]: updatedAllMarkups });
+                if (!isContextValid()) return;
 
                 set({ markups: [] });
             } catch (error) {
@@ -542,6 +552,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
             try {
                 const notesResult = await chrome.storage.local.get(STORAGE_KEY);
                 const markupsResult = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+                if (!isContextValid()) return;
 
                 let notesToExport = (notesResult[STORAGE_KEY] || []) as Note[];
                 let markupsToExport = (markupsResult[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
@@ -561,15 +572,12 @@ export const useNoteStore = create<NoteState>((set, get) => {
 
                 const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-                const filename = `pagepost_export_${domain || 'all'}_${timestamp}.json`;
+                const filename = `pagepost_export_${domain || 'all'}.json`;
 
                 const link = document.createElement('a');
                 link.href = url;
                 link.download = filename;
-                document.body.appendChild(link);
                 link.click();
-                document.body.removeChild(link);
                 URL.revokeObjectURL(url);
             } catch (error) {
                 console.error('Failed to export data:', error);
@@ -580,47 +588,36 @@ export const useNoteStore = create<NoteState>((set, get) => {
             if (!isContextValid()) return;
             try {
                 const data = JSON.parse(jsonData);
-                if (!data.notes && !data.markups) throw new Error('Invalid data format');
-
                 const notesResult = await chrome.storage.local.get(STORAGE_KEY);
                 const markupsResult = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+                if (!isContextValid()) return;
 
                 const existingNotes = (notesResult[STORAGE_KEY] || []) as Note[];
                 const existingMarkups = (markupsResult[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
 
-                // Merge notes by ID (incoming wins for same ID)
                 const incomingNotes = (data.notes || []) as Note[];
                 const noteMap = new Map<string, Note>();
                 existingNotes.forEach(n => noteMap.set(n.id, n));
                 incomingNotes.forEach(n => noteMap.set(n.id, n));
 
-                // Merge markups by ID
                 const incomingMarkups = (data.markups || []) as MarkupObject[];
                 const markupMap = new Map<string, MarkupObject>();
                 existingMarkups.forEach(m => markupMap.set(m.id, m));
                 incomingMarkups.forEach(m => markupMap.set(m.id, m));
 
-                const mergedNotes = Array.from(noteMap.values());
-                const mergedMarkups = Array.from(markupMap.values());
-
                 await chrome.storage.local.set({
-                    [STORAGE_KEY]: mergedNotes,
-                    [MARKUP_STORAGE_KEY]: mergedMarkups
+                    [STORAGE_KEY]: Array.from(noteMap.values()),
+                    [MARKUP_STORAGE_KEY]: Array.from(markupMap.values())
                 });
 
-                // Refresh state
-                const { currentUrl, isGlobalView, fetchNotesForUrl, fetchMarkupsForUrl, fetchAllNotes, fetchAllMarkups } = get();
-                if (isGlobalView) {
-                    await fetchAllNotes();
-                    await fetchAllMarkups();
-                } else if (currentUrl) {
+                if (!isContextValid()) return;
+                const { currentUrl, fetchNotesForUrl, fetchMarkupsForUrl } = get();
+                if (currentUrl) {
                     await fetchNotesForUrl(currentUrl);
                     await fetchMarkupsForUrl(currentUrl);
                 }
-                alert(`${incomingNotes.length}개의 메모와 ${incomingMarkups.length}개의 마크업을 성공적으로 가져왔습니다.`);
             } catch (error) {
                 console.error('Failed to import data:', error);
-                alert('데이터를 가져오는데 실패했습니다: ' + (error instanceof Error ? error.message : '알 수 없는 오류'));
             }
         },
     };
