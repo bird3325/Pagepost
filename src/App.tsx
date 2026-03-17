@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNoteStore } from './store/useNoteStore';
-import { StickyNote, Search, Settings, ExternalLink, Trash2, MapPin, X, ChevronLeft, AlertTriangle, Eye, EyeOff, Clock, Play, CheckCircle2, Keyboard } from 'lucide-react';
+import { StickyNote, Search, Settings, ExternalLink, Trash2, MapPin, X, ChevronLeft, AlertTriangle, Eye, EyeOff, Clock, Play, CheckCircle2, Keyboard, Folder, FolderPlus } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 
 const App: React.FC = () => {
@@ -23,7 +23,8 @@ const PopupView: React.FC = () => {
   const {
     notes, fetchAllNotes, deleteNote, deleteAllNotes, updateNote,
     searchQuery, setSearchQuery,
-    settings, updateSettings, loadSettings
+    settings, updateSettings, loadSettings,
+    projects, currentProjectId, setCurrentProjectId, fetchAllProjects, addProject
   } = useNoteStore();
 
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
@@ -31,8 +32,9 @@ const PopupView: React.FC = () => {
 
   useEffect(() => {
     loadSettings();
+    fetchAllProjects();
     fetchAllNotes();
-  }, [fetchAllNotes, loadSettings]);
+  }, [fetchAllNotes, loadSettings, fetchAllProjects]);
 
   useEffect(() => {
     fetchAllNotes();
@@ -99,6 +101,46 @@ const PopupView: React.FC = () => {
             className="text-gray-400 hover:text-gray-600"
           >
             <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* Project Selector Bar */}
+      {!isSettingsOpen && (
+        <div className="px-4 py-2 bg-white border-b border-gray-100 flex items-center gap-2 overflow-x-auto no-scrollbar scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          <button
+            onClick={() => setCurrentProjectId(null)}
+            className={`flex-shrink-0 px-2.5 py-1 rounded text-[10px] font-bold transition-all ${!currentProjectId ? 'bg-brand-primary text-gray-900 shadow-sm' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
+          >
+            전체
+          </button>
+          {projects.map(project => (
+            <button
+              key={project.id}
+              onClick={() => setCurrentProjectId(project.id)}
+              className={`flex-shrink-0 px-2.5 py-1 rounded text-[10px] font-bold transition-all flex items-center gap-1.5 ${currentProjectId === project.id ? 'bg-brand-primary text-gray-900 shadow-sm' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
+            >
+              <Folder size={10} />
+              {project.name}
+            </button>
+          ))}
+          <button
+            onClick={() => {
+              const name = prompt('새 프로젝트 이름을 입력하세요 (예: 2026 이사 준비):');
+              if (name && name.trim()) {
+                const newProject = {
+                  id: crypto.randomUUID(),
+                  name: name.trim(),
+                  createdAt: Date.now(),
+                  updatedAt: Date.now()
+                };
+                addProject(newProject);
+              }
+            }}
+            className="flex-shrink-0 p-1 rounded bg-gray-50 text-gray-400 hover:text-brand-primary hover:bg-brand-primary/10 transition-all ml-1"
+            title="새 프로젝트 추가"
+          >
+            <FolderPlus size={14} />
           </button>
         </div>
       )}
@@ -271,7 +313,7 @@ const PopupView: React.FC = () => {
       <div className="p-3 border-t border-gray-200 bg-white flex justify-center">
         <button
           onClick={() => window.open('index.html', '_blank')}
-          className="text-xs text-gray-500 hover:text-brand-accent transition-colors"
+          className="text-xs text-gray-500 hover:text-brand-primary transition-colors"
         >
           대시보드 전체보기
         </button>

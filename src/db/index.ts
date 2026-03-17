@@ -2,6 +2,7 @@ export interface Note {
     id: string;          // UUID v4
     url: string;         // 페이지 전체 URL
     domain: string;      // 도메인 (필터용)
+    projectId?: string;   // 소속 프로젝트 ID
 
     anchor: {
         dom: {
@@ -53,6 +54,7 @@ export interface MarkupObject {
     id: string;
     url: string;         // Normalized URL
     type: MarkupType;
+    projectId?: string;   // 소속 프로젝트 ID
 
     // For 'pen' and 'highlight', we store points. 
     // For others, we might store bounds or start/end points.
@@ -76,6 +78,15 @@ export interface MarkupObject {
     content?: string;     // For 'text' type
     linkedNoteId?: string; // Optional link to a Note
 
+    createdAt: number;
+    updatedAt: number;
+}
+
+export interface Project {
+    id: string;
+    name: string;
+    description?: string;
+    color?: string;
     createdAt: number;
     updatedAt: number;
 }

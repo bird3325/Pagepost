@@ -752,6 +752,10 @@
     max-height: 70vh;
   }
 
+  .max-h-\[400px\] {
+    max-height: 400px;
+  }
+
   .max-h-\[500px\] {
     max-height: 500px;
   }
@@ -810,6 +814,10 @@
 
   .w-40 {
     width: calc(var(--spacing) * 40);
+  }
+
+  .w-44 {
+    width: calc(var(--spacing) * 44);
   }
 
   .w-48 {
@@ -1128,6 +1136,10 @@
 
   .overflow-visible {
     overflow: visible;
+  }
+
+  .overflow-x-auto {
+    overflow-x: auto;
   }
 
   .overflow-y-auto {
@@ -1536,6 +1548,10 @@
     }
   }
 
+  .bg-slate-100 {
+    background-color: var(--color-slate-100);
+  }
+
   .bg-transparent {
     background-color: #0000;
   }
@@ -1561,6 +1577,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .bg-white\/10 {
       background-color: color-mix(in oklab, var(--color-white) 10%, transparent);
+    }
+  }
+
+  .bg-white\/20 {
+    background-color: #fff3;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-white\/20 {
+      background-color: color-mix(in oklab, var(--color-white) 20%, transparent);
     }
   }
 
@@ -1927,6 +1953,10 @@
     color: var(--color-emerald-600);
   }
 
+  .text-gray-200 {
+    color: var(--color-gray-200);
+  }
+
   .text-gray-300 {
     color: var(--color-gray-300);
   }
@@ -2125,6 +2155,16 @@
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 
+  .shadow-brand-primary\/20 {
+    --tw-shadow-color: #ffd54f33;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .shadow-brand-primary\/20 {
+      --tw-shadow-color: color-mix(in oklab, color-mix(in oklab, var(--color-brand-primary) 20%, transparent) var(--tw-shadow-alpha), transparent);
+    }
+  }
+
   .ring-brand-primary {
     --tw-ring-color: var(--color-brand-primary);
   }
@@ -2309,8 +2349,22 @@
       background-color: var(--color-brand-primary);
     }
 
+    .hover\:bg-brand-primary\/10:hover {
+      background-color: #ffd54f1a;
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:bg-brand-primary\/10:hover {
+        background-color: color-mix(in oklab, var(--color-brand-primary) 10%, transparent);
+      }
+    }
+
     .hover\:bg-gray-100:hover {
       background-color: var(--color-gray-100);
+    }
+
+    .hover\:bg-gray-200:hover {
+      background-color: var(--color-gray-200);
     }
 
     .hover\:bg-gray-700:hover {
@@ -2341,6 +2395,10 @@
 
     .hover\:bg-slate-100:hover {
       background-color: var(--color-slate-100);
+    }
+
+    .hover\:bg-white:hover {
+      background-color: var(--color-white);
     }
 
     .hover\:bg-white\/5:hover {

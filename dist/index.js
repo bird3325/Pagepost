@@ -12540,6 +12540,8 @@ const normalizeUrl = (url) => {
 const STORAGE_KEY = "pagepost_notes";
 const MARKUP_STORAGE_KEY = "pagepost_markups";
 const SETTINGS_KEY = "pagepost_settings";
+const PROJECTS_KEY = "pagepost_projects";
+const CURRENT_PROJECT_KEY = "pagepost_current_project";
 const isContextValid = () => {
   try {
     return typeof chrome !== "undefined" && !!chrome.runtime && !!chrome.runtime.id;
@@ -12571,6 +12573,15 @@ const useNoteStore = create((set, get) => {
                 settings: { ...state.settings, ...newValue }
               }));
             }
+          }
+          if (changes[PROJECTS_KEY]) {
+            set({ projects: changes[PROJECTS_KEY].newValue || [] });
+          }
+          if (changes[CURRENT_PROJECT_KEY]) {
+            const { isGlobalView, fetchAllNotes, fetchNotesForUrl, currentUrl } = get();
+            set({ currentProjectId: changes[CURRENT_PROJECT_KEY].newValue || null });
+            if (isGlobalView) fetchAllNotes();
+            else if (currentUrl) fetchNotesForUrl(currentUrl);
           }
           if (changes["pagepost_mode"]) {
             const newValue = changes["pagepost_mode"].newValue;
@@ -12620,6 +12631,8 @@ const useNoteStore = create((set, get) => {
       isCleanView: false
     },
     markups: [],
+    projects: [],
+    currentProjectId: null,
     markupFetchRequestId: 0,
     loadSettings: async () => {
       if (!isContextValid()) return;
@@ -12646,6 +12659,15 @@ const useNoteStore = create((set, get) => {
       } catch (error) {
         console.error("Failed to update settings:", error);
       }
+    },
+    setCurrentProjectId: (id) => {
+      set({ currentProjectId: id });
+      if (isContextValid()) {
+        chrome.storage.local.set({ [CURRENT_PROJECT_KEY]: id });
+      }
+      const { isGlobalView, fetchAllNotes, fetchNotesForUrl, currentUrl } = get();
+      if (isGlobalView) fetchAllNotes();
+      else if (currentUrl) fetchNotesForUrl(currentUrl);
     },
     setSearchQuery: (query) => set({ searchQuery: query }),
     setMode: async (mode) => {
@@ -12688,7 +12710,11 @@ const useNoteStore = create((set, get) => {
         const result = await chrome.storage.local.get(STORAGE_KEY);
         if (!isContextValid()) return;
         let allNotes = result[STORAGE_KEY] || [];
-        const query = get().searchQuery.toLowerCase();
+        const { currentProjectId, searchQuery } = get();
+        if (currentProjectId) {
+          allNotes = allNotes.filter((n) => n.projectId === currentProjectId);
+        }
+        const query = searchQuery.toLowerCase();
         if (query) {
           allNotes = allNotes.filter(
             (n) => n.content.toLowerCase().includes(query) || n.domain.toLowerCase().includes(query) || n.tags.some((t) => t.toLowerCase().includes(query))
@@ -12741,8 +12767,12 @@ const useNoteStore = create((set, get) => {
         const result = await chrome.storage.local.get(STORAGE_KEY);
         if (!isContextValid() || get().fetchRequestId !== nextId) return;
         let allNotes = result[STORAGE_KEY] || [];
-        const filteredNotes = allNotes.filter((n) => normalizeUrl(n.url) === normalizedUrl);
-        const query = get().searchQuery.toLowerCase();
+        let filteredNotes = allNotes.filter((n) => normalizeUrl(n.url) === normalizedUrl);
+        const { currentProjectId, searchQuery } = get();
+        if (currentProjectId) {
+          filteredNotes = filteredNotes.filter((n) => n.projectId === currentProjectId);
+        }
+        const query = searchQuery.toLowerCase();
         const processedNotes = query ? filteredNotes.filter((n) => n.content.toLowerCase().includes(query)) : filteredNotes;
         set({ notes: processedNotes, isLoading: false });
       } catch (error) {
@@ -12763,6 +12793,7 @@ const useNoteStore = create((set, get) => {
         const noteWithTags = {
           ...note,
           url: normalizedUrl,
+          projectId: note.projectId || get().currentProjectId || void 0,
           tags: [.../* @__PURE__ */ new Set([...note.tags, ...tags])]
         };
         const updatedAllNotes = [...allNotes, noteWithTags];
@@ -12851,7 +12882,11 @@ const useNoteStore = create((set, get) => {
       if (!isContextValid()) return;
       try {
         const normalizedUrl = normalizeUrl(markup.url);
-        const markupWithUrl = { ...markup, url: normalizedUrl };
+        const markupWithUrl = {
+          ...markup,
+          url: normalizedUrl,
+          projectId: markup.projectId || get().currentProjectId || void 0
+        };
         const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
         if (!isContextValid()) return;
         const allMarkups = result[MARKUP_STORAGE_KEY] || [];
@@ -12998,6 +13033,67 @@ const useNoteStore = create((set, get) => {
       } catch (error) {
         console.error("Failed to import data:", error);
       }
+    },
+    fetchAllProjects: async () => {
+      if (!isContextValid()) return;
+      try {
+        const result = await chrome.storage.local.get([PROJECTS_KEY, CURRENT_PROJECT_KEY]);
+        if (!isContextValid()) return;
+        const projects = result[PROJECTS_KEY] || [];
+        const currentProjectId = result[CURRENT_PROJECT_KEY] || null;
+        set({ projects, currentProjectId });
+      } catch (error) {
+        console.error("Failed to fetch projects:", error);
+      }
+    },
+    addProject: async (project) => {
+      if (!isContextValid()) return;
+      try {
+        const result = await chrome.storage.local.get(PROJECTS_KEY);
+        if (!isContextValid()) return;
+        const existingProjects = result[PROJECTS_KEY] || [];
+        const updatedProjects = [...existingProjects, project];
+        await chrome.storage.local.set({ [PROJECTS_KEY]: updatedProjects });
+        if (!isContextValid()) return;
+        set({ projects: updatedProjects });
+      } catch (error) {
+        console.error("Failed to add project:", error);
+      }
+    },
+    updateProject: async (id, updates) => {
+      if (!isContextValid()) return;
+      try {
+        const result = await chrome.storage.local.get(PROJECTS_KEY);
+        if (!isContextValid()) return;
+        const projects = result[PROJECTS_KEY] || [];
+        const updatedProjects = projects.map((p) => p.id === id ? { ...p, ...updates, updatedAt: Date.now() } : p);
+        await chrome.storage.local.set({ [PROJECTS_KEY]: updatedProjects });
+        if (!isContextValid()) return;
+        set({ projects: updatedProjects });
+      } catch (error) {
+        console.error("Failed to update project:", error);
+      }
+    },
+    deleteProject: async (id) => {
+      if (!isContextValid()) return;
+      try {
+        const result = await chrome.storage.local.get(PROJECTS_KEY);
+        if (!isContextValid()) return;
+        const projects = result[PROJECTS_KEY] || [];
+        const updatedProjects = projects.filter((p) => p.id !== id);
+        await chrome.storage.local.set({ [PROJECTS_KEY]: updatedProjects });
+        if (!isContextValid()) return;
+        const currentId = get().currentProjectId;
+        set({
+          projects: updatedProjects,
+          currentProjectId: currentId === id ? null : currentId
+        });
+        if (currentId === id) {
+          await chrome.storage.local.set({ [CURRENT_PROJECT_KEY]: null });
+        }
+      } catch (error) {
+        console.error("Failed to delete project:", error);
+      }
     }
   };
 });
@@ -13077,52 +13173,52 @@ const createLucideIcon = (iconName, iconNode) => {
   Component.displayName = toPascalCase(iconName);
   return Component;
 };
-const __iconNode$q = [
+const __iconNode$t = [
   ["path", { d: "M8 2v4", key: "1cmpym" }],
   ["path", { d: "M16 2v4", key: "4m81vk" }],
   ["rect", { width: "18", height: "18", x: "3", y: "4", rx: "2", key: "1hopcy" }],
   ["path", { d: "M3 10h18", key: "8toen8" }]
 ];
-const Calendar = createLucideIcon("calendar", __iconNode$q);
-const __iconNode$p = [
+const Calendar = createLucideIcon("calendar", __iconNode$t);
+const __iconNode$s = [
   ["path", { d: "M3 3v16a2 2 0 0 0 2 2h16", key: "c24i48" }],
   ["path", { d: "M18 17V9", key: "2bz60n" }],
   ["path", { d: "M13 17V5", key: "1frdt8" }],
   ["path", { d: "M8 17v-3", key: "17ska0" }]
 ];
-const ChartColumn = createLucideIcon("chart-column", __iconNode$p);
-const __iconNode$o = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
-const ChevronLeft = createLucideIcon("chevron-left", __iconNode$o);
-const __iconNode$n = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
-const ChevronRight = createLucideIcon("chevron-right", __iconNode$n);
-const __iconNode$m = [
+const ChartColumn = createLucideIcon("chart-column", __iconNode$s);
+const __iconNode$r = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
+const ChevronLeft = createLucideIcon("chevron-left", __iconNode$r);
+const __iconNode$q = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
+const ChevronRight = createLucideIcon("chevron-right", __iconNode$q);
+const __iconNode$p = [
   ["path", { d: "M21.801 10A10 10 0 1 1 17 3.335", key: "yps3ct" }],
   ["path", { d: "m9 11 3 3L22 4", key: "1pflzl" }]
 ];
-const CircleCheckBig = createLucideIcon("circle-check-big", __iconNode$m);
-const __iconNode$l = [
+const CircleCheckBig = createLucideIcon("circle-check-big", __iconNode$p);
+const __iconNode$o = [
   ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
   ["path", { d: "m9 12 2 2 4-4", key: "dzmm74" }]
 ];
-const CircleCheck = createLucideIcon("circle-check", __iconNode$l);
-const __iconNode$k = [
+const CircleCheck = createLucideIcon("circle-check", __iconNode$o);
+const __iconNode$n = [
   ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
   ["path", { d: "M12 6v6l4 2", key: "mmk7yg" }]
 ];
-const Clock = createLucideIcon("clock", __iconNode$k);
-const __iconNode$j = [
+const Clock = createLucideIcon("clock", __iconNode$n);
+const __iconNode$m = [
   ["path", { d: "M12 15V3", key: "m9g1x1" }],
   ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", key: "ih7n3h" }],
   ["path", { d: "m7 10 5 5 5-5", key: "brsn70" }]
 ];
-const Download = createLucideIcon("download", __iconNode$j);
-const __iconNode$i = [
+const Download = createLucideIcon("download", __iconNode$m);
+const __iconNode$l = [
   ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
   ["path", { d: "M10 14 21 3", key: "gplh6r" }],
   ["path", { d: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6", key: "a6xqqp" }]
 ];
-const ExternalLink = createLucideIcon("external-link", __iconNode$i);
-const __iconNode$h = [
+const ExternalLink = createLucideIcon("external-link", __iconNode$l);
+const __iconNode$k = [
   [
     "path",
     {
@@ -13140,8 +13236,8 @@ const __iconNode$h = [
   ],
   ["path", { d: "m2 2 20 20", key: "1ooewy" }]
 ];
-const EyeOff = createLucideIcon("eye-off", __iconNode$h);
-const __iconNode$g = [
+const EyeOff = createLucideIcon("eye-off", __iconNode$k);
+const __iconNode$j = [
   [
     "path",
     {
@@ -13151,8 +13247,30 @@ const __iconNode$g = [
   ],
   ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
 ];
-const Eye = createLucideIcon("eye", __iconNode$g);
-const __iconNode$f = [
+const Eye = createLucideIcon("eye", __iconNode$j);
+const __iconNode$i = [
+  ["path", { d: "M12 10v6", key: "1bos4e" }],
+  ["path", { d: "M9 13h6", key: "1uhe8q" }],
+  [
+    "path",
+    {
+      d: "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z",
+      key: "1kt360"
+    }
+  ]
+];
+const FolderPlus = createLucideIcon("folder-plus", __iconNode$i);
+const __iconNode$h = [
+  [
+    "path",
+    {
+      d: "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z",
+      key: "1kt360"
+    }
+  ]
+];
+const Folder = createLucideIcon("folder", __iconNode$h);
+const __iconNode$g = [
   [
     "path",
     {
@@ -13161,14 +13279,14 @@ const __iconNode$f = [
     }
   ]
 ];
-const Funnel = createLucideIcon("funnel", __iconNode$f);
-const __iconNode$e = [
+const Funnel = createLucideIcon("funnel", __iconNode$g);
+const __iconNode$f = [
   ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
   ["path", { d: "M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20", key: "13o1zl" }],
   ["path", { d: "M2 12h20", key: "9i4pu4" }]
 ];
-const Globe = createLucideIcon("globe", __iconNode$e);
-const __iconNode$d = [
+const Globe = createLucideIcon("globe", __iconNode$f);
+const __iconNode$e = [
   ["path", { d: "M10 8h.01", key: "1r9ogq" }],
   ["path", { d: "M12 12h.01", key: "1mp3jc" }],
   ["path", { d: "M14 8h.01", key: "1primd" }],
@@ -13179,8 +13297,8 @@ const __iconNode$d = [
   ["path", { d: "M8 12h.01", key: "czm47f" }],
   ["rect", { width: "20", height: "16", x: "2", y: "4", rx: "2", key: "18n3k1" }]
 ];
-const Keyboard = createLucideIcon("keyboard", __iconNode$d);
-const __iconNode$c = [
+const Keyboard = createLucideIcon("keyboard", __iconNode$e);
+const __iconNode$d = [
   [
     "path",
     {
@@ -13190,7 +13308,13 @@ const __iconNode$c = [
   ],
   ["circle", { cx: "12", cy: "10", r: "3", key: "ilqhr7" }]
 ];
-const MapPin = createLucideIcon("map-pin", __iconNode$c);
+const MapPin = createLucideIcon("map-pin", __iconNode$d);
+const __iconNode$c = [
+  ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", key: "afitv7" }],
+  ["path", { d: "M3 9h18", key: "1pudct" }],
+  ["path", { d: "M9 21V9", key: "1oto5p" }]
+];
+const PanelsTopLeft = createLucideIcon("panels-top-left", __iconNode$c);
 const __iconNode$b = [
   [
     "path",
@@ -13313,15 +13437,22 @@ const Dashboard = () => {
     stats,
     settings,
     exportData,
-    importData
+    importData,
+    projects,
+    currentProjectId,
+    setCurrentProjectId,
+    fetchAllProjects,
+    addProject,
+    deleteProject
   } = useNoteStore();
   const [selectedDomain, setSelectedDomain] = React.useState(null);
   const [statusFilter, setStatusFilter] = React.useState(null);
   const fileInputRef = React.useRef(null);
   reactExports.useEffect(() => {
+    fetchAllProjects();
     fetchAllNotes();
     fetchAllMarkups();
-  }, [fetchAllNotes, fetchAllMarkups]);
+  }, [fetchAllProjects, fetchAllNotes, fetchAllMarkups]);
   const notesByDomain = reactExports.useMemo(() => {
     const groups = {};
     notes.forEach((note) => {
@@ -13463,11 +13594,81 @@ const Dashboard = () => {
           )) })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wider", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Folder, { size: 16 }),
+              " 프로젝트"
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: () => {
+                  const name = prompt("새 프로젝트 이름을 입력하세요:");
+                  if (name && name.trim()) {
+                    addProject({
+                      id: crypto.randomUUID(),
+                      name: name.trim(),
+                      createdAt: Date.now(),
+                      updatedAt: Date.now()
+                    });
+                  }
+                },
+                className: "p-1 hover:bg-white rounded-lg text-slate-400 hover:text-brand-primary transition-colors",
+                title: "새 프로젝트 추가",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(FolderPlus, { size: 16 })
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-2 space-y-1", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                onClick: () => setCurrentProjectId(null),
+                className: `w-full px-3 py-2 rounded-lg text-left text-sm font-bold flex items-center justify-between transition-colors ${!currentProjectId ? "bg-brand-primary text-white" : "text-slate-600 hover:bg-slate-50"}`,
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(PanelsTopLeft, { size: 16 }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "모든 프로젝트" })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-[10px] px-1.5 py-0.5 rounded-full ${!currentProjectId ? "bg-white/20 text-white" : "bg-slate-100 text-slate-400"}`, children: stats.totalNotes })
+                ]
+              }
+            ),
+            projects.map((project) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                onClick: () => setCurrentProjectId(project.id),
+                className: `w-full px-3 py-2 rounded-lg text-left text-sm font-bold flex items-center justify-between group transition-colors ${currentProjectId === project.id ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20" : "text-slate-600 hover:bg-slate-50"}`,
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 truncate", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(Folder, { size: 16, className: currentProjectId === project.id ? "text-white" : "text-slate-400" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate", children: project.name })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center gap-2", children: currentProjectId !== project.id && /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "button",
+                    {
+                      onClick: (e) => {
+                        e.stopPropagation();
+                        if (confirm(`'${project.name}' 프로젝트를 삭제하시겠습니까?`)) {
+                          deleteProject(project.id);
+                        }
+                      },
+                      className: "opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 text-slate-300 hover:text-red-500 rounded transition-all",
+                      children: /* @__PURE__ */ jsxRuntimeExports.jsx(Trash2, { size: 12 })
+                    }
+                  ) })
+                ]
+              },
+              project.id
+            ))
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wider", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(Funnel, { size: 16 }),
             " 사이트 리스트"
           ] }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "divide-y divide-slate-50 max-h-[500px] overflow-y-auto font-sans", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "divide-y divide-slate-50 max-h-[400px] overflow-y-auto font-sans", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs(
               "button",
               {
@@ -13592,14 +13793,20 @@ const PopupView = () => {
     setSearchQuery,
     settings,
     updateSettings,
-    loadSettings
+    loadSettings,
+    projects,
+    currentProjectId,
+    setCurrentProjectId,
+    fetchAllProjects,
+    addProject
   } = useNoteStore();
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
   reactExports.useEffect(() => {
     loadSettings();
+    fetchAllProjects();
     fetchAllNotes();
-  }, [fetchAllNotes, loadSettings]);
+  }, [fetchAllNotes, loadSettings, fetchAllProjects]);
   reactExports.useEffect(() => {
     fetchAllNotes();
   }, [searchQuery, fetchAllNotes]);
@@ -13661,6 +13868,48 @@ const PopupView = () => {
               },
               className: "text-gray-400 hover:text-gray-600",
               children: /* @__PURE__ */ jsxRuntimeExports.jsx(X, { size: 16 })
+            }
+          )
+        ] }),
+        !isSettingsOpen && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-4 py-2 bg-white border-b border-gray-100 flex items-center gap-2 overflow-x-auto no-scrollbar scrollbar-hide", style: { scrollbarWidth: "none", msOverflowStyle: "none" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: () => setCurrentProjectId(null),
+              className: `flex-shrink-0 px-2.5 py-1 rounded text-[10px] font-bold transition-all ${!currentProjectId ? "bg-brand-primary text-gray-900 shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-gray-200"}`,
+              children: "전체"
+            }
+          ),
+          projects.map((project) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              onClick: () => setCurrentProjectId(project.id),
+              className: `flex-shrink-0 px-2.5 py-1 rounded text-[10px] font-bold transition-all flex items-center gap-1.5 ${currentProjectId === project.id ? "bg-brand-primary text-gray-900 shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-gray-200"}`,
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Folder, { size: 10 }),
+                project.name
+              ]
+            },
+            project.id
+          )),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: () => {
+                const name = prompt("새 프로젝트 이름을 입력하세요 (예: 2026 이사 준비):");
+                if (name && name.trim()) {
+                  const newProject = {
+                    id: crypto.randomUUID(),
+                    name: name.trim(),
+                    createdAt: Date.now(),
+                    updatedAt: Date.now()
+                  };
+                  addProject(newProject);
+                }
+              },
+              className: "flex-shrink-0 p-1 rounded bg-gray-50 text-gray-400 hover:text-brand-primary hover:bg-brand-primary/10 transition-all ml-1",
+              title: "새 프로젝트 추가",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx(FolderPlus, { size: 14 })
             }
           )
         ] }),
@@ -13821,7 +14070,7 @@ const PopupView = () => {
           "button",
           {
             onClick: () => window.open("index.html", "_blank"),
-            className: "text-xs text-gray-500 hover:text-brand-accent transition-colors",
+            className: "text-xs text-gray-500 hover:text-brand-primary transition-colors",
             children: "대시보드 전체보기"
           }
         ) })

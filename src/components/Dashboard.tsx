@@ -18,7 +18,10 @@ import {
     User,
     Play,
     Clock,
-    CheckCircle
+    CheckCircle,
+    Folder,
+    FolderPlus,
+    Layout
 } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
@@ -32,7 +35,13 @@ const Dashboard: React.FC = () => {
         stats,
         settings,
         exportData,
-        importData
+        importData,
+        projects,
+        currentProjectId,
+        setCurrentProjectId,
+        fetchAllProjects,
+        addProject,
+        deleteProject
     } = useNoteStore();
 
     const [selectedDomain, setSelectedDomain] = React.useState<string | null>(null);
@@ -40,9 +49,10 @@ const Dashboard: React.FC = () => {
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     useEffect(() => {
+        fetchAllProjects();
         fetchAllNotes();
         fetchAllMarkups();
-    }, [fetchAllNotes, fetchAllMarkups]);
+    }, [fetchAllProjects, fetchAllNotes, fetchAllMarkups]);
 
     // Group notes by domain
     const notesByDomain = useMemo(() => {
@@ -190,13 +200,80 @@ const Dashboard: React.FC = () => {
                             </div>
                         </div>
 
+                        {/* Project Management Sidebar Section */}
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                            <div className="p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between">
+                                <h3 className="font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wider">
+                                    <Folder size={16} /> 프로젝트
+                                </h3>
+                                <button
+                                    onClick={() => {
+                                        const name = prompt('새 프로젝트 이름을 입력하세요:');
+                                        if (name && name.trim()) {
+                                            addProject({
+                                                id: crypto.randomUUID(),
+                                                name: name.trim(),
+                                                createdAt: Date.now(),
+                                                updatedAt: Date.now()
+                                            });
+                                        }
+                                    }}
+                                    className="p-1 hover:bg-white rounded-lg text-slate-400 hover:text-brand-primary transition-colors"
+                                    title="새 프로젝트 추가"
+                                >
+                                    <FolderPlus size={16} />
+                                </button>
+                            </div>
+                            <div className="p-2 space-y-1">
+                                <button
+                                    onClick={() => setCurrentProjectId(null)}
+                                    className={`w-full px-3 py-2 rounded-lg text-left text-sm font-bold flex items-center justify-between transition-colors ${!currentProjectId ? 'bg-brand-primary text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <Layout size={16} />
+                                        <span>모든 프로젝트</span>
+                                    </div>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${!currentProjectId ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                        {stats.totalNotes}
+                                    </span>
+                                </button>
+                                {projects.map(project => (
+                                    <button
+                                        key={project.id}
+                                        onClick={() => setCurrentProjectId(project.id)}
+                                        className={`w-full px-3 py-2 rounded-lg text-left text-sm font-bold flex items-center justify-between group transition-colors ${currentProjectId === project.id ? 'bg-brand-primary text-white shadow-md shadow-brand-primary/20' : 'text-slate-600 hover:bg-slate-50'}`}
+                                    >
+                                        <div className="flex items-center gap-3 truncate">
+                                            <Folder size={16} className={currentProjectId === project.id ? 'text-white' : 'text-slate-400'} />
+                                            <span className="truncate">{project.name}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {currentProjectId !== project.id && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (confirm(`'${project.name}' 프로젝트를 삭제하시겠습니까?`)) {
+                                                            deleteProject(project.id);
+                                                        }
+                                                    }}
+                                                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 text-slate-300 hover:text-red-500 rounded transition-all"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
                         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                             <div className="p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between">
                                 <h3 className="font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wider">
                                     <Filter size={16} /> 사이트 리스트
                                 </h3>
                             </div>
-                            <div className="divide-y divide-slate-50 max-h-[500px] overflow-y-auto font-sans">
+                            <div className="divide-y divide-slate-50 max-h-[400px] overflow-y-auto font-sans">
                                 <button
                                     onClick={() => setSelectedDomain(null)}
                                     className={`w-full px-4 py-3.5 text-left hover:bg-slate-50 transition-colors flex items-center justify-between group ${!selectedDomain ? 'bg-brand-primary/5 border-l-4 border-brand-primary' : ''}`}
@@ -248,8 +325,8 @@ const Dashboard: React.FC = () => {
                                                     <span className="text-xs font-bold text-brand-primary truncate uppercase tracking-wide">{note.domain}</span>
                                                     {note.status && (
                                                         <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase ${note.status === 'done' ? 'bg-emerald-100 text-emerald-600' :
-                                                                note.status === 'in-progress' ? 'bg-blue-100 text-blue-600' :
-                                                                    'bg-amber-100 text-amber-600'
+                                                            note.status === 'in-progress' ? 'bg-blue-100 text-blue-600' :
+                                                                'bg-amber-100 text-amber-600'
                                                             }`}>
                                                             {note.status}
                                                         </span>

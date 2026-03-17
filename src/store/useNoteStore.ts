@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { type Note, type MarkupObject, type MarkupType } from '../db';
+import { type Note, type MarkupObject, type MarkupType, type Project } from '../db';
 import { normalizeUrl } from '../utils/url';
 
 interface NoteState {
@@ -26,6 +26,8 @@ interface NoteState {
         isCleanView: boolean;
     };
     markups: MarkupObject[];
+    projects: Project[];
+    currentProjectId: string | null;
     fetchRequestId: number;
     markupFetchRequestId: number;
 
@@ -63,6 +65,13 @@ interface NoteState {
     redoMarkup: () => Promise<void>;
     clearAllMarkups: () => Promise<void>;
 
+    // Project Actions
+    fetchAllProjects: () => Promise<void>;
+    addProject: (project: Project) => Promise<void>;
+    updateProject: (id: string, updates: Partial<Project>) => Promise<void>;
+    deleteProject: (id: string) => Promise<void>;
+    setCurrentProjectId: (id: string | null) => void;
+
     // Data Management
     exportData: (domain?: string) => Promise<void>;
     importData: (jsonData: string) => Promise<void>;
@@ -71,6 +80,8 @@ interface NoteState {
 const STORAGE_KEY = 'pagepost_notes';
 const MARKUP_STORAGE_KEY = 'pagepost_markups';
 const SETTINGS_KEY = 'pagepost_settings';
+const PROJECTS_KEY = 'pagepost_projects';
+const CURRENT_PROJECT_KEY = 'pagepost_current_project';
 
 const isContextValid = () => {
     try {
@@ -107,6 +118,15 @@ export const useNoteStore = create<NoteState>((set, get) => {
                                 settings: { ...state.settings, ...newValue }
                             }));
                         }
+                    }
+                    if (changes[PROJECTS_KEY]) {
+                        set({ projects: (changes[PROJECTS_KEY].newValue || []) as Project[] });
+                    }
+                    if (changes[CURRENT_PROJECT_KEY]) {
+                        const { isGlobalView, fetchAllNotes, fetchNotesForUrl, currentUrl } = get();
+                        set({ currentProjectId: (changes[CURRENT_PROJECT_KEY].newValue as string | null) || null });
+                        if (isGlobalView) fetchAllNotes();
+                        else if (currentUrl) fetchNotesForUrl(currentUrl);
                     }
                     if (changes['pagepost_mode']) {
                         const newValue = changes['pagepost_mode'].newValue;
@@ -160,6 +180,8 @@ export const useNoteStore = create<NoteState>((set, get) => {
             isCleanView: false
         },
         markups: [],
+        projects: [],
+        currentProjectId: null,
         markupFetchRequestId: 0,
 
         loadSettings: async () => {
@@ -188,6 +210,17 @@ export const useNoteStore = create<NoteState>((set, get) => {
             } catch (error) {
                 console.error('Failed to update settings:', error);
             }
+        },
+
+        setCurrentProjectId: (id) => {
+            set({ currentProjectId: id });
+            if (isContextValid()) {
+                chrome.storage.local.set({ [CURRENT_PROJECT_KEY]: id });
+            }
+            // Trigger refresh
+            const { isGlobalView, fetchAllNotes, fetchNotesForUrl, currentUrl } = get();
+            if (isGlobalView) fetchAllNotes();
+            else if (currentUrl) fetchNotesForUrl(currentUrl);
         },
 
         setSearchQuery: (query: string) => set({ searchQuery: query }),
@@ -237,8 +270,14 @@ export const useNoteStore = create<NoteState>((set, get) => {
                 if (!isContextValid()) return;
                 let allNotes = (result[STORAGE_KEY] || []) as Note[];
 
+                // Filter by project if currentProjectId is set
+                const { currentProjectId, searchQuery } = get();
+                if (currentProjectId) {
+                    allNotes = allNotes.filter(n => n.projectId === currentProjectId);
+                }
+
                 // Filter by search query if exists
-                const query = get().searchQuery.toLowerCase();
+                const query = searchQuery.toLowerCase();
                 if (query) {
                     allNotes = allNotes.filter(n =>
                         n.content.toLowerCase().includes(query) ||
@@ -309,9 +348,15 @@ export const useNoteStore = create<NoteState>((set, get) => {
                 if (!isContextValid() || get().fetchRequestId !== nextId) return;
 
                 let allNotes = (result[STORAGE_KEY] || []) as Note[];
-                const filteredNotes = allNotes.filter(n => normalizeUrl(n.url) === normalizedUrl);
+                let filteredNotes = allNotes.filter(n => normalizeUrl(n.url) === normalizedUrl);
 
-                const query = get().searchQuery.toLowerCase();
+                // Filter by project if currentProjectId is set
+                const { currentProjectId, searchQuery } = get();
+                if (currentProjectId) {
+                    filteredNotes = filteredNotes.filter(n => n.projectId === currentProjectId);
+                }
+
+                const query = searchQuery.toLowerCase();
                 const processedNotes = query
                     ? filteredNotes.filter(n => n.content.toLowerCase().includes(query))
                     : filteredNotes;
@@ -334,9 +379,10 @@ export const useNoteStore = create<NoteState>((set, get) => {
 
                 const normalizedUrl = normalizeUrl(note.url);
                 const tags = note.content ? Array.from(note.content.matchAll(/#(\w+)/g)).map(m => m[1]) : [];
-                const noteWithTags = {
+                const noteWithTags: Note = {
                     ...note,
                     url: normalizedUrl,
+                    projectId: note.projectId || get().currentProjectId || undefined,
                     tags: [...new Set([...note.tags, ...tags])]
                 };
 
@@ -442,7 +488,11 @@ export const useNoteStore = create<NoteState>((set, get) => {
             if (!isContextValid()) return;
             try {
                 const normalizedUrl = normalizeUrl(markup.url);
-                const markupWithUrl = { ...markup, url: normalizedUrl };
+                const markupWithUrl: MarkupObject = {
+                    ...markup,
+                    url: normalizedUrl,
+                    projectId: markup.projectId || get().currentProjectId || undefined
+                };
 
                 const result = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
                 if (!isContextValid()) return;
@@ -618,6 +668,73 @@ export const useNoteStore = create<NoteState>((set, get) => {
                 }
             } catch (error) {
                 console.error('Failed to import data:', error);
+            }
+        },
+
+        fetchAllProjects: async () => {
+            if (!isContextValid()) return;
+            try {
+                const result = await chrome.storage.local.get([PROJECTS_KEY, CURRENT_PROJECT_KEY]);
+                if (!isContextValid()) return;
+                const projects = (result[PROJECTS_KEY] || []) as Project[];
+                const currentProjectId = (result[CURRENT_PROJECT_KEY] as string | null) || null;
+                set({ projects, currentProjectId });
+            } catch (error) {
+                console.error('Failed to fetch projects:', error);
+            }
+        },
+
+        addProject: async (project) => {
+            if (!isContextValid()) return;
+            try {
+                const result = await chrome.storage.local.get(PROJECTS_KEY);
+                if (!isContextValid()) return;
+                const existingProjects = (result[PROJECTS_KEY] || []) as Project[];
+                const updatedProjects = [...existingProjects, project];
+                await chrome.storage.local.set({ [PROJECTS_KEY]: updatedProjects });
+                if (!isContextValid()) return;
+                set({ projects: updatedProjects });
+            } catch (error) {
+                console.error('Failed to add project:', error);
+            }
+        },
+
+        updateProject: async (id, updates) => {
+            if (!isContextValid()) return;
+            try {
+                const result = await chrome.storage.local.get(PROJECTS_KEY);
+                if (!isContextValid()) return;
+                const projects = (result[PROJECTS_KEY] || []) as Project[];
+                const updatedProjects = projects.map(p => p.id === id ? { ...p, ...updates, updatedAt: Date.now() } : p);
+                await chrome.storage.local.set({ [PROJECTS_KEY]: updatedProjects });
+                if (!isContextValid()) return;
+                set({ projects: updatedProjects });
+            } catch (error) {
+                console.error('Failed to update project:', error);
+            }
+        },
+
+        deleteProject: async (id) => {
+            if (!isContextValid()) return;
+            try {
+                const result = await chrome.storage.local.get(PROJECTS_KEY);
+                if (!isContextValid()) return;
+                const projects = (result[PROJECTS_KEY] || []) as Project[];
+                const updatedProjects = projects.filter(p => p.id !== id);
+                await chrome.storage.local.set({ [PROJECTS_KEY]: updatedProjects });
+                if (!isContextValid()) return;
+
+                const currentId = get().currentProjectId;
+                set({
+                    projects: updatedProjects,
+                    currentProjectId: currentId === id ? null : currentId
+                });
+
+                if (currentId === id) {
+                    await chrome.storage.local.set({ [CURRENT_PROJECT_KEY]: null });
+                }
+            } catch (error) {
+                console.error('Failed to delete project:', error);
             }
         },
     };
