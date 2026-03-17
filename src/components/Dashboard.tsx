@@ -250,19 +250,18 @@ const Dashboard: React.FC = () => {
                                             <span className="truncate">{project.name}</span>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            {currentProjectId !== project.id && (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        if (confirm(`'${project.name}' 프로젝트를 삭제하시겠습니까?`)) {
-                                                            deleteProject(project.id);
-                                                        }
-                                                    }}
-                                                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 text-slate-300 hover:text-red-500 rounded transition-all"
-                                                >
-                                                    <Trash2 size={12} />
-                                                </button>
-                                            )}
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (confirm(`'${project.name}' 프로젝트를 삭제하시겠습니까?\n(속한 메모들은 삭제되지 않고 유지됩니다.)`)) {
+                                                        deleteProject(project.id);
+                                                    }
+                                                }}
+                                                className={`p-1 hover:bg-red-50 rounded transition-all ${currentProjectId === project.id ? 'opacity-100 bg-white/20 text-white' : 'opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500'}`}
+                                                title="프로젝트 삭제"
+                                            >
+                                                <Trash2 size={12} />
+                                            </button>
                                         </div>
                                     </button>
                                 ))}

@@ -13090,19 +13090,35 @@ const useNoteStore = create((set, get) => {
     deleteProject: async (id) => {
       if (!isContextValid()) return;
       try {
-        const result = await chrome.storage.local.get(PROJECTS_KEY);
+        const result = await chrome.storage.local.get([PROJECTS_KEY, STORAGE_KEY, MARKUP_STORAGE_KEY]);
         if (!isContextValid()) return;
         const projects = result[PROJECTS_KEY] || [];
+        const allNotes = result[STORAGE_KEY] || [];
+        const allMarkups = result[MARKUP_STORAGE_KEY] || [];
         const updatedProjects = projects.filter((p) => p.id !== id);
-        await chrome.storage.local.set({ [PROJECTS_KEY]: updatedProjects });
+        const updatedNotes = allNotes.map(
+          (note) => note.projectId === id ? { ...note, projectId: void 0 } : note
+        );
+        const updatedMarkups = allMarkups.map(
+          (markup) => markup.projectId === id ? { ...markup, projectId: void 0 } : markup
+        );
+        await chrome.storage.local.set({
+          [PROJECTS_KEY]: updatedProjects,
+          [STORAGE_KEY]: updatedNotes,
+          [MARKUP_STORAGE_KEY]: updatedMarkups
+        });
         if (!isContextValid()) return;
         const currentId = get().currentProjectId;
+        const newCurrentId = currentId === id ? null : currentId;
         set({
           projects: updatedProjects,
-          currentProjectId: currentId === id ? null : currentId
+          currentProjectId: newCurrentId
         });
         if (currentId === id) {
           await chrome.storage.local.set({ [CURRENT_PROJECT_KEY]: null });
+        }
+        if (get().currentUrl) {
+          get().fetchNotesForUrl(get().currentUrl);
         }
       } catch (error) {
         console.error("Failed to delete project:", error);
@@ -13664,16 +13680,18 @@ const Dashboard = () => {
                     /* @__PURE__ */ jsxRuntimeExports.jsx(Folder, { size: 16, className: currentProjectId === project.id ? "text-white" : "text-slate-400" }),
                     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate", children: project.name })
                   ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center gap-2", children: currentProjectId !== project.id && /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center gap-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
                     "button",
                     {
                       onClick: (e) => {
                         e.stopPropagation();
-                        if (confirm(`'${project.name}' 프로젝트를 삭제하시겠습니까?`)) {
+                        if (confirm(`'${project.name}' 프로젝트를 삭제하시겠습니까?
+(속한 메모들은 삭제되지 않고 유지됩니다.)`)) {
                           deleteProject(project.id);
                         }
                       },
-                      className: "opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 text-slate-300 hover:text-red-500 rounded transition-all",
+                      className: `p-1 hover:bg-red-50 rounded transition-all ${currentProjectId === project.id ? "opacity-100 bg-white/20 text-white" : "opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500"}`,
+                      title: "프로젝트 삭제",
                       children: /* @__PURE__ */ jsxRuntimeExports.jsx(Trash2, { size: 12 })
                     }
                   ) })
@@ -13849,7 +13867,8 @@ const PopupView = () => {
     currentProjectId,
     setCurrentProjectId,
     fetchAllProjects,
-    addProject
+    addProject,
+    deleteProject
   } = useNoteStore();
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
@@ -13932,18 +13951,34 @@ const PopupView = () => {
               children: "전체"
             }
           ),
-          projects.map((project) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              onClick: () => setCurrentProjectId(project.id),
-              className: `flex-shrink-0 px-2.5 py-1 rounded text-[10px] font-bold transition-all flex items-center gap-1.5 ${currentProjectId === project.id ? "bg-brand-primary text-gray-900 shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-gray-200"}`,
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Folder, { size: 10 }),
-                project.name
-              ]
-            },
-            project.id
-          )),
+          projects.map((project) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative group flex-shrink-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                onClick: () => setCurrentProjectId(project.id),
+                className: `flex-shrink-0 px-2.5 py-1 rounded text-[10px] font-bold transition-all flex items-center gap-1.5 ${currentProjectId === project.id ? "bg-brand-primary text-gray-900 shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-gray-200"}`,
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(Folder, { size: 10 }),
+                  project.name
+                ]
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: (e) => {
+                  e.stopPropagation();
+                  if (confirm(`'${project.name}' 프로젝트를 삭제하시겠습니까?
+(속한 메모들은 삭제되지 않고 유지됩니다.)`)) {
+                    deleteProject(project.id);
+                  }
+                },
+                className: "absolute -top-1 -right-1 p-0.5 bg-white border border-gray-100 rounded-full text-red-400 shadow-sm opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50 z-10",
+                title: "프로젝트 삭제",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(X, { size: 8 })
+              }
+            )
+          ] }, project.id)),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {

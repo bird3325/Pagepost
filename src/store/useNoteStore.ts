@@ -736,21 +736,50 @@ export const useNoteStore = create<NoteState>((set, get) => {
         deleteProject: async (id) => {
             if (!isContextValid()) return;
             try {
-                const result = await chrome.storage.local.get(PROJECTS_KEY);
+                // 1. Fetch all data
+                const result = await chrome.storage.local.get([PROJECTS_KEY, STORAGE_KEY, MARKUP_STORAGE_KEY]);
                 if (!isContextValid()) return;
+
                 const projects = (result[PROJECTS_KEY] || []) as Project[];
+                const allNotes = (result[STORAGE_KEY] || []) as Note[];
+                const allMarkups = (result[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
+
+                // 2. Remove project from list
                 const updatedProjects = projects.filter(p => p.id !== id);
-                await chrome.storage.local.set({ [PROJECTS_KEY]: updatedProjects });
+
+                // 3. Detach notes and markups from this project
+                const updatedNotes = allNotes.map(note =>
+                    note.projectId === id ? { ...note, projectId: undefined } : note
+                );
+                const updatedMarkups = allMarkups.map(markup =>
+                    markup.projectId === id ? { ...markup, projectId: undefined } : markup
+                );
+
+                // 4. Save everything back
+                await chrome.storage.local.set({
+                    [PROJECTS_KEY]: updatedProjects,
+                    [STORAGE_KEY]: updatedNotes,
+                    [MARKUP_STORAGE_KEY]: updatedMarkups
+                });
+
                 if (!isContextValid()) return;
 
                 const currentId = get().currentProjectId;
+                const newCurrentId = currentId === id ? null : currentId;
+
+                // 5. Update state
                 set({
                     projects: updatedProjects,
-                    currentProjectId: currentId === id ? null : currentId
+                    currentProjectId: newCurrentId
                 });
 
                 if (currentId === id) {
                     await chrome.storage.local.set({ [CURRENT_PROJECT_KEY]: null });
+                }
+
+                // 6. Refresh notes if necessary to reflect project change
+                if (get().currentUrl) {
+                    get().fetchNotesForUrl(get().currentUrl);
                 }
             } catch (error) {
                 console.error('Failed to delete project:', error);

@@ -24,7 +24,7 @@ const PopupView: React.FC = () => {
     notes, fetchAllNotes, deleteNote, deleteAllNotes, updateNote,
     searchQuery, setSearchQuery,
     settings, updateSettings, loadSettings,
-    projects, currentProjectId, setCurrentProjectId, fetchAllProjects, addProject
+    projects, currentProjectId, setCurrentProjectId, fetchAllProjects, addProject, deleteProject
   } = useNoteStore();
 
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
@@ -116,14 +116,27 @@ const PopupView: React.FC = () => {
             전체
           </button>
           {projects.map(project => (
-            <button
-              key={project.id}
-              onClick={() => setCurrentProjectId(project.id)}
-              className={`flex-shrink-0 px-2.5 py-1 rounded text-[10px] font-bold transition-all flex items-center gap-1.5 ${currentProjectId === project.id ? 'bg-brand-primary text-gray-900 shadow-sm' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
-            >
-              <Folder size={10} />
-              {project.name}
-            </button>
+            <div key={project.id} className="relative group flex-shrink-0">
+              <button
+                onClick={() => setCurrentProjectId(project.id)}
+                className={`flex-shrink-0 px-2.5 py-1 rounded text-[10px] font-bold transition-all flex items-center gap-1.5 ${currentProjectId === project.id ? 'bg-brand-primary text-gray-900 shadow-sm' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
+              >
+                <Folder size={10} />
+                {project.name}
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (confirm(`'${project.name}' 프로젝트를 삭제하시겠습니까?\n(속한 메모들은 삭제되지 않고 유지됩니다.)`)) {
+                    deleteProject(project.id);
+                  }
+                }}
+                className="absolute -top-1 -right-1 p-0.5 bg-white border border-gray-100 rounded-full text-red-400 shadow-sm opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50 z-10"
+                title="프로젝트 삭제"
+              >
+                <X size={8} />
+              </button>
+            </div>
           ))}
           <button
             onClick={() => {
