@@ -17,11 +17,12 @@ import {
     Share2,
     User,
     Play,
-    Clock,
+    MinusCircle,
     CheckCircle,
     Folder,
     FolderPlus,
-    Layout
+    Layout,
+    History
 } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
@@ -46,6 +47,7 @@ const Dashboard: React.FC = () => {
 
     const [selectedDomain, setSelectedDomain] = React.useState<string | null>(null);
     const [statusFilter, setStatusFilter] = React.useState<string | null>(null);
+    const [expandedHistoryId, setExpandedHistoryId] = React.useState<string | null>(null);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -184,7 +186,7 @@ const Dashboard: React.FC = () => {
                             <div className="p-2 space-y-1">
                                 {[
                                     { id: null, label: '전체 보기', icon: Globe, color: 'text-slate-400' },
-                                    { id: 'pending', label: '보류 중 (Pending)', icon: Clock, color: 'text-amber-500' },
+                                    { id: 'pending', label: '보류 중 (Pending)', icon: MinusCircle, color: 'text-amber-500' },
                                     { id: 'in-progress', label: '진행 중 (In Progress)', icon: Play, color: 'text-blue-500' },
                                     { id: 'done', label: '완료됨 (Done)', icon: CheckCircle, color: 'text-emerald-500' },
                                 ].map(status => (
@@ -324,10 +326,13 @@ const Dashboard: React.FC = () => {
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-xs font-bold text-brand-primary truncate uppercase tracking-wide">{note.domain}</span>
                                                     {note.status && (
-                                                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase ${note.status === 'done' ? 'bg-emerald-100 text-emerald-600' :
+                                                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase flex items-center gap-1 ${note.status === 'done' ? 'bg-emerald-100 text-emerald-600' :
                                                             note.status === 'in-progress' ? 'bg-blue-100 text-blue-600' :
                                                                 'bg-amber-100 text-amber-600'
                                                             }`}>
+                                                            {note.status === 'done' ? <CheckCircle size={10} /> :
+                                                                note.status === 'in-progress' ? <Play size={10} /> :
+                                                                    <MinusCircle size={10} />}
                                                             {note.status}
                                                         </span>
                                                     )}
@@ -338,6 +343,15 @@ const Dashboard: React.FC = () => {
                                             </div>
                                         </div>
                                         <div className="flex gap-1.5 translate-x-2 -translate-y-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            {note.history && note.history.length > 0 && (
+                                                <button
+                                                    onClick={() => setExpandedHistoryId(expandedHistoryId === note.id ? null : note.id)}
+                                                    className={`p-2 rounded-xl transition-colors ${expandedHistoryId === note.id ? 'bg-brand-primary text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-brand-primary'}`}
+                                                    title="수정 히스토리"
+                                                >
+                                                    <History size={18} />
+                                                </button>
+                                            )}
                                             <button onClick={() => goToNote(note)} className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 hover:text-brand-primary transition-colors">
                                                 <ExternalLink size={18} />
                                             </button>
@@ -363,9 +377,46 @@ const Dashboard: React.FC = () => {
                                                 fontSize: `${(note.fontSize || settings.fontSize) + 2}px`,
                                                 color: note.textColor || settings.textColor
                                             }}>
-                                            {note.content || "박성된 내용이 없습니다."}
+                                            {note.content || "작성된 내용이 없습니다."}
                                         </p>
                                     </div>
+
+                                    {/* History Timeline */}
+                                    {expandedHistoryId === note.id && note.history && (
+                                        <div className="px-5 pb-5 animate-in slide-in-from-top duration-300">
+                                            <div className="pt-4 border-t border-slate-100 space-y-4">
+                                                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Revision Timeline</h4>
+                                                {note.history.map((entry, idx) => (
+                                                    <div key={idx} className="relative pl-5 border-l border-slate-200 pb-2 last:pb-0">
+                                                        <div className="absolute left-[-4.5px] top-1.5 w-2 h-2 rounded-full bg-slate-200 border border-white" />
+                                                        <div className="flex items-center justify-between mb-1">
+                                                            <span className="text-[9px] font-bold text-slate-400">
+                                                                {idx === 0 ? '이전 버전' : `V${note.history!.length - idx}`}
+                                                            </span>
+                                                            <span className="text-[9px] text-slate-400">
+                                                                {new Date(entry.updatedAt).toLocaleString()}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-xs text-slate-500 leading-relaxed bg-slate-50 p-2.5 rounded-xl italic">
+                                                            {entry.content}
+                                                        </p>
+                                                    </div>
+                                                ))}
+                                                <div className="relative pl-5 border-l border-brand-primary pb-2">
+                                                    <div className="absolute left-[-4.5px] top-1.5 w-2 h-2 rounded-full bg-brand-primary border border-white" />
+                                                    <div className="flex items-center justify-between mb-1">
+                                                        <span className="text-[9px] font-bold text-brand-primary">현재 버전</span>
+                                                        <span className="text-[9px] text-slate-400">
+                                                            {new Date(note.updatedAt).toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-xs text-slate-700 font-medium leading-relaxed bg-brand-primary/5 p-2.5 rounded-xl border border-brand-primary/10">
+                                                        {note.content}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* Note Footer */}
                                     {note.tags.length > 0 && (

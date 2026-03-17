@@ -2,9 +2,10 @@ import React, { useEffect } from 'react';
 import { NoteCard } from './NoteCard';
 import { useNoteStore } from '../store/useNoteStore';
 import { FloatingToolbar } from './FloatingToolbar';
-import { LayoutList, ChevronRight, MessageSquare } from 'lucide-react';
+import { LayoutList, ChevronRight, MessageSquare, History } from 'lucide-react';
 
 const ReviewSidebar: React.FC<{ notes: any[], onNoteClick: (id: string) => void }> = ({ notes, onNoteClick }) => {
+    const [expandedHistoryId, setExpandedHistoryId] = React.useState<string | null>(null);
     return (
         <div className="fixed top-0 right-0 w-80 h-full bg-white/90 backdrop-blur-xl border-l border-gray-200 shadow-2xl z-[400] flex flex-col pointer-events-auto animate-in slide-in-from-right duration-300">
             <div className="p-6 bg-brand-primary/10 border-b border-brand-primary/20">
@@ -41,8 +42,45 @@ const ReviewSidebar: React.FC<{ notes: any[], onNoteClick: (id: string) => void 
                                         <span key={tag} className="text-[9px] px-1.5 py-0.5 bg-gray-50 text-gray-500 rounded-md font-bold">#{tag}</span>
                                     ))}
                                 </div>
-                                <ChevronRight size={14} className="text-brand-primary opacity-0 group-hover:opacity-100 transition-all translate-x-1" />
+                                <div className="flex items-center gap-2">
+                                    {note.history && note.history.length > 0 && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setExpandedHistoryId(expandedHistoryId === note.id ? null : note.id);
+                                            }}
+                                            className={`p-1 rounded-md transition-colors ${expandedHistoryId === note.id ? 'bg-indigo-500 text-white shadow-sm' : 'bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100'}`}
+                                            title="히스토리"
+                                        >
+                                            <History size={12} />
+                                        </button>
+                                    )}
+                                    <ChevronRight size={14} className="text-brand-primary opacity-0 group-hover:opacity-100 transition-all translate-x-1" />
+                                </div>
                             </div>
+
+                            {/* History list in sidebar */}
+                            {expandedHistoryId === note.id && note.history && (
+                                <div className="mt-4 pt-4 border-t border-gray-50 space-y-3 animate-in slide-in-from-top duration-200">
+                                    <h4 className="text-[9px] font-black text-gray-400 uppercase tracking-widest">History</h4>
+                                    {note.history.map((entry: any, i: number) => (
+                                        <div key={i} className="bg-gray-50/50 p-2 rounded-lg border border-gray-200/50">
+                                            <div className="flex justify-between items-center mb-1">
+                                                <span className="text-[8px] font-bold text-gray-400">
+                                                    {new Date(entry.updatedAt).toLocaleDateString()} {new Date(entry.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                </span>
+                                            </div>
+                                            <p className="text-[11px] text-gray-600 leading-tight italic">{entry.content}</p>
+                                        </div>
+                                    ))}
+                                    <div className="p-2 rounded-lg bg-green-50/30 border border-green-100/50">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="text-[8px] font-bold text-green-600">Current</span>
+                                        </div>
+                                        <p className="text-[11px] text-gray-800 leading-tight font-medium">{note.content}</p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     ))
                 )}

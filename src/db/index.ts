@@ -1,3 +1,8 @@
+export interface NoteHistoryEntry {
+    content: string;
+    updatedAt: number;
+}
+
 export interface Note {
     id: string;          // UUID v4
     url: string;         // 페이지 전체 URL
@@ -46,6 +51,7 @@ export interface Note {
 
     createdAt: number;
     updatedAt: number;
+    history?: NoteHistoryEntry[];
 }
 
 export type MarkupType = 'pen' | 'highlight' | 'rect' | 'circle' | 'arrow' | 'text' | 'sticker' | 'star' | 'heart' | 'triangle' | 'chat' | 'lightning' | 'diamond' | 'pentagon' | 'hexagon' | 'cross' | 'cloud' | 'banner' | 'burst1' | 'burst2' | 'eraser';

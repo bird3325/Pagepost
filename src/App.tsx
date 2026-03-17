@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNoteStore } from './store/useNoteStore';
-import { StickyNote, Search, Settings, ExternalLink, Trash2, MapPin, X, ChevronLeft, AlertTriangle, Eye, EyeOff, Clock, Play, CheckCircle2, Keyboard, Folder, FolderPlus } from 'lucide-react';
+import { StickyNote, Search, Settings, ExternalLink, Trash2, MapPin, X, ChevronLeft, AlertTriangle, Eye, EyeOff, MinusCircle, Play, CheckCircle2, Keyboard, Folder, FolderPlus, History } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 
 const App: React.FC = () => {
@@ -29,6 +29,7 @@ const PopupView: React.FC = () => {
 
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
+  const [viewingHistoryNoteId, setViewingHistoryNoteId] = React.useState<string | null>(null);
 
   useEffect(() => {
     loadSettings();
@@ -106,7 +107,7 @@ const PopupView: React.FC = () => {
       )}
 
       {/* Project Selector Bar */}
-      {!isSettingsOpen && (
+      {!isSettingsOpen && !viewingHistoryNoteId && (
         <div className="px-4 py-2 bg-white border-b border-gray-100 flex items-center gap-2 overflow-x-auto no-scrollbar scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           <button
             onClick={() => setCurrentProjectId(null)}
@@ -146,17 +147,19 @@ const PopupView: React.FC = () => {
       )}
 
       {/* Current Page Summary */}
-      <div className="p-4 border-b border-gray-200">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">전체 메모 리스트</span>
-          <span className="px-2 py-0.5 bg-gray-200 text-gray-700 text-[10px] rounded-full font-bold">
-            {notes.length}
-          </span>
+      {!viewingHistoryNoteId && (
+        <div className="p-4 border-b border-gray-200">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">전체 메모 리스트</span>
+            <span className="px-2 py-0.5 bg-gray-200 text-gray-700 text-[10px] rounded-full font-bold">
+              {notes.length}
+            </span>
+          </div>
+          <div className="text-[11px] text-gray-400 truncate max-w-full italic">
+            작성된 모든 메모가 표시됩니다.
+          </div>
         </div>
-        <div className="text-[11px] text-gray-400 truncate max-w-full italic">
-          작성된 모든 메모가 표시됩니다.
-        </div>
-      </div>
+      )}
 
 
       {isSettingsOpen ? (
@@ -267,8 +270,17 @@ const PopupView: React.FC = () => {
                       >
                         {note.status === 'done' ? <CheckCircle2 size={12} /> :
                           note.status === 'in-progress' ? <Play size={12} /> :
-                            <Clock size={12} />}
+                            <MinusCircle size={12} />}
                       </button>
+                      {note.history && note.history.length > 0 && (
+                        <button
+                          onClick={() => setViewingHistoryNoteId(note.id)}
+                          className="p-1 bg-blue-50 hover:bg-blue-100 rounded text-blue-600 border border-blue-100 transition-colors"
+                          title="수정 히스토리"
+                        >
+                          <History size={12} />
+                        </button>
+                      )}
                       <button
                         onClick={() => goToNote(note)}
                         className="p-1 hover:bg-gray-100 rounded text-gray-500"
@@ -309,15 +321,59 @@ const PopupView: React.FC = () => {
         </div>
       )}
 
+      {/* History View Overlay */}
+      {viewingHistoryNoteId && (
+        <div className="flex-1 flex flex-col bg-white overflow-hidden animate-in slide-in-from-right duration-200">
+          <div className="p-3 border-b flex items-center justify-between bg-gray-50">
+            <div className="flex items-center gap-2">
+              <button onClick={() => setViewingHistoryNoteId(null)} className="p-1 hover:bg-gray-200 rounded">
+                <ChevronLeft size={18} />
+              </button>
+              <span className="text-sm font-bold">수정 히스토리</span>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-4">
+            {notes.find(n => n.id === viewingHistoryNoteId)?.history?.map((entry, idx) => (
+              <div key={idx} className="border-l-2 border-brand-primary pl-3 py-1">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase">
+                    {idx === 0 ? '이전 버전' : `버전 ${notes.find(n => n.id === viewingHistoryNoteId)!.history!.length - idx}`}
+                  </span>
+                  <span className="text-[10px] text-gray-400">
+                    {new Date(entry.updatedAt).toLocaleString()}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-700 leading-relaxed bg-gray-50 p-2 rounded border border-gray-100 italic">
+                  {entry.content}
+                </p>
+              </div>
+            ))}
+            <div className="border-l-2 border-green-500 pl-3 py-1">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-bold text-green-600 uppercase">현재 버전</span>
+                <span className="text-[10px] text-gray-400">
+                  {new Date(notes.find(n => n.id === viewingHistoryNoteId)!.updatedAt).toLocaleString()}
+                </span>
+              </div>
+              <p className="text-xs text-gray-800 leading-relaxed bg-green-50 p-2 rounded border border-green-100">
+                {notes.find(n => n.id === viewingHistoryNoteId)!.content}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Footer */}
-      <div className="p-3 border-t border-gray-200 bg-white flex justify-center">
-        <button
-          onClick={() => window.open('index.html', '_blank')}
-          className="text-xs text-gray-500 hover:text-brand-primary transition-colors"
-        >
-          대시보드 전체보기
-        </button>
-      </div>
+      {!viewingHistoryNoteId && (
+        <div className="p-3 border-t border-gray-200 bg-white flex justify-center">
+          <button
+            onClick={() => window.open('index.html', '_blank')}
+            className="text-xs text-gray-500 hover:text-brand-primary transition-colors"
+          >
+            대시보드 전체보기
+          </button>
+        </div>
+      )}
     </div>
   );
 };

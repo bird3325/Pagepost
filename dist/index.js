@@ -12816,9 +12816,22 @@ const useNoteStore = create((set, get) => {
         const result = await chrome.storage.local.get(STORAGE_KEY);
         if (!isContextValid()) return;
         const allNotes = result[STORAGE_KEY] || [];
+        const existingNote = allNotes.find((n) => n.id === id);
+        if (!existingNote) return;
         const updatedAt = Date.now();
-        const tags = updates.content ? Array.from(updates.content.matchAll(/#(\w+)/g)).map((m) => m[1]) : void 0;
-        const finalUpdates = tags !== void 0 ? { ...updates, tags, updatedAt } : { ...updates, updatedAt };
+        let finalUpdates = { ...updates, updatedAt };
+        if (updates.content !== void 0) {
+          const tags = Array.from(updates.content.matchAll(/#(\w+)/g)).map((m) => m[1]);
+          finalUpdates.tags = [...new Set(tags)];
+          if (updates.content !== existingNote.content) {
+            const historyEntry = {
+              content: existingNote.content,
+              updatedAt: existingNote.updatedAt
+            };
+            const newHistory = [historyEntry, ...existingNote.history || []].slice(0, 50);
+            finalUpdates.history = newHistory;
+          }
+        }
         const updatedAllNotes = allNotes.map((n) => n.id === id ? { ...n, ...finalUpdates } : n);
         await chrome.storage.local.set({ [STORAGE_KEY]: updatedAllNotes });
         if (!isContextValid()) return;
@@ -13173,52 +13186,52 @@ const createLucideIcon = (iconName, iconNode) => {
   Component.displayName = toPascalCase(iconName);
   return Component;
 };
-const __iconNode$t = [
+const __iconNode$u = [
   ["path", { d: "M8 2v4", key: "1cmpym" }],
   ["path", { d: "M16 2v4", key: "4m81vk" }],
   ["rect", { width: "18", height: "18", x: "3", y: "4", rx: "2", key: "1hopcy" }],
   ["path", { d: "M3 10h18", key: "8toen8" }]
 ];
-const Calendar = createLucideIcon("calendar", __iconNode$t);
-const __iconNode$s = [
+const Calendar = createLucideIcon("calendar", __iconNode$u);
+const __iconNode$t = [
   ["path", { d: "M3 3v16a2 2 0 0 0 2 2h16", key: "c24i48" }],
   ["path", { d: "M18 17V9", key: "2bz60n" }],
   ["path", { d: "M13 17V5", key: "1frdt8" }],
   ["path", { d: "M8 17v-3", key: "17ska0" }]
 ];
-const ChartColumn = createLucideIcon("chart-column", __iconNode$s);
-const __iconNode$r = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
-const ChevronLeft = createLucideIcon("chevron-left", __iconNode$r);
-const __iconNode$q = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
-const ChevronRight = createLucideIcon("chevron-right", __iconNode$q);
-const __iconNode$p = [
+const ChartColumn = createLucideIcon("chart-column", __iconNode$t);
+const __iconNode$s = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
+const ChevronLeft = createLucideIcon("chevron-left", __iconNode$s);
+const __iconNode$r = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
+const ChevronRight = createLucideIcon("chevron-right", __iconNode$r);
+const __iconNode$q = [
   ["path", { d: "M21.801 10A10 10 0 1 1 17 3.335", key: "yps3ct" }],
   ["path", { d: "m9 11 3 3L22 4", key: "1pflzl" }]
 ];
-const CircleCheckBig = createLucideIcon("circle-check-big", __iconNode$p);
-const __iconNode$o = [
+const CircleCheckBig = createLucideIcon("circle-check-big", __iconNode$q);
+const __iconNode$p = [
   ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
   ["path", { d: "m9 12 2 2 4-4", key: "dzmm74" }]
 ];
-const CircleCheck = createLucideIcon("circle-check", __iconNode$o);
-const __iconNode$n = [
+const CircleCheck = createLucideIcon("circle-check", __iconNode$p);
+const __iconNode$o = [
   ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
-  ["path", { d: "M12 6v6l4 2", key: "mmk7yg" }]
+  ["path", { d: "M8 12h8", key: "1wcyev" }]
 ];
-const Clock = createLucideIcon("clock", __iconNode$n);
-const __iconNode$m = [
+const CircleMinus = createLucideIcon("circle-minus", __iconNode$o);
+const __iconNode$n = [
   ["path", { d: "M12 15V3", key: "m9g1x1" }],
   ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", key: "ih7n3h" }],
   ["path", { d: "m7 10 5 5 5-5", key: "brsn70" }]
 ];
-const Download = createLucideIcon("download", __iconNode$m);
-const __iconNode$l = [
+const Download = createLucideIcon("download", __iconNode$n);
+const __iconNode$m = [
   ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
   ["path", { d: "M10 14 21 3", key: "gplh6r" }],
   ["path", { d: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6", key: "a6xqqp" }]
 ];
-const ExternalLink = createLucideIcon("external-link", __iconNode$l);
-const __iconNode$k = [
+const ExternalLink = createLucideIcon("external-link", __iconNode$m);
+const __iconNode$l = [
   [
     "path",
     {
@@ -13236,8 +13249,8 @@ const __iconNode$k = [
   ],
   ["path", { d: "m2 2 20 20", key: "1ooewy" }]
 ];
-const EyeOff = createLucideIcon("eye-off", __iconNode$k);
-const __iconNode$j = [
+const EyeOff = createLucideIcon("eye-off", __iconNode$l);
+const __iconNode$k = [
   [
     "path",
     {
@@ -13247,8 +13260,8 @@ const __iconNode$j = [
   ],
   ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
 ];
-const Eye = createLucideIcon("eye", __iconNode$j);
-const __iconNode$i = [
+const Eye = createLucideIcon("eye", __iconNode$k);
+const __iconNode$j = [
   ["path", { d: "M12 10v6", key: "1bos4e" }],
   ["path", { d: "M9 13h6", key: "1uhe8q" }],
   [
@@ -13259,8 +13272,8 @@ const __iconNode$i = [
     }
   ]
 ];
-const FolderPlus = createLucideIcon("folder-plus", __iconNode$i);
-const __iconNode$h = [
+const FolderPlus = createLucideIcon("folder-plus", __iconNode$j);
+const __iconNode$i = [
   [
     "path",
     {
@@ -13269,8 +13282,8 @@ const __iconNode$h = [
     }
   ]
 ];
-const Folder = createLucideIcon("folder", __iconNode$h);
-const __iconNode$g = [
+const Folder = createLucideIcon("folder", __iconNode$i);
+const __iconNode$h = [
   [
     "path",
     {
@@ -13279,13 +13292,19 @@ const __iconNode$g = [
     }
   ]
 ];
-const Funnel = createLucideIcon("funnel", __iconNode$g);
-const __iconNode$f = [
+const Funnel = createLucideIcon("funnel", __iconNode$h);
+const __iconNode$g = [
   ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
   ["path", { d: "M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20", key: "13o1zl" }],
   ["path", { d: "M2 12h20", key: "9i4pu4" }]
 ];
-const Globe = createLucideIcon("globe", __iconNode$f);
+const Globe = createLucideIcon("globe", __iconNode$g);
+const __iconNode$f = [
+  ["path", { d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", key: "1357e3" }],
+  ["path", { d: "M3 3v5h5", key: "1xhq8a" }],
+  ["path", { d: "M12 7v5l4 2", key: "1fdv2h" }]
+];
+const History = createLucideIcon("history", __iconNode$f);
 const __iconNode$e = [
   ["path", { d: "M10 8h.01", key: "1r9ogq" }],
   ["path", { d: "M12 12h.01", key: "1mp3jc" }],
@@ -13447,6 +13466,7 @@ const Dashboard = () => {
   } = useNoteStore();
   const [selectedDomain, setSelectedDomain] = React.useState(null);
   const [statusFilter, setStatusFilter] = React.useState(null);
+  const [expandedHistoryId, setExpandedHistoryId] = React.useState(null);
   const fileInputRef = React.useRef(null);
   reactExports.useEffect(() => {
     fetchAllProjects();
@@ -13577,7 +13597,7 @@ const Dashboard = () => {
           ] }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-2 space-y-1", children: [
             { id: null, label: "전체 보기", icon: Globe, color: "text-slate-400" },
-            { id: "pending", label: "보류 중 (Pending)", icon: Clock, color: "text-amber-500" },
+            { id: "pending", label: "보류 중 (Pending)", icon: CircleMinus, color: "text-amber-500" },
             { id: "in-progress", label: "진행 중 (In Progress)", icon: Play, color: "text-blue-500" },
             { id: "done", label: "완료됨 (Done)", icon: CircleCheckBig, color: "text-emerald-500" }
           ].map((status) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -13722,7 +13742,10 @@ const Dashboard = () => {
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col max-w-[200px]", children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
                     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-bold text-brand-primary truncate uppercase tracking-wide", children: note.domain }),
-                    note.status && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase ${note.status === "done" ? "bg-emerald-100 text-emerald-600" : note.status === "in-progress" ? "bg-blue-100 text-blue-600" : "bg-amber-100 text-amber-600"}`, children: note.status })
+                    note.status && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase flex items-center gap-1 ${note.status === "done" ? "bg-emerald-100 text-emerald-600" : note.status === "in-progress" ? "bg-blue-100 text-blue-600" : "bg-amber-100 text-amber-600"}`, children: [
+                      note.status === "done" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CircleCheckBig, { size: 10 }) : note.status === "in-progress" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Play, { size: 10 }) : /* @__PURE__ */ jsxRuntimeExports.jsx(CircleMinus, { size: 10 }),
+                      note.status
+                    ] })
                   ] }),
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("time", { className: "text-[10px] text-slate-400 font-medium mt-0.5", children: [
                     new Date(note.updatedAt).toLocaleDateString(),
@@ -13732,6 +13755,15 @@ const Dashboard = () => {
                 ] })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-1.5 translate-x-2 -translate-y-2 opacity-0 group-hover:opacity-100 transition-opacity", children: [
+                note.history && note.history.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    onClick: () => setExpandedHistoryId(expandedHistoryId === note.id ? null : note.id),
+                    className: `p-2 rounded-xl transition-colors ${expandedHistoryId === note.id ? "bg-brand-primary text-white" : "hover:bg-slate-100 text-slate-500 hover:text-brand-primary"}`,
+                    title: "수정 히스토리",
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(History, { size: 18 })
+                  }
+                ),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => goToNote(note), className: "p-2 hover:bg-slate-100 rounded-xl text-slate-500 hover:text-brand-primary transition-colors", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExternalLink, { size: 18 }) }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => deleteNote(note.id), className: "p-2 hover:bg-red-50 rounded-xl text-slate-300 hover:text-red-500 transition-colors", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Trash2, { size: 18 }) })
               ] })
@@ -13752,9 +13784,28 @@ const Dashboard = () => {
                   fontSize: `${(note.fontSize || settings.fontSize) + 2}px`,
                   color: note.textColor || settings.textColor
                 },
-                children: note.content || "박성된 내용이 없습니다."
+                children: note.content || "작성된 내용이 없습니다."
               }
             ) }),
+            expandedHistoryId === note.id && note.history && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-5 pb-5 animate-in slide-in-from-top duration-300", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pt-4 border-t border-slate-100 space-y-4", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2", children: "Revision Timeline" }),
+              note.history.map((entry, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative pl-5 border-l border-slate-200 pb-2 last:pb-0", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute left-[-4.5px] top-1.5 w-2 h-2 rounded-full bg-slate-200 border border-white" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-1", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[9px] font-bold text-slate-400", children: idx === 0 ? "이전 버전" : `V${note.history.length - idx}` }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[9px] text-slate-400", children: new Date(entry.updatedAt).toLocaleString() })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500 leading-relaxed bg-slate-50 p-2.5 rounded-xl italic", children: entry.content })
+              ] }, idx)),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative pl-5 border-l border-brand-primary pb-2", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute left-[-4.5px] top-1.5 w-2 h-2 rounded-full bg-brand-primary border border-white" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-1", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[9px] font-bold text-brand-primary", children: "현재 버전" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[9px] text-slate-400", children: new Date(note.updatedAt).toLocaleString() })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-700 font-medium leading-relaxed bg-brand-primary/5 p-2.5 rounded-xl border border-brand-primary/10", children: note.content })
+              ] })
+            ] }) }),
             note.tags.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-5 py-4 border-t border-slate-50 bg-slate-50/30 flex flex-wrap gap-2", children: note.tags.map((tag) => /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[11px] font-bold px-2.5 py-1 bg-white text-slate-500 rounded-lg border border-slate-100 shadow-sm flex items-center gap-1.5 transition-colors hover:border-brand-primary/20 hover:text-brand-primary", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { size: 10 }),
               " ",
@@ -13802,6 +13853,7 @@ const PopupView = () => {
   } = useNoteStore();
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
+  const [viewingHistoryNoteId, setViewingHistoryNoteId] = React.useState(null);
   reactExports.useEffect(() => {
     loadSettings();
     fetchAllProjects();
@@ -13871,7 +13923,7 @@ const PopupView = () => {
             }
           )
         ] }),
-        !isSettingsOpen && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-4 py-2 bg-white border-b border-gray-100 flex items-center gap-2 overflow-x-auto no-scrollbar scrollbar-hide", style: { scrollbarWidth: "none", msOverflowStyle: "none" }, children: [
+        !isSettingsOpen && !viewingHistoryNoteId && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-4 py-2 bg-white border-b border-gray-100 flex items-center gap-2 overflow-x-auto no-scrollbar scrollbar-hide", style: { scrollbarWidth: "none", msOverflowStyle: "none" }, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
@@ -13913,7 +13965,7 @@ const PopupView = () => {
             }
           )
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-4 border-b border-gray-200", children: [
+        !viewingHistoryNoteId && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-4 border-b border-gray-200", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-1", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold text-gray-500 uppercase tracking-wider", children: "전체 메모 리스트" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "px-2 py-0.5 bg-gray-200 text-gray-700 text-[10px] rounded-full font-bold", children: notes.length })
@@ -14022,7 +14074,16 @@ const PopupView = () => {
                         },
                         className: `p-1 rounded flex items-center gap-1 ${note.status === "done" ? "bg-green-500/10 text-green-600" : note.status === "in-progress" ? "bg-blue-500/10 text-blue-600" : "hover:bg-gray-100 text-gray-400"}`,
                         title: `상태: ${note.status}`,
-                        children: note.status === "done" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CircleCheck, { size: 12 }) : note.status === "in-progress" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Play, { size: 12 }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Clock, { size: 12 })
+                        children: note.status === "done" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CircleCheck, { size: 12 }) : note.status === "in-progress" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Play, { size: 12 }) : /* @__PURE__ */ jsxRuntimeExports.jsx(CircleMinus, { size: 12 })
+                      }
+                    ),
+                    note.history && note.history.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "button",
+                      {
+                        onClick: () => setViewingHistoryNoteId(note.id),
+                        className: "p-1 bg-blue-50 hover:bg-blue-100 rounded text-blue-600 border border-blue-100 transition-colors",
+                        title: "수정 히스토리",
+                        children: /* @__PURE__ */ jsxRuntimeExports.jsx(History, { size: 12 })
                       }
                     ),
                     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -14066,7 +14127,29 @@ const PopupView = () => {
             note.id
           )) }) })
         ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-3 border-t border-gray-200 bg-white flex justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        viewingHistoryNoteId && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 flex flex-col bg-white overflow-hidden animate-in slide-in-from-right duration-200", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-3 border-b flex items-center justify-between bg-gray-50", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => setViewingHistoryNoteId(null), className: "p-1 hover:bg-gray-200 rounded", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronLeft, { size: 18 }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-bold", children: "수정 히스토리" })
+          ] }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 overflow-y-auto p-3 space-y-4", children: [
+            notes.find((n) => n.id === viewingHistoryNoteId)?.history?.map((entry, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-l-2 border-brand-primary pl-3 py-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-1.5", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-bold text-gray-400 uppercase", children: idx === 0 ? "이전 버전" : `버전 ${notes.find((n) => n.id === viewingHistoryNoteId).history.length - idx}` }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] text-gray-400", children: new Date(entry.updatedAt).toLocaleString() })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-gray-700 leading-relaxed bg-gray-50 p-2 rounded border border-gray-100 italic", children: entry.content })
+            ] }, idx)),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-l-2 border-green-500 pl-3 py-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-1.5", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-bold text-green-600 uppercase", children: "현재 버전" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] text-gray-400", children: new Date(notes.find((n) => n.id === viewingHistoryNoteId).updatedAt).toLocaleString() })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-gray-800 leading-relaxed bg-green-50 p-2 rounded border border-green-100", children: notes.find((n) => n.id === viewingHistoryNoteId).content })
+            ] })
+          ] })
+        ] }),
+        !viewingHistoryNoteId && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-3 border-t border-gray-200 bg-white flex justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
             onClick: () => window.open("index.html", "_blank"),

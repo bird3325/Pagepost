@@ -410,9 +410,28 @@ export const useNoteStore = create<NoteState>((set, get) => {
                 if (!isContextValid()) return;
                 const allNotes = (result[STORAGE_KEY] || []) as Note[];
 
+                const existingNote = allNotes.find(n => n.id === id);
+                if (!existingNote) return;
+
                 const updatedAt = Date.now();
-                const tags = updates.content ? Array.from(updates.content.matchAll(/#(\w+)/g)).map(m => m[1]) : undefined;
-                const finalUpdates = tags !== undefined ? { ...updates, tags, updatedAt } : { ...updates, updatedAt };
+                let finalUpdates: any = { ...updates, updatedAt };
+
+                // Handle content-specific updates (Tags and History)
+                if (updates.content !== undefined) {
+                    // Update tags based on current content (replaces old tags)
+                    const tags = Array.from(updates.content.matchAll(/#(\w+)/g)).map(m => m[1]);
+                    finalUpdates.tags = [...new Set(tags)];
+
+                    // Record history if content has actually changed
+                    if (updates.content !== existingNote.content) {
+                        const historyEntry = {
+                            content: existingNote.content,
+                            updatedAt: existingNote.updatedAt
+                        };
+                        const newHistory = [historyEntry, ...(existingNote.history || [])].slice(0, 50);
+                        finalUpdates.history = newHistory;
+                    }
+                }
 
                 const updatedAllNotes = allNotes.map((n) => (n.id === id ? { ...n, ...finalUpdates } : n));
                 await chrome.storage.local.set({ [STORAGE_KEY]: updatedAllNotes });

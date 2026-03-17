@@ -13,7 +13,9 @@ import {
     Maximize2,
     User,
     Play,
-    Clock
+    MinusCircle,
+    History,
+    ChevronLeft
 } from 'lucide-react';
 
 interface NoteCardProps {
@@ -32,6 +34,7 @@ const NoteCardComponent: React.FC<NoteCardProps> = ({ note }) => {
     const { updateNote, deleteNote, settings, loadSettings, activeNoteId, setActiveNoteId } = useNoteStore();
     const [isEditing, setIsEditing] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
+    const [showHistory, setShowHistory] = useState(false);
 
     useEffect(() => {
         loadSettings();
@@ -350,6 +353,15 @@ const NoteCardComponent: React.FC<NoteCardProps> = ({ note }) => {
                             >
                                 <Pin size={14} />
                             </button>
+                            {note.history && note.history.length > 0 && (
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); setShowHistory(true); }}
+                                    className="p-1 bg-blue-500 hover:bg-blue-600 rounded text-white shadow-sm transition-colors"
+                                    title="수정 히스토리"
+                                >
+                                    <History size={12} />
+                                </button>
+                            )}
                             <button
                                 onClick={() => {
                                     const statusMap: Record<string, any> = {
@@ -368,8 +380,7 @@ const NoteCardComponent: React.FC<NoteCardProps> = ({ note }) => {
                             >
                                 {note.status === 'done' ? <CheckCircle size={14} /> :
                                     note.status === 'in-progress' ? <Play size={14} /> :
-                                        <Clock size={14} />}
-                                <span className="text-[8px] font-bold uppercase">{note.status}</span>
+                                        <MinusCircle size={14} />}
                             </button>
                         </div>
 
@@ -382,6 +393,46 @@ const NoteCardComponent: React.FC<NoteCardProps> = ({ note }) => {
                             </div>
                         </div>
                     </div>
+
+                    {/* History Overlay for NoteCard */}
+                    {showHistory && (
+                        <div className="absolute inset-0 bg-white/95 backdrop-blur-sm z-[250] flex flex-col animate-in fade-in duration-200">
+                            <div className="flex items-center gap-2 p-2 border-b border-black/5 bg-black/5">
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); setShowHistory(false); }}
+                                    className="p-1 hover:bg-black/10 rounded"
+                                >
+                                    <ChevronLeft size={14} />
+                                </button>
+                                <span className="text-[10px] font-black uppercase tracking-tight">Revision History</span>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-2 space-y-3">
+                                {note.history?.map((entry, idx) => (
+                                    <div key={idx} className="border-l-2 border-brand-primary pl-2 py-0.5">
+                                        <div className="flex items-center justify-between mb-0.5">
+                                            <span className="text-[8px] font-bold text-black/40 uppercase">
+                                                {idx === 0 ? 'Last Version' : `V${note.history!.length - idx}`}
+                                            </span>
+                                            <span className="text-[8px] text-black/30">
+                                                {new Date(entry.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
+                                        </div>
+                                        <p className="text-[10px] text-black/70 leading-tight italic line-clamp-3">
+                                            {entry.content}
+                                        </p>
+                                    </div>
+                                ))}
+                                <div className="border-l-2 border-green-500 pl-2 py-0.5">
+                                    <div className="flex items-center justify-between mb-0.5">
+                                        <span className="text-[8px] font-bold text-green-600 uppercase">Current</span>
+                                    </div>
+                                    <p className="text-[10px] text-black/80 leading-tight font-medium">
+                                        {note.content}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </>
             )}
         </div>
