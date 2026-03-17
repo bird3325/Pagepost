@@ -11,14 +11,95 @@ import { normalizeUrl } from '../utils/url';
 import tailwindStyles from '../index.css?inline';
 import contentStyles from './style.css?inline';
 
+// Track mouse position for hotkeys
+let currentMousePos = { x: 0, y: 0 };
+let currentElement: HTMLElement | null = null;
 let lastElement: HTMLElement | null = null;
 let lastClickInfo = { x: 0, y: 0 };
+
+document.addEventListener('mousemove', (e: MouseEvent) => {
+    currentMousePos = { x: e.clientX, y: e.clientY };
+    currentElement = e.target as HTMLElement;
+});
 
 // Capture the last right-click information to position the note correctly
 document.addEventListener('contextmenu', (e: MouseEvent) => {
     lastElement = e.target as HTMLElement;
     lastClickInfo = { x: e.clientX, y: e.clientY };
 }, true);
+
+// Global Hotkeys
+document.addEventListener('keydown', (e: KeyboardEvent) => {
+    // Only trigger if not typing in an input/textarea
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target as HTMLElement).isContentEditable) {
+        return;
+    }
+
+    if (e.altKey) {
+        const store = useNoteStore.getState();
+
+        switch (e.key.toLowerCase()) {
+            case 'n': // Alt + N: New Note
+                e.preventDefault();
+                const normalizedUrl = normalizeUrl(window.location.href);
+                const targetElement = currentElement || document.body;
+                const anchor = captureAnchor(targetElement, currentMousePos.x, currentMousePos.y);
+                const currentSettings = store.settings;
+
+                const newNote = {
+                    id: crypto.randomUUID(),
+                    url: normalizedUrl,
+                    domain: window.location.hostname,
+                    anchor,
+                    content: '',
+                    color: '#FFF9C4',
+                    size: { width: 200, height: 150 },
+                    notePosition: {
+                        x: Math.max(0, currentMousePos.x + window.scrollX),
+                        y: Math.max(0, currentMousePos.y + window.scrollY)
+                    },
+                    tags: [],
+                    status: 'pending' as const,
+                    isPinned: false,
+                    isCollapsed: false,
+                    fontFamily: currentSettings.fontFamily,
+                    fontSize: currentSettings.fontSize,
+                    textColor: currentSettings.textColor,
+                    createdAt: Date.now(),
+                    updatedAt: Date.now()
+                };
+
+                store.addNote(newNote).then(() => {
+                    store.setActiveNoteId(newNote.id);
+                });
+                break;
+
+            case 'a': // Alt + A: Toggle Markup Mode
+                e.preventDefault();
+                store.setMode(store.mode === 'markup' ? 'note' : 'markup');
+                break;
+
+            case 'r': // Alt + R: Toggle Review Mode
+                e.preventDefault();
+                store.setMode(store.mode === 'review' ? 'note' : 'review');
+                break;
+
+            case 'c': // Alt + C: Toggle Clean View
+                e.preventDefault();
+                store.updateSettings({ isCleanView: !store.settings.isCleanView });
+                break;
+        }
+    }
+
+    if (e.key === 'Escape') {
+        const store = useNoteStore.getState();
+        if (store.activeNoteId) {
+            store.setActiveNoteId(null);
+        } else if (store.mode !== 'note') {
+            store.setMode('note');
+        }
+    }
+});
 
 const handleMessage = (message: any) => {
     console.log('PagePost: Message received:', message.type);

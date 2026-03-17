@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNoteStore } from './store/useNoteStore';
-import { StickyNote, Search, Settings, ExternalLink, Trash2, MapPin, X, ChevronLeft, AlertTriangle, Eye, EyeOff, Clock, Play, CheckCircle2 } from 'lucide-react';
+import { StickyNote, Search, Settings, ExternalLink, Trash2, MapPin, X, ChevronLeft, AlertTriangle, Eye, EyeOff, Clock, Play, CheckCircle2, Keyboard } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 
 const App: React.FC = () => {
@@ -140,6 +140,25 @@ const PopupView: React.FC = () => {
             </div>
           </section>
 
+          <section>
+            <h2 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-1.5">
+              <Keyboard size={14} /> 생산성 단축키
+            </h2>
+            <div className="space-y-2">
+              {[
+                { key: 'Alt + N', desc: '새 메모 생성' },
+                { key: 'Alt + A', desc: '마크업 모드 토글' },
+                { key: 'Alt + R', desc: '리뷰 모드 토글' },
+                { key: 'Alt + C', desc: '클린 뷰 토글' },
+                { key: 'Esc', desc: '선택 해제 / 닫기' },
+              ].map((item) => (
+                <div key={item.key} className="flex items-center justify-between p-2 bg-gray-50 rounded border border-gray-100">
+                  <span className="text-[10px] font-bold text-gray-600 bg-gray-200 px-1.5 py-0.5 rounded leading-none">{item.key}</span>
+                  <span className="text-[10px] text-gray-500 font-medium">{item.desc}</span>
+                </div>
+              ))}
+            </div>
+          </section>
 
           <section>
             <h2 className="text-xs font-bold text-red-400 uppercase mb-3 flex items-center gap-1.5">

@@ -13077,52 +13077,52 @@ const createLucideIcon = (iconName, iconNode) => {
   Component.displayName = toPascalCase(iconName);
   return Component;
 };
-const __iconNode$p = [
+const __iconNode$q = [
   ["path", { d: "M8 2v4", key: "1cmpym" }],
   ["path", { d: "M16 2v4", key: "4m81vk" }],
   ["rect", { width: "18", height: "18", x: "3", y: "4", rx: "2", key: "1hopcy" }],
   ["path", { d: "M3 10h18", key: "8toen8" }]
 ];
-const Calendar = createLucideIcon("calendar", __iconNode$p);
-const __iconNode$o = [
+const Calendar = createLucideIcon("calendar", __iconNode$q);
+const __iconNode$p = [
   ["path", { d: "M3 3v16a2 2 0 0 0 2 2h16", key: "c24i48" }],
   ["path", { d: "M18 17V9", key: "2bz60n" }],
   ["path", { d: "M13 17V5", key: "1frdt8" }],
   ["path", { d: "M8 17v-3", key: "17ska0" }]
 ];
-const ChartColumn = createLucideIcon("chart-column", __iconNode$o);
-const __iconNode$n = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
-const ChevronLeft = createLucideIcon("chevron-left", __iconNode$n);
-const __iconNode$m = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
-const ChevronRight = createLucideIcon("chevron-right", __iconNode$m);
-const __iconNode$l = [
+const ChartColumn = createLucideIcon("chart-column", __iconNode$p);
+const __iconNode$o = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
+const ChevronLeft = createLucideIcon("chevron-left", __iconNode$o);
+const __iconNode$n = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
+const ChevronRight = createLucideIcon("chevron-right", __iconNode$n);
+const __iconNode$m = [
   ["path", { d: "M21.801 10A10 10 0 1 1 17 3.335", key: "yps3ct" }],
   ["path", { d: "m9 11 3 3L22 4", key: "1pflzl" }]
 ];
-const CircleCheckBig = createLucideIcon("circle-check-big", __iconNode$l);
-const __iconNode$k = [
+const CircleCheckBig = createLucideIcon("circle-check-big", __iconNode$m);
+const __iconNode$l = [
   ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
   ["path", { d: "m9 12 2 2 4-4", key: "dzmm74" }]
 ];
-const CircleCheck = createLucideIcon("circle-check", __iconNode$k);
-const __iconNode$j = [
+const CircleCheck = createLucideIcon("circle-check", __iconNode$l);
+const __iconNode$k = [
   ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
   ["path", { d: "M12 6v6l4 2", key: "mmk7yg" }]
 ];
-const Clock = createLucideIcon("clock", __iconNode$j);
-const __iconNode$i = [
+const Clock = createLucideIcon("clock", __iconNode$k);
+const __iconNode$j = [
   ["path", { d: "M12 15V3", key: "m9g1x1" }],
   ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", key: "ih7n3h" }],
   ["path", { d: "m7 10 5 5 5-5", key: "brsn70" }]
 ];
-const Download = createLucideIcon("download", __iconNode$i);
-const __iconNode$h = [
+const Download = createLucideIcon("download", __iconNode$j);
+const __iconNode$i = [
   ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
   ["path", { d: "M10 14 21 3", key: "gplh6r" }],
   ["path", { d: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6", key: "a6xqqp" }]
 ];
-const ExternalLink = createLucideIcon("external-link", __iconNode$h);
-const __iconNode$g = [
+const ExternalLink = createLucideIcon("external-link", __iconNode$i);
+const __iconNode$h = [
   [
     "path",
     {
@@ -13140,8 +13140,8 @@ const __iconNode$g = [
   ],
   ["path", { d: "m2 2 20 20", key: "1ooewy" }]
 ];
-const EyeOff = createLucideIcon("eye-off", __iconNode$g);
-const __iconNode$f = [
+const EyeOff = createLucideIcon("eye-off", __iconNode$h);
+const __iconNode$g = [
   [
     "path",
     {
@@ -13151,8 +13151,8 @@ const __iconNode$f = [
   ],
   ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
 ];
-const Eye = createLucideIcon("eye", __iconNode$f);
-const __iconNode$e = [
+const Eye = createLucideIcon("eye", __iconNode$g);
+const __iconNode$f = [
   [
     "path",
     {
@@ -13161,13 +13161,25 @@ const __iconNode$e = [
     }
   ]
 ];
-const Funnel = createLucideIcon("funnel", __iconNode$e);
-const __iconNode$d = [
+const Funnel = createLucideIcon("funnel", __iconNode$f);
+const __iconNode$e = [
   ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
   ["path", { d: "M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20", key: "13o1zl" }],
   ["path", { d: "M2 12h20", key: "9i4pu4" }]
 ];
-const Globe = createLucideIcon("globe", __iconNode$d);
+const Globe = createLucideIcon("globe", __iconNode$e);
+const __iconNode$d = [
+  ["path", { d: "M10 8h.01", key: "1r9ogq" }],
+  ["path", { d: "M12 12h.01", key: "1mp3jc" }],
+  ["path", { d: "M14 8h.01", key: "1primd" }],
+  ["path", { d: "M16 12h.01", key: "1l6xoz" }],
+  ["path", { d: "M18 8h.01", key: "emo2bl" }],
+  ["path", { d: "M6 8h.01", key: "x9i8wu" }],
+  ["path", { d: "M7 16h10", key: "wp8him" }],
+  ["path", { d: "M8 12h.01", key: "czm47f" }],
+  ["rect", { width: "20", height: "16", x: "2", y: "4", rx: "2", key: "18n3k1" }]
+];
+const Keyboard = createLucideIcon("keyboard", __iconNode$d);
 const __iconNode$c = [
   [
     "path",
@@ -13681,6 +13693,22 @@ const PopupView = () => {
                   }
                 )
               ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-1.5", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Keyboard, { size: 14 }),
+                " 생산성 단축키"
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-2", children: [
+                { key: "Alt + N", desc: "새 메모 생성" },
+                { key: "Alt + A", desc: "마크업 모드 토글" },
+                { key: "Alt + R", desc: "리뷰 모드 토글" },
+                { key: "Alt + C", desc: "클린 뷰 토글" },
+                { key: "Esc", desc: "선택 해제 / 닫기" }
+              ].map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between p-2 bg-gray-50 rounded border border-gray-100", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-bold text-gray-600 bg-gray-200 px-1.5 py-0.5 rounded leading-none", children: item.key }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] text-gray-500 font-medium", children: item.desc })
+              ] }, item.key)) })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-xs font-bold text-red-400 uppercase mb-3 flex items-center gap-1.5", children: [
