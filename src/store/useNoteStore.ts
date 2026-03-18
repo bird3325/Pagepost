@@ -11,9 +11,13 @@ interface NoteState {
     currentUrl: string;
     isGlobalView: boolean;
     searchQuery: string;
+    dashboardViewMode: 'list' | 'canvas';
     mode: 'note' | 'markup' | 'capture' | 'review';
     currentTool: MarkupType | 'eraser' | 'select';
     currentColor: string;
+    // ... rest
+    setDashboardViewMode: (mode: 'list' | 'canvas') => void;
+    updateCanvasPosition: (noteId: string, position: { x: number, y: number }) => Promise<void>;
     settings: {
         fontFamily: string;
         fontSize: number;
@@ -102,6 +106,7 @@ const MARKUP_STORAGE_KEY = 'pagepost_markups';
 const SETTINGS_KEY = 'pagepost_settings';
 const PROJECTS_KEY = 'pagepost_projects';
 const CURRENT_PROJECT_KEY = 'pagepost_current_project';
+const DASHBOARD_VIEW_MODE_KEY = 'pagepost_dashboard_view_mode';
 
 const isContextValid = () => {
     try {
@@ -148,6 +153,9 @@ export const useNoteStore = create<NoteState>((set, get) => {
                         if (isGlobalView) fetchAllNotes();
                         else if (currentUrl) fetchNotesForUrl(currentUrl);
                     }
+                    if (changes[DASHBOARD_VIEW_MODE_KEY]) {
+                        set({ dashboardViewMode: (changes[DASHBOARD_VIEW_MODE_KEY].newValue as 'list' | 'canvas') || 'list' });
+                    }
                     if (changes['pagepost_mode']) {
                         const newValue = changes['pagepost_mode'].newValue;
                         if (newValue === 'note' || newValue === 'markup' || newValue === 'capture' || newValue === 'review') {
@@ -178,6 +186,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
         currentUrl: '',
         isGlobalView: false,
         searchQuery: '',
+        dashboardViewMode: 'list',
         stats: {
             totalNotes: 0,
             totalMarkups: 0,
@@ -228,6 +237,14 @@ export const useNoteStore = create<NoteState>((set, get) => {
             } catch (error) {
                 console.error('Failed to load settings:', error);
             }
+
+            try {
+                const res = await chrome.storage.local.get(DASHBOARD_VIEW_MODE_KEY);
+                const mode = res[DASHBOARD_VIEW_MODE_KEY];
+                if (mode === 'list' || mode === 'canvas') {
+                    set({ dashboardViewMode: mode });
+                }
+            } catch (e) { }
         },
 
         updateSettings: async (newSettings) => {
@@ -240,6 +257,30 @@ export const useNoteStore = create<NoteState>((set, get) => {
                 set({ settings: updated });
             } catch (error) {
                 console.error('Failed to update settings:', error);
+            }
+        },
+
+        setDashboardViewMode: (mode) => {
+            set({ dashboardViewMode: mode });
+            if (isContextValid()) {
+                chrome.storage.local.set({ [DASHBOARD_VIEW_MODE_KEY]: mode });
+            }
+        },
+
+        updateCanvasPosition: async (noteId, position) => {
+            const { updateNoteState } = get();
+
+            // Memory update for smooth dragging
+            updateNoteState(noteId, { canvasPosition: position });
+
+            // Persist to storage
+            if (isContextValid()) {
+                const result = await chrome.storage.local.get(STORAGE_KEY);
+                const notes = (result[STORAGE_KEY] || []) as Note[];
+                const updatedNotes = notes.map(n =>
+                    n.id === noteId ? { ...n, canvasPosition: position, updatedAt: Date.now() } : n
+                );
+                await chrome.storage.local.set({ [STORAGE_KEY]: updatedNotes });
             }
         },
 

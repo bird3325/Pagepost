@@ -65,6 +65,12 @@ export interface Note {
         trelloId?: string;
         syncedAt?: number;
     };
+
+    // Canvas Dashboard Positioning
+    canvasPosition?: {
+        x: number;
+        y: number;
+    };
 }
 
 export type MarkupType = 'pen' | 'highlight' | 'rect' | 'circle' | 'arrow' | 'text' | 'sticker' | 'star' | 'heart' | 'triangle' | 'chat' | 'lightning' | 'diamond' | 'pentagon' | 'hexagon' | 'cross' | 'cloud' | 'banner' | 'burst1' | 'burst2' | 'eraser';

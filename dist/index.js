@@ -12542,6 +12542,7 @@ const MARKUP_STORAGE_KEY = "pagepost_markups";
 const SETTINGS_KEY = "pagepost_settings";
 const PROJECTS_KEY = "pagepost_projects";
 const CURRENT_PROJECT_KEY = "pagepost_current_project";
+const DASHBOARD_VIEW_MODE_KEY = "pagepost_dashboard_view_mode";
 const isContextValid = () => {
   try {
     return typeof chrome !== "undefined" && !!chrome.runtime && !!chrome.runtime.id;
@@ -12583,6 +12584,9 @@ const useNoteStore = create((set, get) => {
             if (isGlobalView) fetchAllNotes();
             else if (currentUrl) fetchNotesForUrl(currentUrl);
           }
+          if (changes[DASHBOARD_VIEW_MODE_KEY]) {
+            set({ dashboardViewMode: changes[DASHBOARD_VIEW_MODE_KEY].newValue || "list" });
+          }
           if (changes["pagepost_mode"]) {
             const newValue = changes["pagepost_mode"].newValue;
             if (newValue === "note" || newValue === "markup" || newValue === "capture" || newValue === "review") {
@@ -12610,6 +12614,7 @@ const useNoteStore = create((set, get) => {
     currentUrl: "",
     isGlobalView: false,
     searchQuery: "",
+    dashboardViewMode: "list",
     stats: {
       totalNotes: 0,
       totalMarkups: 0,
@@ -12657,6 +12662,14 @@ const useNoteStore = create((set, get) => {
       } catch (error) {
         console.error("Failed to load settings:", error);
       }
+      try {
+        const res = await chrome.storage.local.get(DASHBOARD_VIEW_MODE_KEY);
+        const mode = res[DASHBOARD_VIEW_MODE_KEY];
+        if (mode === "list" || mode === "canvas") {
+          set({ dashboardViewMode: mode });
+        }
+      } catch (e) {
+      }
     },
     updateSettings: async (newSettings) => {
       if (!isContextValid()) return;
@@ -12668,6 +12681,24 @@ const useNoteStore = create((set, get) => {
         set({ settings: updated });
       } catch (error) {
         console.error("Failed to update settings:", error);
+      }
+    },
+    setDashboardViewMode: (mode) => {
+      set({ dashboardViewMode: mode });
+      if (isContextValid()) {
+        chrome.storage.local.set({ [DASHBOARD_VIEW_MODE_KEY]: mode });
+      }
+    },
+    updateCanvasPosition: async (noteId, position) => {
+      const { updateNoteState } = get();
+      updateNoteState(noteId, { canvasPosition: position });
+      if (isContextValid()) {
+        const result = await chrome.storage.local.get(STORAGE_KEY);
+        const notes = result[STORAGE_KEY] || [];
+        const updatedNotes = notes.map(
+          (n) => n.id === noteId ? { ...n, canvasPosition: position, updatedAt: Date.now() } : n
+        );
+        await chrome.storage.local.set({ [STORAGE_KEY]: updatedNotes });
       }
     },
     setCurrentProjectId: (id) => {
@@ -13313,52 +13344,52 @@ const createLucideIcon = (iconName, iconNode) => {
   Component.displayName = toPascalCase(iconName);
   return Component;
 };
-const __iconNode$w = [
+const __iconNode$A = [
   ["path", { d: "M8 2v4", key: "1cmpym" }],
   ["path", { d: "M16 2v4", key: "4m81vk" }],
   ["rect", { width: "18", height: "18", x: "3", y: "4", rx: "2", key: "1hopcy" }],
   ["path", { d: "M3 10h18", key: "8toen8" }]
 ];
-const Calendar = createLucideIcon("calendar", __iconNode$w);
-const __iconNode$v = [
+const Calendar = createLucideIcon("calendar", __iconNode$A);
+const __iconNode$z = [
   ["path", { d: "M3 3v16a2 2 0 0 0 2 2h16", key: "c24i48" }],
   ["path", { d: "M18 17V9", key: "2bz60n" }],
   ["path", { d: "M13 17V5", key: "1frdt8" }],
   ["path", { d: "M8 17v-3", key: "17ska0" }]
 ];
-const ChartColumn = createLucideIcon("chart-column", __iconNode$v);
-const __iconNode$u = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
-const ChevronLeft = createLucideIcon("chevron-left", __iconNode$u);
-const __iconNode$t = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
-const ChevronRight = createLucideIcon("chevron-right", __iconNode$t);
-const __iconNode$s = [
+const ChartColumn = createLucideIcon("chart-column", __iconNode$z);
+const __iconNode$y = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
+const ChevronLeft = createLucideIcon("chevron-left", __iconNode$y);
+const __iconNode$x = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
+const ChevronRight = createLucideIcon("chevron-right", __iconNode$x);
+const __iconNode$w = [
   ["path", { d: "M21.801 10A10 10 0 1 1 17 3.335", key: "yps3ct" }],
   ["path", { d: "m9 11 3 3L22 4", key: "1pflzl" }]
 ];
-const CircleCheckBig = createLucideIcon("circle-check-big", __iconNode$s);
-const __iconNode$r = [
+const CircleCheckBig = createLucideIcon("circle-check-big", __iconNode$w);
+const __iconNode$v = [
   ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
   ["path", { d: "m9 12 2 2 4-4", key: "dzmm74" }]
 ];
-const CircleCheck = createLucideIcon("circle-check", __iconNode$r);
-const __iconNode$q = [
+const CircleCheck = createLucideIcon("circle-check", __iconNode$v);
+const __iconNode$u = [
   ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
   ["path", { d: "M8 12h8", key: "1wcyev" }]
 ];
-const CircleMinus = createLucideIcon("circle-minus", __iconNode$q);
-const __iconNode$p = [
+const CircleMinus = createLucideIcon("circle-minus", __iconNode$u);
+const __iconNode$t = [
   ["path", { d: "M12 15V3", key: "m9g1x1" }],
   ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", key: "ih7n3h" }],
   ["path", { d: "m7 10 5 5 5-5", key: "brsn70" }]
 ];
-const Download = createLucideIcon("download", __iconNode$p);
-const __iconNode$o = [
+const Download = createLucideIcon("download", __iconNode$t);
+const __iconNode$s = [
   ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
   ["path", { d: "M10 14 21 3", key: "gplh6r" }],
   ["path", { d: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6", key: "a6xqqp" }]
 ];
-const ExternalLink = createLucideIcon("external-link", __iconNode$o);
-const __iconNode$n = [
+const ExternalLink = createLucideIcon("external-link", __iconNode$s);
+const __iconNode$r = [
   [
     "path",
     {
@@ -13376,8 +13407,8 @@ const __iconNode$n = [
   ],
   ["path", { d: "m2 2 20 20", key: "1ooewy" }]
 ];
-const EyeOff = createLucideIcon("eye-off", __iconNode$n);
-const __iconNode$m = [
+const EyeOff = createLucideIcon("eye-off", __iconNode$r);
+const __iconNode$q = [
   [
     "path",
     {
@@ -13387,8 +13418,8 @@ const __iconNode$m = [
   ],
   ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
 ];
-const Eye = createLucideIcon("eye", __iconNode$m);
-const __iconNode$l = [
+const Eye = createLucideIcon("eye", __iconNode$q);
+const __iconNode$p = [
   ["path", { d: "M12 10v6", key: "1bos4e" }],
   ["path", { d: "M9 13h6", key: "1uhe8q" }],
   [
@@ -13399,8 +13430,8 @@ const __iconNode$l = [
     }
   ]
 ];
-const FolderPlus = createLucideIcon("folder-plus", __iconNode$l);
-const __iconNode$k = [
+const FolderPlus = createLucideIcon("folder-plus", __iconNode$p);
+const __iconNode$o = [
   [
     "path",
     {
@@ -13409,8 +13440,8 @@ const __iconNode$k = [
     }
   ]
 ];
-const Folder = createLucideIcon("folder", __iconNode$k);
-const __iconNode$j = [
+const Folder = createLucideIcon("folder", __iconNode$o);
+const __iconNode$n = [
   [
     "path",
     {
@@ -13419,20 +13450,20 @@ const __iconNode$j = [
     }
   ]
 ];
-const Funnel = createLucideIcon("funnel", __iconNode$j);
-const __iconNode$i = [
+const Funnel = createLucideIcon("funnel", __iconNode$n);
+const __iconNode$m = [
   ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
   ["path", { d: "M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20", key: "13o1zl" }],
   ["path", { d: "M2 12h20", key: "9i4pu4" }]
 ];
-const Globe = createLucideIcon("globe", __iconNode$i);
-const __iconNode$h = [
+const Globe = createLucideIcon("globe", __iconNode$m);
+const __iconNode$l = [
   ["path", { d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", key: "1357e3" }],
   ["path", { d: "M3 3v5h5", key: "1xhq8a" }],
   ["path", { d: "M12 7v5l4 2", key: "1fdv2h" }]
 ];
-const History = createLucideIcon("history", __iconNode$h);
-const __iconNode$g = [
+const History = createLucideIcon("history", __iconNode$l);
+const __iconNode$k = [
   ["path", { d: "M10 8h.01", key: "1r9ogq" }],
   ["path", { d: "M12 12h.01", key: "1mp3jc" }],
   ["path", { d: "M14 8h.01", key: "1primd" }],
@@ -13443,13 +13474,22 @@ const __iconNode$g = [
   ["path", { d: "M8 12h.01", key: "czm47f" }],
   ["rect", { width: "20", height: "16", x: "2", y: "4", rx: "2", key: "18n3k1" }]
 ];
-const Keyboard = createLucideIcon("keyboard", __iconNode$g);
-const __iconNode$f = [
+const Keyboard = createLucideIcon("keyboard", __iconNode$k);
+const __iconNode$j = [
+  ["path", { d: "M3 5h.01", key: "18ugdj" }],
+  ["path", { d: "M3 12h.01", key: "nlz23k" }],
+  ["path", { d: "M3 19h.01", key: "noohij" }],
+  ["path", { d: "M8 5h13", key: "1pao27" }],
+  ["path", { d: "M8 12h13", key: "1za7za" }],
+  ["path", { d: "M8 19h13", key: "m83p4d" }]
+];
+const List = createLucideIcon("list", __iconNode$j);
+const __iconNode$i = [
   ["rect", { width: "18", height: "11", x: "3", y: "11", rx: "2", ry: "2", key: "1w4ew1" }],
   ["path", { d: "M7 11V7a5 5 0 0 1 10 0v4", key: "fwvmzm" }]
 ];
-const Lock = createLucideIcon("lock", __iconNode$f);
-const __iconNode$e = [
+const Lock = createLucideIcon("lock", __iconNode$i);
+const __iconNode$h = [
   [
     "path",
     {
@@ -13459,14 +13499,14 @@ const __iconNode$e = [
   ],
   ["circle", { cx: "12", cy: "10", r: "3", key: "ilqhr7" }]
 ];
-const MapPin = createLucideIcon("map-pin", __iconNode$e);
-const __iconNode$d = [
+const MapPin = createLucideIcon("map-pin", __iconNode$h);
+const __iconNode$g = [
   ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", key: "afitv7" }],
   ["path", { d: "M3 9h18", key: "1pudct" }],
   ["path", { d: "M9 21V9", key: "1oto5p" }]
 ];
-const PanelsTopLeft = createLucideIcon("panels-top-left", __iconNode$d);
-const __iconNode$c = [
+const PanelsTopLeft = createLucideIcon("panels-top-left", __iconNode$g);
+const __iconNode$f = [
   [
     "path",
     {
@@ -13484,8 +13524,8 @@ const __iconNode$c = [
   ["path", { d: "m2.3 2.3 7.286 7.286", key: "1wuzzi" }],
   ["circle", { cx: "11", cy: "11", r: "2", key: "xmgehs" }]
 ];
-const PenTool = createLucideIcon("pen-tool", __iconNode$c);
-const __iconNode$b = [
+const PenTool = createLucideIcon("pen-tool", __iconNode$f);
+const __iconNode$e = [
   [
     "path",
     {
@@ -13494,13 +13534,20 @@ const __iconNode$b = [
     }
   ]
 ];
-const Play = createLucideIcon("play", __iconNode$b);
-const __iconNode$a = [
+const Play = createLucideIcon("play", __iconNode$e);
+const __iconNode$d = [
+  ["path", { d: "M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", key: "14sxne" }],
+  ["path", { d: "M3 3v5h5", key: "1xhq8a" }],
+  ["path", { d: "M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16", key: "1hlbsb" }],
+  ["path", { d: "M16 16h5v5", key: "ccwih5" }]
+];
+const RefreshCcw = createLucideIcon("refresh-ccw", __iconNode$d);
+const __iconNode$c = [
   ["path", { d: "m21 21-4.34-4.34", key: "14j7rj" }],
   ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }]
 ];
-const Search = createLucideIcon("search", __iconNode$a);
-const __iconNode$9 = [
+const Search = createLucideIcon("search", __iconNode$c);
+const __iconNode$b = [
   [
     "path",
     {
@@ -13510,8 +13557,8 @@ const __iconNode$9 = [
   ],
   ["path", { d: "m21.854 2.147-10.94 10.939", key: "12cjpa" }]
 ];
-const Send = createLucideIcon("send", __iconNode$9);
-const __iconNode$8 = [
+const Send = createLucideIcon("send", __iconNode$b);
+const __iconNode$a = [
   [
     "path",
     {
@@ -13521,16 +13568,16 @@ const __iconNode$8 = [
   ],
   ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
 ];
-const Settings = createLucideIcon("settings", __iconNode$8);
-const __iconNode$7 = [
+const Settings = createLucideIcon("settings", __iconNode$a);
+const __iconNode$9 = [
   ["circle", { cx: "18", cy: "5", r: "3", key: "gq8acd" }],
   ["circle", { cx: "6", cy: "12", r: "3", key: "w7nqdw" }],
   ["circle", { cx: "18", cy: "19", r: "3", key: "1xt0gg" }],
   ["line", { x1: "8.59", x2: "15.42", y1: "13.51", y2: "17.49", key: "47mynk" }],
   ["line", { x1: "15.41", x2: "8.59", y1: "6.51", y2: "10.49", key: "1n3mei" }]
 ];
-const Share2 = createLucideIcon("share-2", __iconNode$7);
-const __iconNode$6 = [
+const Share2 = createLucideIcon("share-2", __iconNode$9);
+const __iconNode$8 = [
   [
     "path",
     {
@@ -13540,8 +13587,8 @@ const __iconNode$6 = [
   ],
   ["path", { d: "M15 3v5a1 1 0 0 0 1 1h5", key: "6s6qgf" }]
 ];
-const StickyNote = createLucideIcon("sticky-note", __iconNode$6);
-const __iconNode$5 = [
+const StickyNote = createLucideIcon("sticky-note", __iconNode$8);
+const __iconNode$7 = [
   [
     "path",
     {
@@ -13551,16 +13598,16 @@ const __iconNode$5 = [
   ],
   ["circle", { cx: "7.5", cy: "7.5", r: ".5", fill: "currentColor", key: "kqv944" }]
 ];
-const Tag = createLucideIcon("tag", __iconNode$5);
-const __iconNode$4 = [
+const Tag = createLucideIcon("tag", __iconNode$7);
+const __iconNode$6 = [
   ["path", { d: "M10 11v6", key: "nco0om" }],
   ["path", { d: "M14 11v6", key: "outv1u" }],
   ["path", { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6", key: "miytrc" }],
   ["path", { d: "M3 6h18", key: "d0wm0j" }],
   ["path", { d: "M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2", key: "e791ji" }]
 ];
-const Trash2 = createLucideIcon("trash-2", __iconNode$4);
-const __iconNode$3 = [
+const Trash2 = createLucideIcon("trash-2", __iconNode$6);
+const __iconNode$5 = [
   [
     "path",
     {
@@ -13571,23 +13618,247 @@ const __iconNode$3 = [
   ["path", { d: "M12 9v4", key: "juzpu7" }],
   ["path", { d: "M12 17h.01", key: "p32p05" }]
 ];
-const TriangleAlert = createLucideIcon("triangle-alert", __iconNode$3);
-const __iconNode$2 = [
+const TriangleAlert = createLucideIcon("triangle-alert", __iconNode$5);
+const __iconNode$4 = [
   ["path", { d: "M12 3v12", key: "1x0j5s" }],
   ["path", { d: "m17 8-5-5-5 5", key: "7q97r8" }],
   ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", key: "ih7n3h" }]
 ];
-const Upload = createLucideIcon("upload", __iconNode$2);
-const __iconNode$1 = [
+const Upload = createLucideIcon("upload", __iconNode$4);
+const __iconNode$3 = [
   ["path", { d: "M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2", key: "975kel" }],
   ["circle", { cx: "12", cy: "7", r: "4", key: "17ys0d" }]
 ];
-const User = createLucideIcon("user", __iconNode$1);
-const __iconNode = [
+const User = createLucideIcon("user", __iconNode$3);
+const __iconNode$2 = [
   ["path", { d: "M18 6 6 18", key: "1bl5f8" }],
   ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
 ];
-const X = createLucideIcon("x", __iconNode);
+const X = createLucideIcon("x", __iconNode$2);
+const __iconNode$1 = [
+  ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }],
+  ["line", { x1: "21", x2: "16.65", y1: "21", y2: "16.65", key: "13gj7c" }],
+  ["line", { x1: "11", x2: "11", y1: "8", y2: "14", key: "1vmskp" }],
+  ["line", { x1: "8", x2: "14", y1: "11", y2: "11", key: "durymu" }]
+];
+const ZoomIn = createLucideIcon("zoom-in", __iconNode$1);
+const __iconNode = [
+  ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }],
+  ["line", { x1: "21", x2: "16.65", y1: "21", y2: "16.65", key: "13gj7c" }],
+  ["line", { x1: "8", x2: "14", y1: "11", y2: "11", key: "durymu" }]
+];
+const ZoomOut = createLucideIcon("zoom-out", __iconNode);
+const CanvasDashboard = () => {
+  const {
+    notes,
+    updateCanvasPosition,
+    searchQuery
+  } = useNoteStore();
+  const containerRef = reactExports.useRef(null);
+  const [pan, setPan] = reactExports.useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = reactExports.useState(1);
+  const [isPanning, setIsPanning] = reactExports.useState(false);
+  const [draggedNoteId, setDraggedNoteId] = reactExports.useState(null);
+  const dragOffset = reactExports.useRef({ x: 0, y: 0 });
+  const filteredNotes = reactExports.useMemo(() => {
+    if (!searchQuery) return notes;
+    const q = searchQuery.toLowerCase();
+    return notes.filter(
+      (n) => n.content.toLowerCase().includes(q) || n.domain.toLowerCase().includes(q) || n.tags.some((t) => t.toLowerCase().includes(q))
+    );
+  }, [notes, searchQuery]);
+  const handleMouseDown = (e) => {
+    if (e.button === 1 || e.button === 0 && e.altKey) {
+      setIsPanning(true);
+      e.preventDefault();
+    }
+  };
+  const handleMouseMove = (e) => {
+    if (isPanning) {
+      setPan((prev) => ({
+        x: prev.x + e.movementX,
+        y: prev.y + e.movementY
+      }));
+    } else if (draggedNoteId) {
+      const note = notes.find((n) => n.id === draggedNoteId);
+      if (note) {
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (rect) {
+          const canvasX = (e.clientX - rect.left - pan.x) / zoom;
+          const canvasY = (e.clientY - rect.top - pan.y) / zoom;
+          updateCanvasPosition(draggedNoteId, {
+            x: canvasX - dragOffset.current.x,
+            y: canvasY - dragOffset.current.y
+          });
+        }
+      }
+    }
+  };
+  const handleMouseUp = () => {
+    setIsPanning(false);
+    setDraggedNoteId(null);
+  };
+  const handleWheel = (e) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = -e.deltaY;
+      const factor = Math.pow(1.1, delta / 100);
+      const newZoom = Math.min(3, Math.max(0.2, zoom * factor));
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (rect) {
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const beforeX = (mouseX - pan.x) / zoom;
+        const beforeY = (mouseY - pan.y) / zoom;
+        const afterX = beforeX * newZoom;
+        const afterY = beforeY * newZoom;
+        setPan({
+          x: mouseX - afterX,
+          y: mouseY - afterY
+        });
+        setZoom(newZoom);
+      }
+    } else {
+      setPan((prev) => ({
+        x: prev.x - e.deltaX,
+        y: prev.y - e.deltaY
+      }));
+    }
+  };
+  const handleNoteDragStart = (e, note) => {
+    e.stopPropagation();
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (rect) {
+      const canvasX = (e.clientX - rect.left - pan.x) / zoom;
+      const canvasY = (e.clientY - rect.top - pan.y) / zoom;
+      dragOffset.current = {
+        x: canvasX - (note.canvasPosition?.x || 0),
+        y: canvasY - (note.canvasPosition?.y || 0)
+      };
+      setDraggedNoteId(note.id);
+    }
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      ref: containerRef,
+      className: "relative w-full h-full overflow-hidden bg-slate-50 cursor-grab active:cursor-grabbing select-none",
+      onMouseDown: handleMouseDown,
+      onMouseMove: handleMouseMove,
+      onMouseUp: handleMouseUp,
+      onMouseLeave: handleMouseUp,
+      onWheel: handleWheel,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "div",
+          {
+            className: "absolute inset-0 pointer-events-none",
+            style: {
+              backgroundImage: `radial-gradient(circle, #cbd5e1 1px, transparent 1px)`,
+              backgroundSize: `${20 * zoom}px ${20 * zoom}px`,
+              backgroundPosition: `${pan.x}px ${pan.y}px`,
+              opacity: 0.5
+            }
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "div",
+          {
+            className: "absolute inset-0 pointer-events-none",
+            style: {
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transformOrigin: "0 0"
+            },
+            children: filteredNotes.map((note) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "div",
+              {
+                className: "absolute pointer-events-auto group",
+                style: {
+                  left: note.canvasPosition?.x || 0,
+                  top: note.canvasPosition?.y || 0,
+                  width: note.size.width,
+                  zIndex: draggedNoteId === note.id ? 10 : 1
+                },
+                onMouseDown: (e) => handleNoteDragStart(e, note),
+                children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                  "div",
+                  {
+                    className: `p-4 rounded-2xl shadow-lg border border-slate-200 transition-all hover:shadow-xl ${draggedNoteId === note.id ? "scale-105" : "scale-100"}`,
+                    style: { backgroundColor: "white", borderLeft: `6px solid ${note.color}` },
+                    children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-2", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-bold text-brand-primary uppercase tracking-widest", children: note.domain }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx(
+                          "a",
+                          {
+                            href: note.url,
+                            target: "_blank",
+                            rel: "noopener noreferrer",
+                            className: "p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-brand-primary",
+                            children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExternalLink, { size: 12 })
+                          }
+                        )
+                      ] }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "p",
+                        {
+                          className: "text-xs text-slate-700 leading-relaxed line-clamp-4 whitespace-pre-wrap italic",
+                          style: { fontFamily: note.fontFamily, fontSize: note.fontSize },
+                          children: note.content
+                        }
+                      ),
+                      note.tags.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex flex-wrap gap-1", children: note.tags.map((tag) => /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[8px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-bold", children: [
+                        "#",
+                        tag
+                      ] }, tag)) })
+                    ]
+                  }
+                )
+              },
+              note.id
+            ))
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute bottom-8 left-8 flex items-center gap-2 p-2 bg-white/80 backdrop-blur rounded-2xl shadow-xl border border-white/50", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: () => setZoom((prev) => Math.min(3, prev + 0.2)),
+              className: "p-2 hover:bg-slate-100 rounded-xl transition-colors",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx(ZoomIn, { size: 18, className: "text-slate-600" })
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-[1px] h-4 bg-slate-200" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: () => setZoom((prev) => Math.max(0.2, prev - 0.2)),
+              className: "p-2 hover:bg-slate-100 rounded-xl transition-colors",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx(ZoomOut, { size: 18, className: "text-slate-600" })
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-[1px] h-4 bg-slate-200" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: () => {
+                setPan({ x: window.innerWidth / 4, y: 100 });
+                setZoom(0.8);
+              },
+              className: "p-2 hover:bg-slate-100 rounded-xl transition-colors",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx(RefreshCcw, { size: 18, className: "text-slate-600" })
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "ml-2 px-3 py-1 bg-slate-100 rounded-lg text-[10px] font-black text-slate-400", children: [
+            Math.round(zoom * 100),
+            "%"
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute top-8 right-8 px-4 py-2 bg-slate-900/10 backdrop-blur rounded-full text-[10px] font-bold text-slate-600 uppercase tracking-widest border border-white/20", children: "Alt + Drag to Pan · Scroll to Zoom" })
+      ]
+    }
+  );
+};
 const Dashboard = () => {
   const {
     notes,
@@ -13610,7 +13881,9 @@ const Dashboard = () => {
     shareSnapshot,
     toggleNoteSharing,
     updateSettings,
-    loadSettings
+    loadSettings,
+    dashboardViewMode,
+    setDashboardViewMode
   } = useNoteStore();
   const [selectedDomain, setSelectedDomain] = React.useState(null);
   const [statusFilter, setStatusFilter] = React.useState(null);
@@ -13917,11 +14190,37 @@ const Dashboard = () => {
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "lg:col-span-9 space-y-8", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center justify-between mb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-xl font-bold flex items-center gap-2 text-slate-800 uppercase tracking-tight", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Calendar, { size: 20, className: "text-brand-primary" }),
-            "Recent Activity"
-          ] }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-6", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-xl font-bold flex items-center gap-2 text-slate-800 uppercase tracking-tight", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Calendar, { size: 20, className: "text-brand-primary" }),
+              dashboardViewMode === "canvas" ? "Infinite Canvas" : "Recent Activity"
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex bg-slate-100 p-1 rounded-xl gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  onClick: () => setDashboardViewMode("list"),
+                  className: `p-1.5 rounded-lg transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-tight ${dashboardViewMode === "list" ? "bg-white shadow-sm text-brand-primary" : "text-slate-400 hover:text-slate-600"}`,
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(List, { size: 14 }),
+                    " 목록 형태"
+                  ]
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  onClick: () => setDashboardViewMode("canvas"),
+                  className: `p-1.5 rounded-lg transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-tight ${dashboardViewMode === "canvas" ? "bg-white shadow-sm text-brand-primary" : "text-slate-400 hover:text-slate-600"}`,
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(PanelsTopLeft, { size: 14 }),
+                    " 캔버스 보드"
+                  ]
+                }
+              )
+            ] })
+          ] }),
+          dashboardViewMode === "canvas" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-[calc(100vh-280px)] min-h-[500px] rounded-3xl overflow-hidden border border-slate-200 shadow-inner", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CanvasDashboard, {}) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-6", children: [
             filteredNotes.map((note) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-md transition-all flex flex-col group", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-5 flex items-start justify-between", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
