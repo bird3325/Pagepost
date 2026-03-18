@@ -49,5 +49,126 @@
       });
       return true;
     }
+    if (message.type === "SYNC_NOTE") {
+      const { service, data, apiKeys } = message;
+      const performSync = async () => {
+        try {
+          if (service === "notion") {
+            const dbResponse = await fetch(`https://api.notion.com/v1/databases/${apiKeys.notionDatabaseId}`, {
+              headers: {
+                "Authorization": `Bearer ${apiKeys.notionToken}`,
+                "Notion-Version": "2022-06-28"
+              }
+            });
+            if (!dbResponse.ok) {
+              const errorData = await dbResponse.json();
+              throw new Error(`Database Access Error: ${errorData.message || dbResponse.status}`);
+            }
+            const dbData = await dbResponse.json();
+            const titleProperty = Object.entries(dbData.properties).find(([_, prop]) => prop.type === "title");
+            const titleKey = titleProperty ? titleProperty[0] : "Name";
+            const response = await fetch("https://api.notion.com/v1/pages", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${apiKeys.notionToken}`,
+                "Content-Type": "application/json",
+                "Notion-Version": "2022-06-28"
+              },
+              body: JSON.stringify({
+                parent: { database_id: apiKeys.notionDatabaseId },
+                properties: {
+                  [titleKey]: { title: [{ text: { content: data.content.substring(0, 100) || "PagePost Note" } }] }
+                },
+                children: [
+                  {
+                    object: "block",
+                    type: "heading_2",
+                    heading_2: { rich_text: [{ text: { content: "📝 PagePost Memo" } }] }
+                  },
+                  {
+                    object: "block",
+                    type: "paragraph",
+                    paragraph: {
+                      rich_text: [
+                        { text: { content: data.content }, annotations: { italic: true } }
+                      ]
+                    }
+                  },
+                  {
+                    object: "block",
+                    type: "divider",
+                    divider: {}
+                  },
+                  {
+                    object: "block",
+                    type: "paragraph",
+                    paragraph: {
+                      rich_text: [
+                        { text: { content: "🌐 Source: " }, annotations: { bold: true } },
+                        { text: { content: data.url }, href: data.url }
+                      ]
+                    }
+                  },
+                  {
+                    object: "block",
+                    type: "paragraph",
+                    paragraph: {
+                      rich_text: [
+                        { text: { content: "🏢 Domain: " }, annotations: { bold: true } },
+                        { text: { content: data.domain } }
+                      ]
+                    }
+                  }
+                ]
+              })
+            });
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.message || `Notion Error: ${response.status}`);
+            }
+            const result = await response.json();
+            sendResponse({ ok: true, id: result.id });
+          } else if (service === "slack") {
+            const response = await fetch(apiKeys.slackWebhookUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                text: `*PagePost Note Captured!*
+
+*Domain:* ${data.domain}
+*URL:* ${data.url}
+*Content:* 
+> ${data.content}
+
+_Sent via PagePost Productivity_`
+              })
+            });
+            if (!response.ok) throw new Error(await response.text());
+            sendResponse({ ok: true, id: `slack-${Date.now()}` });
+          } else if (service === "trello") {
+            const params = new URLSearchParams({
+              name: `PagePost: ${data.domain}`,
+              desc: `${data.content}
+
+URL: ${data.url}`,
+              idList: apiKeys.trelloListId,
+              key: apiKeys.trelloKey,
+              token: apiKeys.trelloToken
+            });
+            const response = await fetch(`https://api.trello.com/1/cards?${params.toString()}`, {
+              method: "POST"
+            });
+            if (!response.ok) throw new Error(await response.text());
+            const result = await response.json();
+            sendResponse({ ok: true, id: result.id });
+          }
+        } catch (err) {
+          console.error(`PagePost: ${service} sync error:`, err);
+          sendResponse({ ok: false, error: err.message });
+        }
+      };
+      performSync();
+      return true;
+    }
   });
 })();

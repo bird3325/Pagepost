@@ -15,7 +15,12 @@ import {
     Play,
     MinusCircle,
     History,
-    ChevronLeft
+    ChevronLeft,
+    Mic,
+    MicOff,
+    Send,
+    Loader2,
+    Check
 } from 'lucide-react';
 
 interface NoteCardProps {
@@ -31,7 +36,23 @@ const COLORS = [
 ];
 
 const NoteCardComponent: React.FC<NoteCardProps> = ({ note }) => {
-    const { updateNote, deleteNote, settings, loadSettings, activeNoteId, setActiveNoteId } = useNoteStore();
+    const updateNote = useNoteStore(state => state.updateNote);
+    const deleteNote = useNoteStore(state => state.deleteNote);
+    const settings = useNoteStore(state => state.settings);
+    const loadSettings = useNoteStore(state => state.loadSettings);
+    const activeNoteId = useNoteStore(state => state.activeNoteId);
+    const setActiveNoteId = useNoteStore(state => state.setActiveNoteId);
+    const accentColor = useNoteStore(state => state.accentColor);
+    const syncToExternalService = useNoteStore(state => state.syncToExternalService);
+    const saveVoiceMemo = useNoteStore(state => state.saveVoiceMemo);
+
+    const [isDraggingLocal, setIsDraggingLocal] = useState(false);
+    const [isResizingLocal, setIsResizingLocal] = useState(false);
+    const [isRecording, setIsRecording] = useState(false);
+    const [recordingTime, setRecordingTime] = useState(0);
+    const [isSyncing, setIsSyncing] = useState<string | null>(null);
+    const [showSyncMenu, setShowSyncMenu] = useState(false);
+
     const [isEditing, setIsEditing] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
@@ -40,56 +61,116 @@ const NoteCardComponent: React.FC<NoteCardProps> = ({ note }) => {
         loadSettings();
     }, [loadSettings]);
 
-    // --- Smart Anchoring Restoration with Retry ---
+    // --- Smart Anchoring Restoration with Retry and Layout Shift Handling ---
     useEffect(() => {
         if (!note.anchor) return;
 
         let retryCount = 0;
-        const maxRetries = 50;
-        const retryInterval = 100; // 0.1 second
+        const maxRetries = 60; // 6 seconds total (100ms * 60)
+        let foundOnce = false;
+        let pouncingEndsAt = 0;
 
-        const attemptRestoration = () => {
+        const attemptRestoration = (isFinal = false) => {
             const el = restoreElement(note.anchor!);
             if (el) {
                 const rect = el.getBoundingClientRect();
 
-                // Safety check: If the element is found but has no dimensions yet (still rendering/loading),
-                // wait for the next retry instead of updating to potentially (0,0) coordinates.
-                if (rect.width === 0 || rect.height === 0) {
-                    return false;
-                }
+                // Safety check: If the element is found but has no dimensions yet
+                if (rect.width === 0 || rect.height === 0) return false;
 
                 const newX = rect.left + window.scrollX + (note.anchor!.position.x * rect.width);
                 const newY = rect.top + window.scrollY + (note.anchor!.position.y * rect.height);
 
-                // Safety check: If both coordinates are basically 0 but the previous position wasn't, 
-                // this is likely a premature restoration or a hidden element. Discard and retry.
-                if (Math.abs(newX) < 1 && Math.abs(newY) < 1 && (Math.abs(note.notePosition.x) > 5 || Math.abs(note.notePosition.y) > 5)) {
-                    return false;
-                }
+                const hasMoved = Math.abs(newX - note.notePosition.x) > 1.0 || Math.abs(newY - note.notePosition.y) > 1.0;
 
-                // Update physical position to move note to anchor
-                if (Math.abs(newX - note.notePosition.x) > 1 || Math.abs(newY - note.notePosition.y) > 1) {
-                    updateNote(note.id, {
-                        notePosition: { x: newX, y: newY }
-                    });
+                if (hasMoved) {
+                    if (isFinal) {
+                        // Permanent save to storage at the end or when definitively moved
+                        updateNote(note.id, { notePosition: { x: newX, y: newY } });
+                    } else {
+                        // Memory-only update during "pouncing" to avoid storage thrashing/shuffling
+                        useNoteStore.getState().updateNoteState(note.id, { notePosition: { x: newX, y: newY } });
+                    }
                 }
-                return true; // Success
+                return true;
             }
-            return false; // Not found yet
+            return false;
         };
 
-        // Initial attempt
-        if (!attemptRestoration()) {
-            const timer = setInterval(() => {
-                retryCount++;
-                if (attemptRestoration() || retryCount >= maxRetries) {
-                    clearInterval(timer);
+        const retryInterval = 100; // 0.1 second
+        const timer = setInterval(() => {
+            retryCount++;
+            const success = attemptRestoration(false);
+
+            if (success && !foundOnce) {
+                foundOnce = true;
+                // Once found, keep tracking for another 3 seconds to handle layout shifts
+                pouncingEndsAt = retryCount + 30;
+            }
+
+            // End of period or max retries
+            if (retryCount >= maxRetries || (foundOnce && retryCount >= pouncingEndsAt)) {
+                clearInterval(timer);
+                // Final sync to storage if we found it
+                if (foundOnce) {
+                    attemptRestoration(true);
                 }
-            }, retryInterval);
-            return () => clearInterval(timer);
+            }
+        }, retryInterval);
+
+        return () => clearInterval(timer);
+    }, [note.id]);
+
+    // --- Voice Recording Logic ---
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const recordChunksRef = useRef<Blob[]>([]);
+    const timerRef = useRef<number | null>(null);
+
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const recorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = recorder;
+            recordChunksRef.current = [];
+
+            recorder.ondataavailable = (e) => {
+                if (e.data.size > 0) recordChunksRef.current.push(e.data);
+            };
+
+            recorder.onstop = () => {
+                const blob = new Blob(recordChunksRef.current, { type: 'audio/webm' });
+                saveVoiceMemo(note.id, blob);
+                stream.getTracks().forEach(track => track.stop());
+            };
+
+            recorder.start();
+            setIsRecording(true);
+            setRecordingTime(0);
+            timerRef.current = window.setInterval(() => {
+                setRecordingTime(prev => prev + 1);
+            }, 1000);
+        } catch (err) {
+            console.error('Failed to start recording:', err);
+            alert('마이크 권한이 필요합니다.');
         }
-    }, [note.id]); // Run on mount or on ID change
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorderRef.current && isRecording) {
+            mediaRecorderRef.current.stop();
+            setIsRecording(false);
+            if (timerRef.current) clearInterval(timerRef.current);
+        }
+    };
+
+    const handleSync = async (service: 'notion' | 'slack' | 'trello') => {
+        setIsSyncing(service);
+        const success = await syncToExternalService(note.id, service);
+        setIsSyncing(null);
+        if (success) {
+            setShowSyncMenu(false);
+        }
+    };
     const [showColors, setShowColors] = useState(false);
     const [localContent, setLocalContent] = useState(note.content);
 
@@ -118,6 +199,7 @@ const NoteCardComponent: React.FC<NoteCardProps> = ({ note }) => {
             initialX: note.notePosition.x,
             initialY: note.notePosition.y
         };
+        setIsDraggingLocal(true);
 
         const handleMouseMove = (ev: MouseEvent) => {
             if (!interactionRef.current.isDragging) return;
@@ -128,8 +210,7 @@ const NoteCardComponent: React.FC<NoteCardProps> = ({ note }) => {
                 const dy = ev.clientY - interactionRef.current.startY;
 
                 if (cardRef.current) {
-                    cardRef.current.style.left = `${interactionRef.current.initialX + dx}px`;
-                    cardRef.current.style.top = `${interactionRef.current.initialY + dy}px`;
+                    cardRef.current.style.transform = `translate(${dx}px, ${dy}px)`;
                     cardRef.current.style.cursor = 'grabbing';
                 }
             });
@@ -142,6 +223,13 @@ const NoteCardComponent: React.FC<NoteCardProps> = ({ note }) => {
 
             const finalX = interactionRef.current.initialX + (ev.clientX - interactionRef.current.startX);
             const finalY = interactionRef.current.initialY + (ev.clientY - interactionRef.current.startY);
+
+            if (cardRef.current) {
+                cardRef.current.style.transform = 'none';
+                cardRef.current.style.left = `${finalX}px`;
+                cardRef.current.style.top = `${finalY}px`;
+            }
+            setIsDraggingLocal(false);
 
             // Re-anchor after move - Use center of the note for more reliable anchoring when collapsed
             const anchorPointX = note.isCollapsed ? finalX + 20 : finalX;
@@ -179,6 +267,7 @@ const NoteCardComponent: React.FC<NoteCardProps> = ({ note }) => {
             initialW: note.size.width,
             initialH: note.size.height
         };
+        setIsResizingLocal(true);
 
         const handleMouseMove = (ev: MouseEvent) => {
             if (!interactionRef.current.isResizing) return;
@@ -205,6 +294,8 @@ const NoteCardComponent: React.FC<NoteCardProps> = ({ note }) => {
             const finalW = Math.max(150, interactionRef.current.initialW + (ev.clientX - interactionRef.current.startX));
             const finalH = Math.max(100, interactionRef.current.initialH + (ev.clientY - interactionRef.current.startY));
 
+            setIsResizingLocal(false);
+
             updateNote(note.id, {
                 size: { width: finalW, height: finalH }
             });
@@ -223,17 +314,20 @@ const NoteCardComponent: React.FC<NoteCardProps> = ({ note }) => {
             onClick={() => setActiveNoteId(note.id)}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
-            className={`absolute rounded-lg shadow-lg border border-black/5 overflow-hidden flex flex-col pointer-events-auto transition-[opacity,transform,filter,ring-width] duration-300 ${currentColorClass} ${note.isCollapsed ? 'w-10 h-10' : ''} ${activeNoteId === note.id ? 'ring-2 ring-brand-primary' : ''} ${settings.isCleanView && !isHovered ? 'scale-95' : 'scale-100'}`}
+            className={`absolute rounded-lg shadow-lg border border-black/5 overflow-hidden flex flex-col pointer-events-auto transition-[opacity,transform,filter,ring-width] duration-300 ${currentColorClass} ${note.isCollapsed ? 'w-10 h-10' : ''} ${activeNoteId === note.id ? 'ring-2 ring-brand-primary' : ''} ${settings.isCleanView && !isHovered ? 'scale-95' : 'scale-100'} ${(isDraggingLocal || isResizingLocal) ? '!transition-none !duration-0' : ''}`}
             style={{
                 left: note.notePosition.x,
                 top: note.notePosition.y,
                 width: note.isCollapsed ? undefined : note.size.width,
                 height: note.isCollapsed ? undefined : note.size.height,
-                zIndex: activeNoteId === note.id ? 200 : 100,
+                zIndex: activeNoteId === note.id ? 201 : 200,
+                border: activeNoteId === note.id ? `3px solid ${accentColor}` : '1px solid rgba(0,0,0,0.1)',
+                boxShadow: activeNoteId === note.id ? `0 12px 40px rgba(0,0,0,0.15), 0 0 20px ${accentColor}33` : '0 8px 30px rgba(0,0,0,0.12)',
                 opacity: settings.isCleanView
-                    ? (isHovered ? 1.0 : 0.05)
+                    ? (isHovered ? 1.0 : settings.cleanViewOpacity)
                     : (note.status === 'done' ? 0.6 : 1.0),
-                filter: settings.isCleanView && !isHovered ? 'grayscale(100%) blur(2px)' : 'none'
+                filter: settings.isCleanView && !isHovered ? 'grayscale(100%) blur(2px)' : 'none',
+                willChange: (isDraggingLocal || isResizingLocal) ? 'transform, left, top' : 'auto'
             }}
         >
             {/* Header / Drag Area */}
@@ -278,12 +372,33 @@ const NoteCardComponent: React.FC<NoteCardProps> = ({ note }) => {
             </div>
 
             {/* Assignee / Info Bar */}
-            {!note.isCollapsed && note.assignee && (
-                <div className="px-3 py-1 bg-black/5 flex items-center gap-1.5 border-b border-black/5">
-                    <User size={10} className="text-black/40" />
-                    <span className="text-[9px] font-bold text-black/60 uppercase tracking-tighter truncate">
-                        Assignee: {note.assignee}
-                    </span>
+            {!note.isCollapsed && (note.assignee || note.audioUrl || note.integrations?.syncedAt) && (
+                <div className="px-3 py-1 bg-black/5 flex items-center justify-between border-b border-black/5">
+                    <div className="flex items-center gap-1.5 overflow-hidden">
+                        {note.assignee && (
+                            <>
+                                <User size={10} className="text-black/40" />
+                                <span className="text-[9px] font-bold text-black/60 uppercase tracking-tighter truncate">
+                                    {note.assignee}
+                                </span>
+                            </>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        {note.audioUrl && (
+                            <div className="flex items-center gap-1 animate-pulse">
+                                <Mic size={10} className="text-brand-primary" />
+                                <span className="text-[8px] font-bold text-brand-primary uppercase">VOICE</span>
+                            </div>
+                        )}
+                        {note.integrations?.syncedAt && (
+                            <div className="flex gap-0.5">
+                                {note.integrations.notionId && <div className="w-1.5 h-1.5 rounded-full bg-slate-800" title="Synced to Notion" />}
+                                {note.integrations.slackTs && <div className="w-1.5 h-1.5 rounded-full bg-[#4A154B]" title="Synced to Slack" />}
+                                {note.integrations.trelloId && <div className="w-1.5 h-1.5 rounded-full bg-[#0079BF]" title="Synced to Trello" />}
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
 
@@ -356,7 +471,8 @@ const NoteCardComponent: React.FC<NoteCardProps> = ({ note }) => {
                             {note.history && note.history.length > 0 && (
                                 <button
                                     onClick={(e) => { e.stopPropagation(); setShowHistory(true); }}
-                                    className="p-1 bg-blue-500 hover:bg-blue-600 rounded text-white shadow-sm transition-colors"
+                                    className="p-1 rounded text-white shadow-sm transition-colors"
+                                    style={{ backgroundColor: accentColor }}
                                     title="수정 히스토리"
                                 >
                                     <History size={12} />
@@ -385,6 +501,61 @@ const NoteCardComponent: React.FC<NoteCardProps> = ({ note }) => {
                         </div>
 
                         <div className="flex items-center gap-1">
+                            {/* Voice Memo Button */}
+                            <button
+                                onClick={() => isRecording ? stopRecording() : startRecording()}
+                                className={`p-1 rounded transition-all duration-300 relative ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'hover:bg-black/10 text-black/40'}`}
+                                title={isRecording ? `녹음 중... (${recordingTime}s)` : "음성 메모 추가"}
+                            >
+                                {isRecording ? <MicOff size={14} /> : <Mic size={14} />}
+                                {note.audioUrl && !isRecording && (
+                                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-brand-primary rounded-full border border-white" />
+                                )}
+                            </button>
+
+                            {/* Workflow Bridge Sync Button */}
+                            <div className="relative">
+                                <button
+                                    onClick={() => setShowSyncMenu(!showSyncMenu)}
+                                    className={`p-1 rounded transition-all ${showSyncMenu ? 'bg-black/10 text-brand-primary' : 'hover:bg-black/10 text-black/40'}`}
+                                    title="외부 서비스 전송"
+                                >
+                                    <Send size={14} />
+                                </button>
+
+                                {showSyncMenu && (
+                                    <div className="absolute bottom-full right-0 mb-2 w-32 bg-white rounded-xl shadow-2xl border border-black/10 overflow-hidden z-[300] animate-in slide-in-from-bottom-2 duration-200">
+                                        <div className="p-2 bg-slate-50 border-b border-black/5 text-[8px] font-black uppercase text-slate-400 tracking-widest text-center">
+                                            Sync To
+                                        </div>
+                                        <div className="p-1 space-y-0.5">
+                                            {[
+                                                { id: 'notion', label: 'Notion', color: 'hover:bg-slate-100', icon: 'N', synced: !!note.integrations?.notionId },
+                                                { id: 'slack', label: 'Slack', color: 'hover:bg-purple-50', icon: '#', synced: !!note.integrations?.slackTs },
+                                                { id: 'trello', label: 'Trello', color: 'hover:bg-blue-50', icon: 'T', synced: !!note.integrations?.trelloId }
+                                            ].map(svc => (
+                                                <button
+                                                    key={svc.id}
+                                                    disabled={!!isSyncing}
+                                                    onClick={() => handleSync(svc.id as any)}
+                                                    className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-[10px] font-bold transition-colors ${svc.color} ${isSyncing === svc.id ? 'opacity-50' : ''}`}
+                                                >
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="w-4 text-center opacity-40">{svc.icon}</span>
+                                                        <span>{svc.label}</span>
+                                                    </div>
+                                                    {isSyncing === svc.id ? (
+                                                        <Loader2 size={10} className="animate-spin" />
+                                                    ) : svc.synced ? (
+                                                        <Check size={10} className="text-green-500" />
+                                                    ) : null}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
                             <div
                                 className="cursor-nwse-resize p-1 hover:bg-black/10 rounded"
                                 onMouseDown={handleResizeStart}
@@ -408,7 +579,7 @@ const NoteCardComponent: React.FC<NoteCardProps> = ({ note }) => {
                             </div>
                             <div className="flex-1 overflow-y-auto p-2 space-y-3">
                                 {note.history?.map((entry, idx) => (
-                                    <div key={idx} className="border-l-2 border-brand-primary pl-2 py-0.5">
+                                    <div key={idx} className="border-l-2 pl-2 py-0.5" style={{ borderColor: accentColor }}>
                                         <div className="flex items-center justify-between mb-0.5">
                                             <span className="text-[8px] font-bold text-black/40 uppercase">
                                                 {idx === 0 ? 'Last Version' : `V${note.history!.length - idx}`}

@@ -22,7 +22,13 @@ import {
     Folder,
     FolderPlus,
     Layout,
-    History
+    History,
+    Lock,
+    Settings,
+    Send,
+    X,
+    Eye,
+    EyeOff
 } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
@@ -42,19 +48,31 @@ const Dashboard: React.FC = () => {
         setCurrentProjectId,
         fetchAllProjects,
         addProject,
-        deleteProject
+        deleteProject,
+        updateProject,
+        shareSnapshot,
+        toggleNoteSharing,
+        updateSettings,
+        loadSettings
     } = useNoteStore();
 
     const [selectedDomain, setSelectedDomain] = React.useState<string | null>(null);
     const [statusFilter, setStatusFilter] = React.useState<string | null>(null);
     const [expandedHistoryId, setExpandedHistoryId] = React.useState<string | null>(null);
+    const [showIntegrations, setShowIntegrations] = React.useState(false);
+    const [visibleFields, setVisibleFields] = React.useState<Record<string, boolean>>({});
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+    const toggleVisibility = (field: string) => {
+        setVisibleFields(prev => ({ ...prev, [field]: !prev[field] }));
+    };
+
     useEffect(() => {
+        loadSettings();
         fetchAllProjects();
         fetchAllNotes();
         fetchAllMarkups();
-    }, [fetchAllProjects, fetchAllNotes, fetchAllMarkups]);
+    }, [loadSettings, fetchAllProjects, fetchAllNotes, fetchAllMarkups]);
 
     // Group notes by domain
     const notesByDomain = useMemo(() => {
@@ -121,10 +139,14 @@ const Dashboard: React.FC = () => {
                     </button>
                     {selectedDomain && (
                         <button
-                            onClick={() => exportData(selectedDomain)}
-                            className="flex items-center gap-2 px-4 py-2 bg-brand-primary/10 border border-brand-primary/20 rounded-xl shadow-sm text-sm font-bold text-brand-primary hover:bg-brand-primary hover:text-white transition-all"
+                            onClick={async () => {
+                                const link = await shareSnapshot(selectedDomain);
+                                await navigator.clipboard.writeText(link);
+                                alert(`'${selectedDomain}' 도메인의 인터랙티브 스냅샷 링크가 복사되었습니다!\n함께 작업하는 팀원에게 공유하세요.`);
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 bg-brand-primary/10 border border-brand-primary/20 rounded-xl shadow-sm text-sm font-bold text-brand-primary hover:bg-brand-primary hover:text-white transition-all animate-in fade-in duration-500"
                         >
-                            <Share2 size={16} /> {selectedDomain} 공유
+                            <Share2 size={16} /> {selectedDomain} 스냅샷 공유
                         </button>
                     )}
                     <button
@@ -239,6 +261,13 @@ const Dashboard: React.FC = () => {
                                         {stats.totalNotes}
                                     </span>
                                 </button>
+                                <button
+                                    onClick={() => setShowIntegrations(true)}
+                                    className={`w-full px-3 py-2 mt-2 border border-dashed border-slate-200 rounded-lg text-left text-sm font-bold flex items-center gap-3 text-slate-400 hover:border-brand-primary hover:text-brand-primary transition-all`}
+                                >
+                                    <Settings size={16} />
+                                    외부 서비스 연동 설정
+                                </button>
                                 {projects.map(project => (
                                     <button
                                         key={project.id}
@@ -250,6 +279,16 @@ const Dashboard: React.FC = () => {
                                             <span className="truncate">{project.name}</span>
                                         </div>
                                         <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    updateProject(project.id, { isPublic: !project.isPublic });
+                                                }}
+                                                className={`p-1 hover:bg-white/20 rounded transition-all ${project.isPublic ? 'text-emerald-400' : 'text-slate-400'} ${currentProjectId === project.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                                                title={project.isPublic ? "공개 프로젝트" : "비공개 프로젝트"}
+                                            >
+                                                {project.isPublic ? <Globe size={12} /> : <Lock size={12} />}
+                                            </button>
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
@@ -336,12 +375,28 @@ const Dashboard: React.FC = () => {
                                                         </span>
                                                     )}
                                                 </div>
-                                                <time className="text-[10px] text-slate-400 font-medium mt-0.5">
-                                                    {new Date(note.updatedAt).toLocaleDateString()} · {new Date(note.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                </time>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <time className="text-[10px] text-slate-400 font-medium whitespace-nowrap">
+                                                        {new Date(note.updatedAt).toLocaleDateString()} · {new Date(note.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </time>
+                                                    {note.integrations?.syncedAt && (
+                                                        <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-slate-50 rounded border border-slate-100/50">
+                                                            {note.integrations.notionId && <div className="w-1.5 h-1.5 rounded-full bg-slate-800" title="Synced to Notion" />}
+                                                            {note.integrations.slackTs && <div className="w-1.5 h-1.5 rounded-full bg-[#4A154B]" title="Synced to Slack" />}
+                                                            {note.integrations.trelloId && <div className="w-1.5 h-1.5 rounded-full bg-[#0079BF]" title="Synced to Trello" />}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                         <div className="flex gap-1.5 translate-x-2 -translate-y-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button
+                                                onClick={() => toggleNoteSharing(note.id)}
+                                                className={`p-2 rounded-xl transition-colors ${note.isShared ? 'bg-emerald-50 text-emerald-500' : 'hover:bg-slate-100 text-slate-300 hover:text-slate-600'}`}
+                                                title={note.isShared ? "공개됨 (클릭하여 비공개)" : "나만 보기 (클릭하여 공유)"}
+                                            >
+                                                {note.isShared ? <Globe size={18} /> : <Lock size={18} />}
+                                            </button>
                                             {note.history && note.history.length > 0 && (
                                                 <button
                                                     onClick={() => setExpandedHistoryId(expandedHistoryId === note.id ? null : note.id)}
@@ -440,6 +495,134 @@ const Dashboard: React.FC = () => {
                     </main>
                 </div>
             </div>
+
+            {/* Integrations Settings Modal */}
+            {showIntegrations && (
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[1000] flex items-center justify-center p-4 animate-in fade-in duration-300">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
+                        <header className="p-6 border-b border-slate-100 flex items-center justify-between">
+                            <h2 className="text-xl font-bold flex items-center gap-2">
+                                <Send className="text-brand-primary" size={24} />
+                                생산성 도구 연동 설정
+                            </h2>
+                            <button onClick={() => setShowIntegrations(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                                <X size={20} />
+                            </button>
+                        </header>
+                        <div className="p-6 overflow-y-auto space-y-8 max-h-[70vh]">
+                            {/* Notion */}
+                            <section className="space-y-4">
+                                <div className="flex items-center gap-2 text-slate-800 font-black uppercase text-xs tracking-widest">
+                                    <div className="w-6 h-6 bg-slate-800 rounded flex items-center justify-center text-white text-[10px]">N</div>
+                                    Notion Integration
+                                </div>
+                                <div className="space-y-3">
+                                    <div className="relative">
+                                        <input
+                                            type={visibleFields['notionToken'] ? "text" : "password"}
+                                            placeholder="Internal Integration Token"
+                                            value={settings.apiKeys?.notionToken || ''}
+                                            onChange={(e) => updateSettings({ apiKeys: { ...settings.apiKeys, notionToken: e.target.value } })}
+                                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none pr-10"
+                                        />
+                                        <button
+                                            onClick={() => toggleVisibility('notionToken')}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-primary transition-colors"
+                                        >
+                                            {visibleFields['notionToken'] ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        </button>
+                                    </div>
+                                    <input
+                                        type="text"
+                                        placeholder="Database ID"
+                                        value={settings.apiKeys?.notionDatabaseId || ''}
+                                        onChange={(e) => updateSettings({ apiKeys: { ...settings.apiKeys, notionDatabaseId: e.target.value } })}
+                                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none"
+                                    />
+                                </div>
+                            </section>
+
+                            {/* Slack */}
+                            <section className="space-y-4">
+                                <div className="flex items-center gap-2 text-[#4A154B] font-black uppercase text-xs tracking-widest">
+                                    <div className="w-6 h-6 bg-[#4A154B] rounded flex items-center justify-center text-white text-[10px]">#</div>
+                                    Slack Integration
+                                </div>
+                                <div className="relative">
+                                    <input
+                                        type={visibleFields['slackWebhookUrl'] ? "text" : "password"}
+                                        placeholder="Incoming Webhook URL"
+                                        value={settings.apiKeys?.slackWebhookUrl || ''}
+                                        onChange={(e) => updateSettings({ apiKeys: { ...settings.apiKeys, slackWebhookUrl: e.target.value } })}
+                                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none pr-10"
+                                    />
+                                    <button
+                                        onClick={() => toggleVisibility('slackWebhookUrl')}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-primary transition-colors"
+                                    >
+                                        {visibleFields['slackWebhookUrl'] ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                </div>
+                            </section>
+
+                            {/* Trello */}
+                            <section className="space-y-4">
+                                <div className="flex items-center gap-2 text-[#0079BF] font-black uppercase text-xs tracking-widest">
+                                    <div className="w-6 h-6 bg-[#0079BF] rounded flex items-center justify-center text-white text-[10px]">T</div>
+                                    Trello Integration
+                                </div>
+                                <div className="space-y-3">
+                                    <div className="relative">
+                                        <input
+                                            type={visibleFields['trelloKey'] ? "text" : "password"}
+                                            placeholder="API Key"
+                                            value={settings.apiKeys?.trelloKey || ''}
+                                            onChange={(e) => updateSettings({ apiKeys: { ...settings.apiKeys, trelloKey: e.target.value } })}
+                                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none pr-10"
+                                        />
+                                        <button
+                                            onClick={() => toggleVisibility('trelloKey')}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-primary transition-colors"
+                                        >
+                                            {visibleFields['trelloKey'] ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        </button>
+                                    </div>
+                                    <div className="relative">
+                                        <input
+                                            type={visibleFields['trelloToken'] ? "text" : "password"}
+                                            placeholder="OAuth Token"
+                                            value={settings.apiKeys?.trelloToken || ''}
+                                            onChange={(e) => updateSettings({ apiKeys: { ...settings.apiKeys, trelloToken: e.target.value } })}
+                                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none pr-10"
+                                        />
+                                        <button
+                                            onClick={() => toggleVisibility('trelloToken')}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-primary transition-colors"
+                                        >
+                                            {visibleFields['trelloToken'] ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        </button>
+                                    </div>
+                                    <input
+                                        type="text"
+                                        placeholder="List ID (Destination)"
+                                        value={settings.apiKeys?.trelloListId || ''}
+                                        onChange={(e) => updateSettings({ apiKeys: { ...settings.apiKeys, trelloListId: e.target.value } })}
+                                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none"
+                                    />
+                                </div>
+                            </section>
+                        </div>
+                        <footer className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
+                            <button
+                                onClick={() => setShowIntegrations(false)}
+                                className="px-6 py-2.5 bg-brand-primary text-white font-bold rounded-xl shadow-lg shadow-brand-primary/20 hover:scale-105 transition-all"
+                            >
+                                설정 저장 및 닫기
+                            </button>
+                        </footer>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

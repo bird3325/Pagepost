@@ -12628,8 +12628,14 @@ const useNoteStore = create((set, get) => {
       penWidth: 3,
       highlightWidth: 20,
       markupOpacity: 1,
-      isCleanView: false
+      isCleanView: false,
+      cleanViewOpacity: 0.1,
+      toolbarPosition: { x: 50, y: 88 },
+      toolbarOpacity: 1,
+      showMiniMap: true,
+      apiKeys: {}
     },
+    accentColor: "#FFD54F",
     markups: [],
     projects: [],
     currentProjectId: null,
@@ -12640,7 +12646,11 @@ const useNoteStore = create((set, get) => {
         const result = await chrome.storage.local.get(SETTINGS_KEY);
         if (!isContextValid()) return;
         if (result[SETTINGS_KEY]) {
-          set({ settings: { ...get().settings, ...result[SETTINGS_KEY] }, isSettingsLoaded: true });
+          const loadedSettings = result[SETTINGS_KEY];
+          if (!loadedSettings.toolbarPosition || typeof loadedSettings.toolbarPosition.x !== "number") {
+            loadedSettings.toolbarPosition = { x: 50, y: 88 };
+          }
+          set({ settings: { ...get().settings, ...loadedSettings }, isSettingsLoaded: true });
         } else {
           set({ isSettingsLoaded: true });
         }
@@ -12681,6 +12691,7 @@ const useNoteStore = create((set, get) => {
       }
     },
     setActiveNoteId: (id) => set({ activeNoteId: id, selectedMarkupId: null }),
+    setAccentColor: (color) => set({ accentColor: color }),
     setSelectedMarkupId: (id) => set({ selectedMarkupId: id }),
     setTool: (tool) => set({ currentTool: tool, selectedMarkupId: tool === "select" ? get().selectedMarkupId : null }),
     setColor: (color) => {
@@ -13123,6 +13134,106 @@ const useNoteStore = create((set, get) => {
       } catch (error) {
         console.error("Failed to delete project:", error);
       }
+    },
+    shareSnapshot: async (domain) => {
+      if (!isContextValid()) return "";
+      try {
+        const notesResult = await chrome.storage.local.get(STORAGE_KEY);
+        const markupsResult = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+        if (!isContextValid()) return "";
+        let notesToExport = notesResult[STORAGE_KEY] || [];
+        let markupsToExport = markupsResult[MARKUP_STORAGE_KEY] || [];
+        const targetDomain = domain || (get().currentUrl ? new URL(get().currentUrl).hostname : "");
+        if (targetDomain) {
+          notesToExport = notesToExport.filter((n) => n.domain === targetDomain);
+          const urls = new Set(notesToExport.map((n) => n.url));
+          markupsToExport = markupsToExport.filter((m) => urls.has(m.url));
+        }
+        const data = {
+          version: "2.0-SNAPSHOT",
+          timestamp: Date.now(),
+          domain: targetDomain,
+          notes: notesToExport,
+          markups: markupsToExport
+        };
+        const serialized = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+        const shareLink = `https://pagepost.io/view?snapshot=${encodeURIComponent(serialized)}`;
+        return shareLink;
+      } catch (error) {
+        console.error("Failed to generate share snapshot:", error);
+        return "";
+      }
+    },
+    toggleNoteSharing: async (id) => {
+      const { updateNote, notes } = get();
+      const note = notes.find((n) => n.id === id);
+      if (!note) return;
+      const isShared = !note.isShared;
+      const shareId = isShared ? note.shareId || crypto.randomUUID() : note.shareId;
+      await updateNote(id, { isShared, shareId });
+    },
+    syncToExternalService: async (noteId, service) => {
+      const { updateNote, notes, settings } = get();
+      const note = notes.find((n) => n.id === noteId);
+      if (!note || !isContextValid()) return false;
+      const apiKeys = settings.apiKeys || {};
+      return new Promise((resolve) => {
+        chrome.runtime.sendMessage({
+          type: "SYNC_NOTE",
+          service,
+          apiKeys,
+          data: {
+            url: note.url,
+            content: note.content,
+            domain: note.domain
+          }
+        }, async (response) => {
+          if (response && response.ok) {
+            const integrationId = response.id;
+            const updates = {
+              integrations: {
+                ...note.integrations || {}
+              }
+            };
+            let hasUpdate = false;
+            if (service === "notion" && integrationId) {
+              updates.integrations.notionId = integrationId;
+              hasUpdate = true;
+            } else if (service === "slack" && integrationId) {
+              updates.integrations.slackTs = integrationId;
+              hasUpdate = true;
+            } else if (service === "trello" && integrationId) {
+              updates.integrations.trelloId = integrationId;
+              hasUpdate = true;
+            }
+            if (hasUpdate) {
+              updates.integrations.syncedAt = Date.now();
+              await updateNote(noteId, updates);
+              resolve(true);
+            } else {
+              resolve(true);
+            }
+          } else {
+            const errorMsg = response?.error || "알 수 없는 서버 오류";
+            console.error(`PagePost: ${service} sync fail:`, errorMsg);
+            alert(`${service} 연동 실패!
+
+[상세 내용]: ${errorMsg}
+
+도움말: 설정의 토큰값이나 데이터베이스 권한(연결 추가)을 다시 확인해 보세요.`);
+            resolve(false);
+          }
+        });
+      });
+    },
+    saveVoiceMemo: async (noteId, audioBlob) => {
+      const { updateNote } = get();
+      const reader = new FileReader();
+      reader.readAsDataURL(audioBlob);
+      reader.onloadend = async () => {
+        const base64Audio = reader.result;
+        await updateNote(noteId, { audioUrl: base64Audio });
+      };
     }
   };
 });
@@ -13202,52 +13313,52 @@ const createLucideIcon = (iconName, iconNode) => {
   Component.displayName = toPascalCase(iconName);
   return Component;
 };
-const __iconNode$u = [
+const __iconNode$w = [
   ["path", { d: "M8 2v4", key: "1cmpym" }],
   ["path", { d: "M16 2v4", key: "4m81vk" }],
   ["rect", { width: "18", height: "18", x: "3", y: "4", rx: "2", key: "1hopcy" }],
   ["path", { d: "M3 10h18", key: "8toen8" }]
 ];
-const Calendar = createLucideIcon("calendar", __iconNode$u);
-const __iconNode$t = [
+const Calendar = createLucideIcon("calendar", __iconNode$w);
+const __iconNode$v = [
   ["path", { d: "M3 3v16a2 2 0 0 0 2 2h16", key: "c24i48" }],
   ["path", { d: "M18 17V9", key: "2bz60n" }],
   ["path", { d: "M13 17V5", key: "1frdt8" }],
   ["path", { d: "M8 17v-3", key: "17ska0" }]
 ];
-const ChartColumn = createLucideIcon("chart-column", __iconNode$t);
-const __iconNode$s = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
-const ChevronLeft = createLucideIcon("chevron-left", __iconNode$s);
-const __iconNode$r = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
-const ChevronRight = createLucideIcon("chevron-right", __iconNode$r);
-const __iconNode$q = [
+const ChartColumn = createLucideIcon("chart-column", __iconNode$v);
+const __iconNode$u = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
+const ChevronLeft = createLucideIcon("chevron-left", __iconNode$u);
+const __iconNode$t = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
+const ChevronRight = createLucideIcon("chevron-right", __iconNode$t);
+const __iconNode$s = [
   ["path", { d: "M21.801 10A10 10 0 1 1 17 3.335", key: "yps3ct" }],
   ["path", { d: "m9 11 3 3L22 4", key: "1pflzl" }]
 ];
-const CircleCheckBig = createLucideIcon("circle-check-big", __iconNode$q);
-const __iconNode$p = [
+const CircleCheckBig = createLucideIcon("circle-check-big", __iconNode$s);
+const __iconNode$r = [
   ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
   ["path", { d: "m9 12 2 2 4-4", key: "dzmm74" }]
 ];
-const CircleCheck = createLucideIcon("circle-check", __iconNode$p);
-const __iconNode$o = [
+const CircleCheck = createLucideIcon("circle-check", __iconNode$r);
+const __iconNode$q = [
   ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
   ["path", { d: "M8 12h8", key: "1wcyev" }]
 ];
-const CircleMinus = createLucideIcon("circle-minus", __iconNode$o);
-const __iconNode$n = [
+const CircleMinus = createLucideIcon("circle-minus", __iconNode$q);
+const __iconNode$p = [
   ["path", { d: "M12 15V3", key: "m9g1x1" }],
   ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", key: "ih7n3h" }],
   ["path", { d: "m7 10 5 5 5-5", key: "brsn70" }]
 ];
-const Download = createLucideIcon("download", __iconNode$n);
-const __iconNode$m = [
+const Download = createLucideIcon("download", __iconNode$p);
+const __iconNode$o = [
   ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
   ["path", { d: "M10 14 21 3", key: "gplh6r" }],
   ["path", { d: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6", key: "a6xqqp" }]
 ];
-const ExternalLink = createLucideIcon("external-link", __iconNode$m);
-const __iconNode$l = [
+const ExternalLink = createLucideIcon("external-link", __iconNode$o);
+const __iconNode$n = [
   [
     "path",
     {
@@ -13265,8 +13376,8 @@ const __iconNode$l = [
   ],
   ["path", { d: "m2 2 20 20", key: "1ooewy" }]
 ];
-const EyeOff = createLucideIcon("eye-off", __iconNode$l);
-const __iconNode$k = [
+const EyeOff = createLucideIcon("eye-off", __iconNode$n);
+const __iconNode$m = [
   [
     "path",
     {
@@ -13276,8 +13387,8 @@ const __iconNode$k = [
   ],
   ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
 ];
-const Eye = createLucideIcon("eye", __iconNode$k);
-const __iconNode$j = [
+const Eye = createLucideIcon("eye", __iconNode$m);
+const __iconNode$l = [
   ["path", { d: "M12 10v6", key: "1bos4e" }],
   ["path", { d: "M9 13h6", key: "1uhe8q" }],
   [
@@ -13288,8 +13399,8 @@ const __iconNode$j = [
     }
   ]
 ];
-const FolderPlus = createLucideIcon("folder-plus", __iconNode$j);
-const __iconNode$i = [
+const FolderPlus = createLucideIcon("folder-plus", __iconNode$l);
+const __iconNode$k = [
   [
     "path",
     {
@@ -13298,8 +13409,8 @@ const __iconNode$i = [
     }
   ]
 ];
-const Folder = createLucideIcon("folder", __iconNode$i);
-const __iconNode$h = [
+const Folder = createLucideIcon("folder", __iconNode$k);
+const __iconNode$j = [
   [
     "path",
     {
@@ -13308,20 +13419,20 @@ const __iconNode$h = [
     }
   ]
 ];
-const Funnel = createLucideIcon("funnel", __iconNode$h);
-const __iconNode$g = [
+const Funnel = createLucideIcon("funnel", __iconNode$j);
+const __iconNode$i = [
   ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
   ["path", { d: "M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20", key: "13o1zl" }],
   ["path", { d: "M2 12h20", key: "9i4pu4" }]
 ];
-const Globe = createLucideIcon("globe", __iconNode$g);
-const __iconNode$f = [
+const Globe = createLucideIcon("globe", __iconNode$i);
+const __iconNode$h = [
   ["path", { d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", key: "1357e3" }],
   ["path", { d: "M3 3v5h5", key: "1xhq8a" }],
   ["path", { d: "M12 7v5l4 2", key: "1fdv2h" }]
 ];
-const History = createLucideIcon("history", __iconNode$f);
-const __iconNode$e = [
+const History = createLucideIcon("history", __iconNode$h);
+const __iconNode$g = [
   ["path", { d: "M10 8h.01", key: "1r9ogq" }],
   ["path", { d: "M12 12h.01", key: "1mp3jc" }],
   ["path", { d: "M14 8h.01", key: "1primd" }],
@@ -13332,8 +13443,13 @@ const __iconNode$e = [
   ["path", { d: "M8 12h.01", key: "czm47f" }],
   ["rect", { width: "20", height: "16", x: "2", y: "4", rx: "2", key: "18n3k1" }]
 ];
-const Keyboard = createLucideIcon("keyboard", __iconNode$e);
-const __iconNode$d = [
+const Keyboard = createLucideIcon("keyboard", __iconNode$g);
+const __iconNode$f = [
+  ["rect", { width: "18", height: "11", x: "3", y: "11", rx: "2", ry: "2", key: "1w4ew1" }],
+  ["path", { d: "M7 11V7a5 5 0 0 1 10 0v4", key: "fwvmzm" }]
+];
+const Lock = createLucideIcon("lock", __iconNode$f);
+const __iconNode$e = [
   [
     "path",
     {
@@ -13343,14 +13459,14 @@ const __iconNode$d = [
   ],
   ["circle", { cx: "12", cy: "10", r: "3", key: "ilqhr7" }]
 ];
-const MapPin = createLucideIcon("map-pin", __iconNode$d);
-const __iconNode$c = [
+const MapPin = createLucideIcon("map-pin", __iconNode$e);
+const __iconNode$d = [
   ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", key: "afitv7" }],
   ["path", { d: "M3 9h18", key: "1pudct" }],
   ["path", { d: "M9 21V9", key: "1oto5p" }]
 ];
-const PanelsTopLeft = createLucideIcon("panels-top-left", __iconNode$c);
-const __iconNode$b = [
+const PanelsTopLeft = createLucideIcon("panels-top-left", __iconNode$d);
+const __iconNode$c = [
   [
     "path",
     {
@@ -13368,8 +13484,8 @@ const __iconNode$b = [
   ["path", { d: "m2.3 2.3 7.286 7.286", key: "1wuzzi" }],
   ["circle", { cx: "11", cy: "11", r: "2", key: "xmgehs" }]
 ];
-const PenTool = createLucideIcon("pen-tool", __iconNode$b);
-const __iconNode$a = [
+const PenTool = createLucideIcon("pen-tool", __iconNode$c);
+const __iconNode$b = [
   [
     "path",
     {
@@ -13378,12 +13494,23 @@ const __iconNode$a = [
     }
   ]
 ];
-const Play = createLucideIcon("play", __iconNode$a);
-const __iconNode$9 = [
+const Play = createLucideIcon("play", __iconNode$b);
+const __iconNode$a = [
   ["path", { d: "m21 21-4.34-4.34", key: "14j7rj" }],
   ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }]
 ];
-const Search = createLucideIcon("search", __iconNode$9);
+const Search = createLucideIcon("search", __iconNode$a);
+const __iconNode$9 = [
+  [
+    "path",
+    {
+      d: "M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z",
+      key: "1ffxy3"
+    }
+  ],
+  ["path", { d: "m21.854 2.147-10.94 10.939", key: "12cjpa" }]
+];
+const Send = createLucideIcon("send", __iconNode$9);
 const __iconNode$8 = [
   [
     "path",
@@ -13478,17 +13605,28 @@ const Dashboard = () => {
     setCurrentProjectId,
     fetchAllProjects,
     addProject,
-    deleteProject
+    deleteProject,
+    updateProject,
+    shareSnapshot,
+    toggleNoteSharing,
+    updateSettings,
+    loadSettings
   } = useNoteStore();
   const [selectedDomain, setSelectedDomain] = React.useState(null);
   const [statusFilter, setStatusFilter] = React.useState(null);
   const [expandedHistoryId, setExpandedHistoryId] = React.useState(null);
+  const [showIntegrations, setShowIntegrations] = React.useState(false);
+  const [visibleFields, setVisibleFields] = React.useState({});
   const fileInputRef = React.useRef(null);
+  const toggleVisibility = (field) => {
+    setVisibleFields((prev) => ({ ...prev, [field]: !prev[field] }));
+  };
   reactExports.useEffect(() => {
+    loadSettings();
     fetchAllProjects();
     fetchAllNotes();
     fetchAllMarkups();
-  }, [fetchAllProjects, fetchAllNotes, fetchAllMarkups]);
+  }, [loadSettings, fetchAllProjects, fetchAllNotes, fetchAllMarkups]);
   const notesByDomain = reactExports.useMemo(() => {
     const groups = {};
     notes.forEach((note) => {
@@ -13512,332 +13650,521 @@ const Dashboard = () => {
     const targetUrl = note.url.includes("#") ? note.url : `${note.url}#pagepost-note-${note.id}`;
     chrome.tabs.create({ url: targetUrl });
   };
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "min-h-screen bg-[#f8fafc] text-slate-900 font-sans p-6 lg:p-10", style: { fontFamily: settings.fontFamily }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-7xl mx-auto", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("h1", { className: "text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(StickyNote, { className: "text-brand-primary", size: 32 }),
-          "PagePost Review Dashboard"
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-screen bg-[#f8fafc] text-slate-900 font-sans p-6 lg:p-10", style: { fontFamily: settings.fontFamily }, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-7xl mx-auto", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("h1", { className: "text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(StickyNote, { className: "text-brand-primary", size: 32 }),
+            "PagePost Review Dashboard"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-slate-500 font-medium", children: "모든 웹사이트의 주석과 조각들을 한눈에 관리하세요." })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-slate-500 font-medium", children: "모든 웹사이트의 주석과 조각들을 한눈에 관리하세요." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center gap-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative group", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Search, { className: "absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-brand-primary", size: 18 }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "text",
+              placeholder: "검색 (메모, 도메인, 태그)...",
+              value: searchQuery,
+              onChange: (e) => setSearchQuery(e.target.value),
+              className: "pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl w-full md:w-80 shadow-sm focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary outline-none transition-all"
+            }
+          )
+        ] }) })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center gap-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative group", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Search, { className: "absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-brand-primary", size: 18 }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3 mb-8", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            onClick: () => exportData(),
+            className: "flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl shadow-sm text-sm font-bold text-slate-700 hover:border-brand-primary hover:text-brand-primary transition-all",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Download, { size: 16 }),
+              " 전체 내보내기"
+            ]
+          }
+        ),
+        selectedDomain && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            onClick: async () => {
+              const link = await shareSnapshot(selectedDomain);
+              await navigator.clipboard.writeText(link);
+              alert(`'${selectedDomain}' 도메인의 인터랙티브 스냅샷 링크가 복사되었습니다!
+함께 작업하는 팀원에게 공유하세요.`);
+            },
+            className: "flex items-center gap-2 px-4 py-2 bg-brand-primary/10 border border-brand-primary/20 rounded-xl shadow-sm text-sm font-bold text-brand-primary hover:bg-brand-primary hover:text-white transition-all animate-in fade-in duration-500",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Share2, { size: 16 }),
+              " ",
+              selectedDomain,
+              " 스냅샷 공유"
+            ]
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            onClick: () => fileInputRef.current?.click(),
+            className: "flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl shadow-sm text-sm font-bold text-slate-700 hover:border-brand-primary hover:text-brand-primary transition-all",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Upload, { size: 16 }),
+              " 데이터 가져오기"
+            ]
+          }
+        ),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "input",
           {
-            type: "text",
-            placeholder: "검색 (메모, 도메인, 태그)...",
-            value: searchQuery,
-            onChange: (e) => setSearchQuery(e.target.value),
-            className: "pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl w-full md:w-80 shadow-sm focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary outline-none transition-all"
-          }
-        )
-      ] }) })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3 mb-8", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          onClick: () => exportData(),
-          className: "flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl shadow-sm text-sm font-bold text-slate-700 hover:border-brand-primary hover:text-brand-primary transition-all",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Download, { size: 16 }),
-            " 전체 내보내기"
-          ]
-        }
-      ),
-      selectedDomain && /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          onClick: () => exportData(selectedDomain),
-          className: "flex items-center gap-2 px-4 py-2 bg-brand-primary/10 border border-brand-primary/20 rounded-xl shadow-sm text-sm font-bold text-brand-primary hover:bg-brand-primary hover:text-white transition-all",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Share2, { size: 16 }),
-            " ",
-            selectedDomain,
-            " 공유"
-          ]
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          onClick: () => fileInputRef.current?.click(),
-          className: "flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl shadow-sm text-sm font-bold text-slate-700 hover:border-brand-primary hover:text-brand-primary transition-all",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Upload, { size: 16 }),
-            " 데이터 가져오기"
-          ]
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "input",
-        {
-          type: "file",
-          ref: fileInputRef,
-          className: "hidden",
-          accept: ".json",
-          onChange: (e) => {
-            const file = e.target.files?.[0];
-            if (file) {
-              const reader = new FileReader();
-              reader.onload = (event) => {
-                const content = event.target?.result;
-                importData(content);
-              };
-              reader.readAsText(file);
+            type: "file",
+            ref: fileInputRef,
+            className: "hidden",
+            accept: ".json",
+            onChange: (e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                  const content = event.target?.result;
+                  importData(content);
+                };
+                reader.readAsText(file);
+              }
             }
           }
-        }
-      )
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10", children: [
-      { label: "전체 메모", value: stats.totalNotes, icon: StickyNote, color: "text-blue-500", bg: "bg-blue-50" },
-      { label: "마크업 요소", value: stats.totalMarkups, icon: PenTool, color: "text-emerald-500", bg: "bg-emerald-50" },
-      { label: "작업 사이트", value: stats.domainCount, icon: Globe, color: "text-indigo-500", bg: "bg-indigo-50" },
-      { label: "활성 태그", value: notes.reduce((acc, n) => acc + n.tags.length, 0), icon: Tag, color: "text-amber-500", bg: "bg-amber-50" }
-    ].map((stat, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-5 transition-transform hover:scale-[1.02]", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `${stat.bg} ${stat.color} p-4 rounded-xl`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(stat.icon, { size: 24 }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-slate-400 uppercase tracking-wider", children: stat.label }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-2xl font-bold mt-0.5", children: stat.value })
-      ] })
-    ] }, idx)) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 lg:grid-cols-12 gap-10", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "lg:col-span-3 space-y-6", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-4 border-b border-slate-50 bg-slate-50/50", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wider", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(ChartColumn, { size: 16 }),
-            " 진행 상태"
-          ] }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-2 space-y-1", children: [
-            { id: null, label: "전체 보기", icon: Globe, color: "text-slate-400" },
-            { id: "pending", label: "보류 중 (Pending)", icon: CircleMinus, color: "text-amber-500" },
-            { id: "in-progress", label: "진행 중 (In Progress)", icon: Play, color: "text-blue-500" },
-            { id: "done", label: "완료됨 (Done)", icon: CircleCheckBig, color: "text-emerald-500" }
-          ].map((status) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              onClick: () => setStatusFilter(status.id),
-              className: `w-full px-3 py-2 rounded-lg text-left text-sm font-bold flex items-center gap-3 transition-colors ${statusFilter === status.id ? "bg-brand-primary text-white" : "text-slate-600 hover:bg-slate-50"}`,
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(status.icon, { size: 16, className: statusFilter === status.id ? "text-white" : status.color }),
-                status.label
-              ]
-            },
-            status.id || "all"
-          )) })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wider", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(Folder, { size: 16 }),
-              " 프로젝트"
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10", children: [
+        { label: "전체 메모", value: stats.totalNotes, icon: StickyNote, color: "text-blue-500", bg: "bg-blue-50" },
+        { label: "마크업 요소", value: stats.totalMarkups, icon: PenTool, color: "text-emerald-500", bg: "bg-emerald-50" },
+        { label: "작업 사이트", value: stats.domainCount, icon: Globe, color: "text-indigo-500", bg: "bg-indigo-50" },
+        { label: "활성 태그", value: notes.reduce((acc, n) => acc + n.tags.length, 0), icon: Tag, color: "text-amber-500", bg: "bg-amber-50" }
+      ].map((stat, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-5 transition-transform hover:scale-[1.02]", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `${stat.bg} ${stat.color} p-4 rounded-xl`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(stat.icon, { size: 24 }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-slate-400 uppercase tracking-wider", children: stat.label }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-2xl font-bold mt-0.5", children: stat.value })
+        ] })
+      ] }, idx)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 lg:grid-cols-12 gap-10", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "lg:col-span-3 space-y-6", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-4 border-b border-slate-50 bg-slate-50/50", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wider", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ChartColumn, { size: 16 }),
+              " 진행 상태"
+            ] }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-2 space-y-1", children: [
+              { id: null, label: "전체 보기", icon: Globe, color: "text-slate-400" },
+              { id: "pending", label: "보류 중 (Pending)", icon: CircleMinus, color: "text-amber-500" },
+              { id: "in-progress", label: "진행 중 (In Progress)", icon: Play, color: "text-blue-500" },
+              { id: "done", label: "완료됨 (Done)", icon: CircleCheckBig, color: "text-emerald-500" }
+            ].map((status) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                onClick: () => setStatusFilter(status.id),
+                className: `w-full px-3 py-2 rounded-lg text-left text-sm font-bold flex items-center gap-3 transition-colors ${statusFilter === status.id ? "bg-brand-primary text-white" : "text-slate-600 hover:bg-slate-50"}`,
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(status.icon, { size: 16, className: statusFilter === status.id ? "text-white" : status.color }),
+                  status.label
+                ]
+              },
+              status.id || "all"
+            )) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wider", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Folder, { size: 16 }),
+                " 프로젝트"
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  onClick: () => {
+                    const name = prompt("새 프로젝트 이름을 입력하세요:");
+                    if (name && name.trim()) {
+                      addProject({
+                        id: crypto.randomUUID(),
+                        name: name.trim(),
+                        createdAt: Date.now(),
+                        updatedAt: Date.now()
+                      });
+                    }
+                  },
+                  className: "p-1 hover:bg-white rounded-lg text-slate-400 hover:text-brand-primary transition-colors",
+                  title: "새 프로젝트 추가",
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(FolderPlus, { size: 16 })
+                }
+              )
             ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-2 space-y-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  onClick: () => setCurrentProjectId(null),
+                  className: `w-full px-3 py-2 rounded-lg text-left text-sm font-bold flex items-center justify-between transition-colors ${!currentProjectId ? "bg-brand-primary text-white" : "text-slate-600 hover:bg-slate-50"}`,
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(PanelsTopLeft, { size: 16 }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "모든 프로젝트" })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-[10px] px-1.5 py-0.5 rounded-full ${!currentProjectId ? "bg-white/20 text-white" : "bg-slate-100 text-slate-400"}`, children: stats.totalNotes })
+                  ]
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  onClick: () => setShowIntegrations(true),
+                  className: `w-full px-3 py-2 mt-2 border border-dashed border-slate-200 rounded-lg text-left text-sm font-bold flex items-center gap-3 text-slate-400 hover:border-brand-primary hover:text-brand-primary transition-all`,
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(Settings, { size: 16 }),
+                    "외부 서비스 연동 설정"
+                  ]
+                }
+              ),
+              projects.map((project) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  onClick: () => setCurrentProjectId(project.id),
+                  className: `w-full px-3 py-2 rounded-lg text-left text-sm font-bold flex items-center justify-between group transition-colors ${currentProjectId === project.id ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20" : "text-slate-600 hover:bg-slate-50"}`,
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 truncate", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(Folder, { size: 16, className: currentProjectId === project.id ? "text-white" : "text-slate-400" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate", children: project.name })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "button",
+                        {
+                          onClick: (e) => {
+                            e.stopPropagation();
+                            updateProject(project.id, { isPublic: !project.isPublic });
+                          },
+                          className: `p-1 hover:bg-white/20 rounded transition-all ${project.isPublic ? "text-emerald-400" : "text-slate-400"} ${currentProjectId === project.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`,
+                          title: project.isPublic ? "공개 프로젝트" : "비공개 프로젝트",
+                          children: project.isPublic ? /* @__PURE__ */ jsxRuntimeExports.jsx(Globe, { size: 12 }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Lock, { size: 12 })
+                        }
+                      ),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "button",
+                        {
+                          onClick: (e) => {
+                            e.stopPropagation();
+                            if (confirm(`'${project.name}' 프로젝트를 삭제하시겠습니까?
+(속한 메모들은 삭제되지 않고 유지됩니다.)`)) {
+                              deleteProject(project.id);
+                            }
+                          },
+                          className: `p-1 hover:bg-red-50 rounded transition-all ${currentProjectId === project.id ? "opacity-100 bg-white/20 text-white" : "opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500"}`,
+                          title: "프로젝트 삭제",
+                          children: /* @__PURE__ */ jsxRuntimeExports.jsx(Trash2, { size: 12 })
+                        }
+                      )
+                    ] })
+                  ]
+                },
+                project.id
+              ))
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wider", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Funnel, { size: 16 }),
+              " 사이트 리스트"
+            ] }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "divide-y divide-slate-50 max-h-[400px] overflow-y-auto font-sans", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  onClick: () => setSelectedDomain(null),
+                  className: `w-full px-4 py-3.5 text-left hover:bg-slate-50 transition-colors flex items-center justify-between group ${!selectedDomain ? "bg-brand-primary/5 border-l-4 border-brand-primary" : ""}`,
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-sm font-bold ${!selectedDomain ? "text-brand-primary" : "text-slate-700"}`, children: "모든 사이트" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] text-slate-400 font-medium uppercase mt-0.5", children: [
+                        "전체 ",
+                        notes.length,
+                        "개의 주석"
+                      ] })
+                    ] }),
+                    !selectedDomain && /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronRight, { size: 14, className: "text-brand-primary" })
+                  ]
+                }
+              ),
+              sortedDomains.map((domain) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  onClick: () => setSelectedDomain(domain),
+                  className: `w-full px-4 py-3.5 text-left hover:bg-slate-50 transition-colors flex items-center justify-between group ${selectedDomain === domain ? "bg-brand-primary/5 border-l-4 border-brand-primary" : ""}`,
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col truncate pr-2", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-sm font-bold truncate group-hover:text-brand-primary ${selectedDomain === domain ? "text-brand-primary" : "text-slate-700"}`, children: domain }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] text-slate-400 font-medium uppercase mt-0.5", children: [
+                        notesByDomain[domain].length,
+                        "개의 주석"
+                      ] })
+                    ] }),
+                    selectedDomain === domain && /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronRight, { size: 14, className: "text-brand-primary" })
+                  ]
+                },
+                domain
+              )),
+              sortedDomains.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-10 text-center text-slate-400 text-sm italic font-medium", children: "데이터가 없습니다." })
+            ] })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "lg:col-span-9 space-y-8", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center justify-between mb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-xl font-bold flex items-center gap-2 text-slate-800 uppercase tracking-tight", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Calendar, { size: 20, className: "text-brand-primary" }),
+            "Recent Activity"
+          ] }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-6", children: [
+            filteredNotes.map((note) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-md transition-all flex flex-col group", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-5 flex items-start justify-between", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-2.5 h-10 rounded-full", style: { backgroundColor: note.color } }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col max-w-[200px]", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-bold text-brand-primary truncate uppercase tracking-wide", children: note.domain }),
+                      note.status && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase flex items-center gap-1 ${note.status === "done" ? "bg-emerald-100 text-emerald-600" : note.status === "in-progress" ? "bg-blue-100 text-blue-600" : "bg-amber-100 text-amber-600"}`, children: [
+                        note.status === "done" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CircleCheckBig, { size: 10 }) : note.status === "in-progress" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Play, { size: 10 }) : /* @__PURE__ */ jsxRuntimeExports.jsx(CircleMinus, { size: 10 }),
+                        note.status
+                      ] })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 mt-0.5", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("time", { className: "text-[10px] text-slate-400 font-medium whitespace-nowrap", children: [
+                        new Date(note.updatedAt).toLocaleDateString(),
+                        " · ",
+                        new Date(note.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                      ] }),
+                      note.integrations?.syncedAt && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 px-1.5 py-0.5 bg-slate-50 rounded border border-slate-100/50", children: [
+                        note.integrations.notionId && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-1.5 h-1.5 rounded-full bg-slate-800", title: "Synced to Notion" }),
+                        note.integrations.slackTs && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-1.5 h-1.5 rounded-full bg-[#4A154B]", title: "Synced to Slack" }),
+                        note.integrations.trelloId && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-1.5 h-1.5 rounded-full bg-[#0079BF]", title: "Synced to Trello" })
+                      ] })
+                    ] })
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-1.5 translate-x-2 -translate-y-2 opacity-0 group-hover:opacity-100 transition-opacity", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "button",
+                    {
+                      onClick: () => toggleNoteSharing(note.id),
+                      className: `p-2 rounded-xl transition-colors ${note.isShared ? "bg-emerald-50 text-emerald-500" : "hover:bg-slate-100 text-slate-300 hover:text-slate-600"}`,
+                      title: note.isShared ? "공개됨 (클릭하여 비공개)" : "나만 보기 (클릭하여 공유)",
+                      children: note.isShared ? /* @__PURE__ */ jsxRuntimeExports.jsx(Globe, { size: 18 }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Lock, { size: 18 })
+                    }
+                  ),
+                  note.history && note.history.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "button",
+                    {
+                      onClick: () => setExpandedHistoryId(expandedHistoryId === note.id ? null : note.id),
+                      className: `p-2 rounded-xl transition-colors ${expandedHistoryId === note.id ? "bg-brand-primary text-white" : "hover:bg-slate-100 text-slate-500 hover:text-brand-primary"}`,
+                      title: "수정 히스토리",
+                      children: /* @__PURE__ */ jsxRuntimeExports.jsx(History, { size: 18 })
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => goToNote(note), className: "p-2 hover:bg-slate-100 rounded-xl text-slate-500 hover:text-brand-primary transition-colors", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExternalLink, { size: 18 }) }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => deleteNote(note.id), className: "p-2 hover:bg-red-50 rounded-xl text-slate-300 hover:text-red-500 transition-colors", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Trash2, { size: 18 }) })
+                ] })
+              ] }),
+              note.assignee && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-5 py-2 bg-slate-50 border-y border-slate-100 flex items-center gap-2", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(User, { size: 12, className: "text-slate-400" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] font-bold text-slate-500 uppercase tracking-tighter", children: [
+                  "담당자: ",
+                  note.assignee
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-5 pb-5 flex-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "p",
+                {
+                  className: "text-slate-700 leading-relaxed text-sm lg:text-base line-clamp-6 whitespace-pre-wrap italic font-serif",
+                  style: {
+                    fontFamily: note.fontFamily || settings.fontFamily,
+                    fontSize: `${(note.fontSize || settings.fontSize) + 2}px`,
+                    color: note.textColor || settings.textColor
+                  },
+                  children: note.content || "작성된 내용이 없습니다."
+                }
+              ) }),
+              expandedHistoryId === note.id && note.history && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-5 pb-5 animate-in slide-in-from-top duration-300", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pt-4 border-t border-slate-100 space-y-4", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2", children: "Revision Timeline" }),
+                note.history.map((entry, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative pl-5 border-l border-slate-200 pb-2 last:pb-0", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute left-[-4.5px] top-1.5 w-2 h-2 rounded-full bg-slate-200 border border-white" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-1", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[9px] font-bold text-slate-400", children: idx === 0 ? "이전 버전" : `V${note.history.length - idx}` }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[9px] text-slate-400", children: new Date(entry.updatedAt).toLocaleString() })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500 leading-relaxed bg-slate-50 p-2.5 rounded-xl italic", children: entry.content })
+                ] }, idx)),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative pl-5 border-l border-brand-primary pb-2", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute left-[-4.5px] top-1.5 w-2 h-2 rounded-full bg-brand-primary border border-white" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-1", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[9px] font-bold text-brand-primary", children: "현재 버전" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[9px] text-slate-400", children: new Date(note.updatedAt).toLocaleString() })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-700 font-medium leading-relaxed bg-brand-primary/5 p-2.5 rounded-xl border border-brand-primary/10", children: note.content })
+                ] })
+              ] }) }),
+              note.tags.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-5 py-4 border-t border-slate-50 bg-slate-50/30 flex flex-wrap gap-2", children: note.tags.map((tag) => /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[11px] font-bold px-2.5 py-1 bg-white text-slate-500 rounded-lg border border-slate-100 shadow-sm flex items-center gap-1.5 transition-colors hover:border-brand-primary/20 hover:text-brand-primary", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { size: 10 }),
+                " ",
+                tag
+              ] }, tag)) })
+            ] }, note.id)),
+            notes.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "col-span-full py-20 bg-white rounded-3xl border-2 border-dashed border-slate-100 flex flex-col items-center justify-center text-slate-300 gap-4", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ChartColumn, { size: 48, strokeWidth: 1 }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-bold uppercase tracking-widest text-sm", children: "No annotations found" })
+            ] })
+          ] })
+        ] })
+      ] })
+    ] }),
+    showIntegrations && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[1000] flex items-center justify-center p-4 animate-in fade-in duration-300", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in zoom-in-95 duration-300", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "p-6 border-b border-slate-100 flex items-center justify-between", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-xl font-bold flex items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Send, { className: "text-brand-primary", size: 24 }),
+          "생산성 도구 연동 설정"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => setShowIntegrations(false), className: "p-2 hover:bg-slate-100 rounded-full transition-colors", children: /* @__PURE__ */ jsxRuntimeExports.jsx(X, { size: 20 }) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-6 overflow-y-auto space-y-8 max-h-[70vh]", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 text-slate-800 font-black uppercase text-xs tracking-widest", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-6 h-6 bg-slate-800 rounded flex items-center justify-center text-white text-[10px]", children: "N" }),
+            "Notion Integration"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: visibleFields["notionToken"] ? "text" : "password",
+                  placeholder: "Internal Integration Token",
+                  value: settings.apiKeys?.notionToken || "",
+                  onChange: (e) => updateSettings({ apiKeys: { ...settings.apiKeys, notionToken: e.target.value } }),
+                  className: "w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none pr-10"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  onClick: () => toggleVisibility("notionToken"),
+                  className: "absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-primary transition-colors",
+                  children: visibleFields["notionToken"] ? /* @__PURE__ */ jsxRuntimeExports.jsx(EyeOff, { size: 16 }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Eye, { size: 16 })
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "text",
+                placeholder: "Database ID",
+                value: settings.apiKeys?.notionDatabaseId || "",
+                onChange: (e) => updateSettings({ apiKeys: { ...settings.apiKeys, notionDatabaseId: e.target.value } }),
+                className: "w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none"
+              }
+            )
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 text-[#4A154B] font-black uppercase text-xs tracking-widest", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-6 h-6 bg-[#4A154B] rounded flex items-center justify-center text-white text-[10px]", children: "#" }),
+            "Slack Integration"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: visibleFields["slackWebhookUrl"] ? "text" : "password",
+                placeholder: "Incoming Webhook URL",
+                value: settings.apiKeys?.slackWebhookUrl || "",
+                onChange: (e) => updateSettings({ apiKeys: { ...settings.apiKeys, slackWebhookUrl: e.target.value } }),
+                className: "w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none pr-10"
+              }
+            ),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
               {
-                onClick: () => {
-                  const name = prompt("새 프로젝트 이름을 입력하세요:");
-                  if (name && name.trim()) {
-                    addProject({
-                      id: crypto.randomUUID(),
-                      name: name.trim(),
-                      createdAt: Date.now(),
-                      updatedAt: Date.now()
-                    });
-                  }
-                },
-                className: "p-1 hover:bg-white rounded-lg text-slate-400 hover:text-brand-primary transition-colors",
-                title: "새 프로젝트 추가",
-                children: /* @__PURE__ */ jsxRuntimeExports.jsx(FolderPlus, { size: 16 })
+                onClick: () => toggleVisibility("slackWebhookUrl"),
+                className: "absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-primary transition-colors",
+                children: visibleFields["slackWebhookUrl"] ? /* @__PURE__ */ jsxRuntimeExports.jsx(EyeOff, { size: 16 }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Eye, { size: 16 })
               }
             )
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-2 space-y-1", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs(
-              "button",
-              {
-                onClick: () => setCurrentProjectId(null),
-                className: `w-full px-3 py-2 rounded-lg text-left text-sm font-bold flex items-center justify-between transition-colors ${!currentProjectId ? "bg-brand-primary text-white" : "text-slate-600 hover:bg-slate-50"}`,
-                children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(PanelsTopLeft, { size: 16 }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "모든 프로젝트" })
-                  ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-[10px] px-1.5 py-0.5 rounded-full ${!currentProjectId ? "bg-white/20 text-white" : "bg-slate-100 text-slate-400"}`, children: stats.totalNotes })
-                ]
-              }
-            ),
-            projects.map((project) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-              "button",
-              {
-                onClick: () => setCurrentProjectId(project.id),
-                className: `w-full px-3 py-2 rounded-lg text-left text-sm font-bold flex items-center justify-between group transition-colors ${currentProjectId === project.id ? "bg-brand-primary text-white shadow-md shadow-brand-primary/20" : "text-slate-600 hover:bg-slate-50"}`,
-                children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 truncate", children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(Folder, { size: 16, className: currentProjectId === project.id ? "text-white" : "text-slate-400" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate", children: project.name })
-                  ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center gap-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "button",
-                    {
-                      onClick: (e) => {
-                        e.stopPropagation();
-                        if (confirm(`'${project.name}' 프로젝트를 삭제하시겠습니까?
-(속한 메모들은 삭제되지 않고 유지됩니다.)`)) {
-                          deleteProject(project.id);
-                        }
-                      },
-                      className: `p-1 hover:bg-red-50 rounded transition-all ${currentProjectId === project.id ? "opacity-100 bg-white/20 text-white" : "opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500"}`,
-                      title: "프로젝트 삭제",
-                      children: /* @__PURE__ */ jsxRuntimeExports.jsx(Trash2, { size: 12 })
-                    }
-                  ) })
-                ]
-              },
-              project.id
-            ))
           ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wider", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Funnel, { size: 16 }),
-            " 사이트 리스트"
-          ] }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "divide-y divide-slate-50 max-h-[400px] overflow-y-auto font-sans", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs(
-              "button",
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 text-[#0079BF] font-black uppercase text-xs tracking-widest", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-6 h-6 bg-[#0079BF] rounded flex items-center justify-center text-white text-[10px]", children: "T" }),
+            "Trello Integration"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: visibleFields["trelloKey"] ? "text" : "password",
+                  placeholder: "API Key",
+                  value: settings.apiKeys?.trelloKey || "",
+                  onChange: (e) => updateSettings({ apiKeys: { ...settings.apiKeys, trelloKey: e.target.value } }),
+                  className: "w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none pr-10"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  onClick: () => toggleVisibility("trelloKey"),
+                  className: "absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-primary transition-colors",
+                  children: visibleFields["trelloKey"] ? /* @__PURE__ */ jsxRuntimeExports.jsx(EyeOff, { size: 16 }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Eye, { size: 16 })
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: visibleFields["trelloToken"] ? "text" : "password",
+                  placeholder: "OAuth Token",
+                  value: settings.apiKeys?.trelloToken || "",
+                  onChange: (e) => updateSettings({ apiKeys: { ...settings.apiKeys, trelloToken: e.target.value } }),
+                  className: "w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none pr-10"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  onClick: () => toggleVisibility("trelloToken"),
+                  className: "absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-primary transition-colors",
+                  children: visibleFields["trelloToken"] ? /* @__PURE__ */ jsxRuntimeExports.jsx(EyeOff, { size: 16 }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Eye, { size: 16 })
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
               {
-                onClick: () => setSelectedDomain(null),
-                className: `w-full px-4 py-3.5 text-left hover:bg-slate-50 transition-colors flex items-center justify-between group ${!selectedDomain ? "bg-brand-primary/5 border-l-4 border-brand-primary" : ""}`,
-                children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col", children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-sm font-bold ${!selectedDomain ? "text-brand-primary" : "text-slate-700"}`, children: "모든 사이트" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] text-slate-400 font-medium uppercase mt-0.5", children: [
-                      "전체 ",
-                      notes.length,
-                      "개의 주석"
-                    ] })
-                  ] }),
-                  !selectedDomain && /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronRight, { size: 14, className: "text-brand-primary" })
-                ]
+                type: "text",
+                placeholder: "List ID (Destination)",
+                value: settings.apiKeys?.trelloListId || "",
+                onChange: (e) => updateSettings({ apiKeys: { ...settings.apiKeys, trelloListId: e.target.value } }),
+                className: "w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none"
               }
-            ),
-            sortedDomains.map((domain) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-              "button",
-              {
-                onClick: () => setSelectedDomain(domain),
-                className: `w-full px-4 py-3.5 text-left hover:bg-slate-50 transition-colors flex items-center justify-between group ${selectedDomain === domain ? "bg-brand-primary/5 border-l-4 border-brand-primary" : ""}`,
-                children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col truncate pr-2", children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-sm font-bold truncate group-hover:text-brand-primary ${selectedDomain === domain ? "text-brand-primary" : "text-slate-700"}`, children: domain }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] text-slate-400 font-medium uppercase mt-0.5", children: [
-                      notesByDomain[domain].length,
-                      "개의 주석"
-                    ] })
-                  ] }),
-                  selectedDomain === domain && /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronRight, { size: 14, className: "text-brand-primary" })
-                ]
-              },
-              domain
-            )),
-            sortedDomains.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-10 text-center text-slate-400 text-sm italic font-medium", children: "데이터가 없습니다." })
+            )
           ] })
         ] })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "lg:col-span-9 space-y-8", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center justify-between mb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-xl font-bold flex items-center gap-2 text-slate-800 uppercase tracking-tight", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Calendar, { size: 20, className: "text-brand-primary" }),
-          "Recent Activity"
-        ] }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-6", children: [
-          filteredNotes.map((note) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-md transition-all flex flex-col group", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-5 flex items-start justify-between", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-2.5 h-10 rounded-full", style: { backgroundColor: note.color } }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col max-w-[200px]", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-bold text-brand-primary truncate uppercase tracking-wide", children: note.domain }),
-                    note.status && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase flex items-center gap-1 ${note.status === "done" ? "bg-emerald-100 text-emerald-600" : note.status === "in-progress" ? "bg-blue-100 text-blue-600" : "bg-amber-100 text-amber-600"}`, children: [
-                      note.status === "done" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CircleCheckBig, { size: 10 }) : note.status === "in-progress" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Play, { size: 10 }) : /* @__PURE__ */ jsxRuntimeExports.jsx(CircleMinus, { size: 10 }),
-                      note.status
-                    ] })
-                  ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("time", { className: "text-[10px] text-slate-400 font-medium mt-0.5", children: [
-                    new Date(note.updatedAt).toLocaleDateString(),
-                    " · ",
-                    new Date(note.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                  ] })
-                ] })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-1.5 translate-x-2 -translate-y-2 opacity-0 group-hover:opacity-100 transition-opacity", children: [
-                note.history && note.history.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "button",
-                  {
-                    onClick: () => setExpandedHistoryId(expandedHistoryId === note.id ? null : note.id),
-                    className: `p-2 rounded-xl transition-colors ${expandedHistoryId === note.id ? "bg-brand-primary text-white" : "hover:bg-slate-100 text-slate-500 hover:text-brand-primary"}`,
-                    title: "수정 히스토리",
-                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(History, { size: 18 })
-                  }
-                ),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => goToNote(note), className: "p-2 hover:bg-slate-100 rounded-xl text-slate-500 hover:text-brand-primary transition-colors", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExternalLink, { size: 18 }) }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => deleteNote(note.id), className: "p-2 hover:bg-red-50 rounded-xl text-slate-300 hover:text-red-500 transition-colors", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Trash2, { size: 18 }) })
-              ] })
-            ] }),
-            note.assignee && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-5 py-2 bg-slate-50 border-y border-slate-100 flex items-center gap-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(User, { size: 12, className: "text-slate-400" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] font-bold text-slate-500 uppercase tracking-tighter", children: [
-                "담당자: ",
-                note.assignee
-              ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-5 pb-5 flex-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "p",
-              {
-                className: "text-slate-700 leading-relaxed text-sm lg:text-base line-clamp-6 whitespace-pre-wrap italic font-serif",
-                style: {
-                  fontFamily: note.fontFamily || settings.fontFamily,
-                  fontSize: `${(note.fontSize || settings.fontSize) + 2}px`,
-                  color: note.textColor || settings.textColor
-                },
-                children: note.content || "작성된 내용이 없습니다."
-              }
-            ) }),
-            expandedHistoryId === note.id && note.history && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-5 pb-5 animate-in slide-in-from-top duration-300", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pt-4 border-t border-slate-100 space-y-4", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2", children: "Revision Timeline" }),
-              note.history.map((entry, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative pl-5 border-l border-slate-200 pb-2 last:pb-0", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute left-[-4.5px] top-1.5 w-2 h-2 rounded-full bg-slate-200 border border-white" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-1", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[9px] font-bold text-slate-400", children: idx === 0 ? "이전 버전" : `V${note.history.length - idx}` }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[9px] text-slate-400", children: new Date(entry.updatedAt).toLocaleString() })
-                ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500 leading-relaxed bg-slate-50 p-2.5 rounded-xl italic", children: entry.content })
-              ] }, idx)),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative pl-5 border-l border-brand-primary pb-2", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute left-[-4.5px] top-1.5 w-2 h-2 rounded-full bg-brand-primary border border-white" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-1", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[9px] font-bold text-brand-primary", children: "현재 버전" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[9px] text-slate-400", children: new Date(note.updatedAt).toLocaleString() })
-                ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-700 font-medium leading-relaxed bg-brand-primary/5 p-2.5 rounded-xl border border-brand-primary/10", children: note.content })
-              ] })
-            ] }) }),
-            note.tags.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-5 py-4 border-t border-slate-50 bg-slate-50/30 flex flex-wrap gap-2", children: note.tags.map((tag) => /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[11px] font-bold px-2.5 py-1 bg-white text-slate-500 rounded-lg border border-slate-100 shadow-sm flex items-center gap-1.5 transition-colors hover:border-brand-primary/20 hover:text-brand-primary", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { size: 10 }),
-              " ",
-              tag
-            ] }, tag)) })
-          ] }, note.id)),
-          notes.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "col-span-full py-20 bg-white rounded-3xl border-2 border-dashed border-slate-100 flex flex-col items-center justify-center text-slate-300 gap-4", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(ChartColumn, { size: 48, strokeWidth: 1 }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-bold uppercase tracking-widest text-sm", children: "No annotations found" })
-          ] })
-        ] })
-      ] })
-    ] })
-  ] }) });
+      /* @__PURE__ */ jsxRuntimeExports.jsx("footer", { className: "p-6 bg-slate-50 border-t border-slate-100 flex justify-end", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: () => setShowIntegrations(false),
+          className: "px-6 py-2.5 bg-brand-primary text-white font-bold rounded-xl shadow-lg shadow-brand-primary/20 hover:scale-105 transition-all",
+          children: "설정 저장 및 닫기"
+        }
+      ) })
+    ] }) })
+  ] });
 };
 const App = () => {
   const [isFullPage, setIsFullPage] = React.useState(window.innerWidth > 500);
@@ -13902,7 +14229,17 @@ const PopupView = () => {
               {
                 onClick: () => setIsSearchOpen(!isSearchOpen),
                 className: `p-1 hover:bg-black/5 rounded ${isSearchOpen ? "bg-black/5" : ""}`,
+                title: "검색",
                 children: /* @__PURE__ */ jsxRuntimeExports.jsx(Search, { size: 18 })
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: () => window.open("index.html", "_blank"),
+                className: "p-1 hover:bg-black/5 rounded",
+                title: "대시보드",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(PanelsTopLeft, { size: 18 })
               }
             ),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -13910,6 +14247,7 @@ const PopupView = () => {
               {
                 onClick: () => setIsSettingsOpen(true),
                 className: "p-1 hover:bg-black/5 rounded",
+                title: "설정",
                 children: /* @__PURE__ */ jsxRuntimeExports.jsx(Settings, { size: 18 })
               }
             )
@@ -14028,6 +14366,56 @@ const PopupView = () => {
                     children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform duration-200 ease-in-out ${settings.showToolbar ? "translate-x-5" : "translate-x-0"}` })
                   }
                 )
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 p-3 bg-gray-50 rounded-lg border border-gray-100", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-2", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-bold text-gray-700 uppercase", children: "클린 뷰 투명도" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] font-bold text-brand-primary", children: [
+                    Math.round(settings.cleanViewOpacity * 100),
+                    "%"
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "range",
+                    min: "0",
+                    max: "0.5",
+                    step: "0.01",
+                    value: settings.cleanViewOpacity,
+                    onChange: (e) => updateSettings({ cleanViewOpacity: parseFloat(e.target.value) }),
+                    className: "w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-primary"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex justify-between mt-1", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[8px] text-gray-400", children: "투명" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[8px] text-gray-400", children: "반투명" })
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 p-3 bg-gray-50 rounded-lg border border-gray-100", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-2", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-bold text-gray-700 uppercase", children: "툴바 자체 투명도" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] font-bold text-brand-primary", children: [
+                    Math.round(settings.toolbarOpacity * 100),
+                    "%"
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "range",
+                    min: "0.1",
+                    max: "1",
+                    step: "0.01",
+                    value: settings.toolbarOpacity,
+                    onChange: (e) => updateSettings({ toolbarOpacity: parseFloat(e.target.value) }),
+                    className: "w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-primary"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex justify-between mt-1", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[8px] text-gray-400", children: "투명" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[8px] text-gray-400", children: "불투명" })
+                ] })
               ] })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
@@ -14183,15 +14571,7 @@ const PopupView = () => {
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-gray-800 leading-relaxed bg-green-50 p-2 rounded border border-green-100", children: notes.find((n) => n.id === viewingHistoryNoteId).content })
             ] })
           ] })
-        ] }),
-        !viewingHistoryNoteId && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-3 border-t border-gray-200 bg-white flex justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: () => window.open("index.html", "_blank"),
-            className: "text-xs text-gray-500 hover:text-brand-primary transition-colors",
-            children: "대시보드 전체보기"
-          }
-        ) })
+        ] })
       ]
     }
   );

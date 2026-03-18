@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNoteStore } from './store/useNoteStore';
-import { StickyNote, Search, Settings, ExternalLink, Trash2, MapPin, X, ChevronLeft, AlertTriangle, Eye, EyeOff, MinusCircle, Play, CheckCircle2, Keyboard, Folder, FolderPlus, History } from 'lucide-react';
+import { StickyNote, Search, Settings, ExternalLink, Trash2, MapPin, X, ChevronLeft, AlertTriangle, Eye, EyeOff, MinusCircle, Play, CheckCircle2, Keyboard, Folder, FolderPlus, History, Layout } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 
 const App: React.FC = () => {
@@ -69,12 +69,21 @@ const PopupView: React.FC = () => {
               <button
                 onClick={() => setIsSearchOpen(!isSearchOpen)}
                 className={`p-1 hover:bg-black/5 rounded ${isSearchOpen ? 'bg-black/5' : ''}`}
+                title="검색"
               >
                 <Search size={18} />
               </button>
               <button
+                onClick={() => window.open('index.html', '_blank')}
+                className="p-1 hover:bg-black/5 rounded"
+                title="대시보드"
+              >
+                <Layout size={18} />
+              </button>
+              <button
                 onClick={() => setIsSettingsOpen(true)}
                 className="p-1 hover:bg-black/5 rounded"
+                title="설정"
               >
                 <Settings size={18} />
               </button>
@@ -195,6 +204,46 @@ const PopupView: React.FC = () => {
               >
                 <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform duration-200 ease-in-out ${settings.showToolbar ? 'translate-x-5' : 'translate-x-0'}`} />
               </button>
+            </div>
+
+            <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-bold text-gray-700 uppercase">클린 뷰 투명도</span>
+                <span className="text-[10px] font-bold text-brand-primary">{Math.round(settings.cleanViewOpacity * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="0.5"
+                step="0.01"
+                value={settings.cleanViewOpacity}
+                onChange={(e) => updateSettings({ cleanViewOpacity: parseFloat(e.target.value) })}
+                className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-primary"
+              />
+              <div className="flex justify-between mt-1">
+                <span className="text-[8px] text-gray-400">투명</span>
+                <span className="text-[8px] text-gray-400">반투명</span>
+              </div>
+            </div>
+
+            <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-bold text-gray-700 uppercase">툴바 자체 투명도</span>
+                <span className="text-[10px] font-bold text-brand-primary">{Math.round(settings.toolbarOpacity * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0.1"
+                max="1"
+                step="0.01"
+                value={settings.toolbarOpacity}
+                onChange={(e) => updateSettings({ toolbarOpacity: parseFloat(e.target.value) })}
+                className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-primary"
+              />
+              <div className="flex justify-between mt-1">
+                <span className="text-[8px] text-gray-400">투명</span>
+                <span className="text-[8px] text-gray-400">불투명</span>
+              </div>
             </div>
           </section>
 
@@ -376,17 +425,6 @@ const PopupView: React.FC = () => {
         </div>
       )}
 
-      {/* Footer */}
-      {!viewingHistoryNoteId && (
-        <div className="p-3 border-t border-gray-200 bg-white flex justify-center">
-          <button
-            onClick={() => window.open('index.html', '_blank')}
-            className="text-xs text-gray-500 hover:text-brand-primary transition-colors"
-          >
-            대시보드 전체보기
-          </button>
-        </div>
-      )}
     </div>
   );
 };

@@ -2,11 +2,13 @@
 
 import { createRoot } from 'react-dom/client';
 import { NoteContainer } from '../components/NoteContainer';
+import { MiniMap } from '../components/MiniMap';
 import { MarkupLayer } from './MarkupLayer';
 import { CaptureLayer } from './CaptureLayer';
 import { captureAnchor } from '../utils/anchoring';
 import { useNoteStore } from '../store/useNoteStore';
 import { normalizeUrl } from '../utils/url';
+import { analyzePageTheme } from '../utils/theme';
 // Import tailwind CSS as inline string to inject only into shadow dom
 import tailwindStyles from '../index.css?inline';
 import contentStyles from './style.css?inline';
@@ -25,7 +27,7 @@ document.addEventListener('mousemove', (e: MouseEvent) => {
 // Capture the last right-click information to position the note correctly
 document.addEventListener('contextmenu', (e: MouseEvent) => {
     lastElement = e.target as HTMLElement;
-    lastClickInfo = { x: e.clientX, y: e.clientY };
+    lastClickInfo = { x: e.pageX, y: e.pageY }; // Using pageX/Y to include scroll
 }, true);
 
 // Global Hotkeys
@@ -43,7 +45,9 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
                 e.preventDefault();
                 const normalizedUrl = normalizeUrl(window.location.href);
                 const targetElement = currentElement || document.body;
-                const anchor = captureAnchor(targetElement, currentMousePos.x, currentMousePos.y);
+                const mouseDocX = currentMousePos.x + window.scrollX;
+                const mouseDocY = currentMousePos.y + window.scrollY;
+                const anchor = captureAnchor(targetElement, mouseDocX, mouseDocY);
                 const currentSettings = store.settings;
 
                 const newNote = {
@@ -55,8 +59,8 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
                     color: '#FFF9C4',
                     size: { width: 200, height: 150 },
                     notePosition: {
-                        x: Math.max(0, currentMousePos.x + window.scrollX),
-                        y: Math.max(0, currentMousePos.y + window.scrollY)
+                        x: Math.max(0, mouseDocX),
+                        y: Math.max(0, mouseDocY)
                     },
                     tags: [],
                     status: 'pending' as const,
@@ -106,6 +110,7 @@ const handleMessage = (message: any) => {
     if (message.type === "CREATE_NOTE_CLICK") {
         const normalizedUrl = normalizeUrl(window.location.href);
         const targetElement = lastElement || document.body;
+        // lastClickInfo.x/y are already document-relative (pageX/Y)
         const anchor = captureAnchor(targetElement, lastClickInfo.x, lastClickInfo.y);
 
         // Capture current global settings to persist with the note
@@ -120,8 +125,8 @@ const handleMessage = (message: any) => {
             color: '#FFF9C4',
             size: { width: 200, height: 150 },
             notePosition: {
-                x: Math.max(0, lastClickInfo.x + window.scrollX),
-                y: Math.max(0, lastClickInfo.y + window.scrollY)
+                x: Math.max(0, lastClickInfo.x),
+                y: Math.max(0, lastClickInfo.y)
             },
             tags: [],
             status: 'pending' as const,
@@ -224,11 +229,17 @@ const init = () => {
         root.render(
             <>
                 <NoteContainer />
+                <MiniMap />
                 <MarkupLayer />
                 <CaptureLayer />
             </>
         );
         console.log('PagePost: UI Root rendered into Shadow DOM');
+
+        // Analyze and apply host page theme (local to this tab)
+        const themeColor = analyzePageTheme();
+        useNoteStore.getState().setAccentColor(themeColor);
+
     } catch (err) {
         console.error('PagePost: Initialization failed:', err);
     }
@@ -252,6 +263,10 @@ const checkUrlChange = (forcedUrl?: string) => {
         lastUrl = currentUrl;
         useNoteStore.getState().fetchNotesForUrl(currentUrl);
         useNoteStore.getState().fetchMarkupsForUrl(currentUrl);
+
+        // Re-analyze theme on SPA navigation
+        const themeColor = analyzePageTheme();
+        useNoteStore.getState().setAccentColor(themeColor);
     }
 };
 

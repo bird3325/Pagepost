@@ -52,6 +52,19 @@ export interface Note {
     createdAt: number;
     updatedAt: number;
     history?: NoteHistoryEntry[];
+
+    // Sharing & Collaboration
+    isShared?: boolean;
+    shareId?: string;
+
+    // Productivity & Media
+    audioUrl?: string;     // URL or base64 of voice memo
+    integrations?: {
+        notionId?: string;
+        slackTs?: string;
+        trelloId?: string;
+        syncedAt?: number;
+    };
 }
 
 export type MarkupType = 'pen' | 'highlight' | 'rect' | 'circle' | 'arrow' | 'text' | 'sticker' | 'star' | 'heart' | 'triangle' | 'chat' | 'lightning' | 'diamond' | 'pentagon' | 'hexagon' | 'cross' | 'cloud' | 'banner' | 'burst1' | 'burst2' | 'eraser';
@@ -84,6 +97,10 @@ export interface MarkupObject {
     content?: string;     // For 'text' type
     linkedNoteId?: string; // Optional link to a Note
 
+    // Sharing & Collaboration
+    isShared?: boolean;
+    shareId?: string;
+
     createdAt: number;
     updatedAt: number;
 }
@@ -93,6 +110,7 @@ export interface Project {
     name: string;
     description?: string;
     color?: string;
+    isPublic?: boolean;
     createdAt: number;
     updatedAt: number;
 }

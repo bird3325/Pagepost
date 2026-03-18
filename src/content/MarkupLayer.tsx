@@ -640,7 +640,7 @@ export const MarkupLayer: React.FC = () => {
                 maxWidth: '100%',
                 display: 'block',
                 pointerEvents: mode === 'markup' ? 'auto' : 'none',
-                opacity: settings.isCleanView ? 0.2 : 1.0,
+                opacity: settings.isCleanView ? settings.cleanViewOpacity : 1.0,
                 transition: 'opacity 0.3s ease-in-out'
             }}
             onMouseDown={handleMouseDown}

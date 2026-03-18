@@ -1,6 +1,18 @@
 @import "tailwindcss";
 
 @theme {
+  --spacing: 4px;
+  /* Default spacing unit: 1 = 4px, 4 = 16px (rem-like behavior but fixed px) */
+
+  /* Fixed font sizes to ignore host rem settings */
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-base: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 24px;
+  --font-size-3xl: 30px;
+
   --color-brand-primary: #FFD54F;
   --color-brand-secondary: #4FC3F7;
   --color-brand-accent: #FF6F61;
@@ -12,6 +24,14 @@
   --color-note-blue: #BBDEFB;
 }
 
+#pagepost-root-container {
+  font-size: 16px !important;
+  line-height: 1.5 !important;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 :root {
   font-family: 'Pretendard Variable', system-ui, -apple-system, sans-serif;
 }
@@ -19,4 +39,14 @@
 body {
   margin: 0;
   overflow-x: hidden;
+}
+
+/* Ensure all clickable elements show the pointer cursor */
+button,
+a,
+input[type="button"],
+input[type="submit"],
+[role="button"],
+.cursor-pointer {
+  cursor: pointer !important;
 }

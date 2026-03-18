@@ -24,7 +24,20 @@ interface NoteState {
         highlightWidth: number;
         markupOpacity: number;
         isCleanView: boolean;
+        cleanViewOpacity: number;
+        toolbarPosition: { x: number; y: number };
+        toolbarOpacity: number;
+        showMiniMap: boolean;
+        apiKeys?: {
+            notionToken?: string;
+            notionDatabaseId?: string;
+            slackWebhookUrl?: string;
+            trelloKey?: string;
+            trelloToken?: string;
+            trelloListId?: string;
+        };
     };
+    accentColor: string;
     markups: MarkupObject[];
     projects: Project[];
     currentProjectId: string | null;
@@ -55,6 +68,7 @@ interface NoteState {
     setOpacity: (opacity: number) => void;
     updateSettings: (settings: Partial<NoteState['settings']>) => Promise<void>;
     loadSettings: () => Promise<void>;
+    setAccentColor: (color: string) => void;
 
     // Markup Actions
     fetchMarkupsForUrl: (url: string) => Promise<void>;
@@ -75,6 +89,12 @@ interface NoteState {
     // Data Management
     exportData: (domain?: string) => Promise<void>;
     importData: (jsonData: string) => Promise<void>;
+    shareSnapshot: (domain?: string) => Promise<string>;
+    toggleNoteSharing: (noteId: string) => Promise<void>;
+
+    // Workflow Integration
+    syncToExternalService: (noteId: string, service: 'notion' | 'slack' | 'trello') => Promise<boolean>;
+    saveVoiceMemo: (noteId: string, audioBlob: Blob) => Promise<void>;
 }
 
 const STORAGE_KEY = 'pagepost_notes';
@@ -177,8 +197,14 @@ export const useNoteStore = create<NoteState>((set, get) => {
             penWidth: 3,
             highlightWidth: 20,
             markupOpacity: 1.0,
-            isCleanView: false
+            isCleanView: false,
+            cleanViewOpacity: 0.1,
+            toolbarPosition: { x: 50, y: 88 },
+            toolbarOpacity: 1.0,
+            showMiniMap: true,
+            apiKeys: {}
         },
+        accentColor: '#FFD54F',
         markups: [],
         projects: [],
         currentProjectId: null,
@@ -190,7 +216,12 @@ export const useNoteStore = create<NoteState>((set, get) => {
                 const result = await chrome.storage.local.get(SETTINGS_KEY);
                 if (!isContextValid()) return;
                 if (result[SETTINGS_KEY]) {
-                    set({ settings: { ...get().settings, ...result[SETTINGS_KEY] }, isSettingsLoaded: true });
+                    const loadedSettings = result[SETTINGS_KEY] as any;
+                    // Ensure toolbarPosition is properly merged or defaulted
+                    if (!loadedSettings.toolbarPosition || typeof loadedSettings.toolbarPosition.x !== 'number') {
+                        loadedSettings.toolbarPosition = { x: 50, y: 88 };
+                    }
+                    set({ settings: { ...get().settings, ...loadedSettings }, isSettingsLoaded: true });
                 } else {
                     set({ isSettingsLoaded: true });
                 }
@@ -235,6 +266,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
             }
         },
         setActiveNoteId: (id) => set({ activeNoteId: id, selectedMarkupId: null }),
+        setAccentColor: (color) => set({ accentColor: color }),
         setSelectedMarkupId: (id) => set({ selectedMarkupId: id }),
         setTool: (tool) => set({ currentTool: tool, selectedMarkupId: tool === 'select' ? get().selectedMarkupId : null }),
         setColor: (color: string) => {
@@ -733,7 +765,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
             }
         },
 
-        deleteProject: async (id) => {
+        deleteProject: async (id: string) => {
             if (!isContextValid()) return;
             try {
                 // 1. Fetch all data
@@ -785,5 +817,124 @@ export const useNoteStore = create<NoteState>((set, get) => {
                 console.error('Failed to delete project:', error);
             }
         },
+
+        shareSnapshot: async (domain?: string) => {
+            if (!isContextValid()) return '';
+            try {
+                const notesResult = await chrome.storage.local.get(STORAGE_KEY);
+                const markupsResult = await chrome.storage.local.get(MARKUP_STORAGE_KEY);
+                if (!isContextValid()) return '';
+
+                let notesToExport = (notesResult[STORAGE_KEY] || []) as Note[];
+                let markupsToExport = (markupsResult[MARKUP_STORAGE_KEY] || []) as MarkupObject[];
+
+                const targetDomain = domain || (get().currentUrl ? new URL(get().currentUrl).hostname : '');
+
+                if (targetDomain) {
+                    notesToExport = notesToExport.filter(n => n.domain === targetDomain);
+                    const urls = new Set(notesToExport.map(n => n.url));
+                    markupsToExport = markupsToExport.filter(m => urls.has(m.url));
+                }
+
+                const data = {
+                    version: '2.0-SNAPSHOT',
+                    timestamp: Date.now(),
+                    domain: targetDomain,
+                    notes: notesToExport,
+                    markups: markupsToExport
+                };
+
+                // In a real product, we would POST this to a server and get a short ID.
+                // For this MVP, we simulate it by encoding the data into a "Snapshot Link".
+                const serialized = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+                const shareLink = `https://pagepost.io/view?snapshot=${encodeURIComponent(serialized)}`;
+
+                return shareLink;
+            } catch (error) {
+                console.error('Failed to generate share snapshot:', error);
+                return '';
+            }
+        },
+
+        toggleNoteSharing: async (id: string) => {
+            const { updateNote, notes } = get();
+            const note = notes.find(n => n.id === id);
+            if (!note) return;
+
+            const isShared = !note.isShared;
+            const shareId = isShared ? (note.shareId || crypto.randomUUID()) : note.shareId;
+
+            await updateNote(id, { isShared, shareId });
+        },
+
+        syncToExternalService: async (noteId, service) => {
+            const { updateNote, notes, settings } = get();
+            const note = notes.find(n => n.id === noteId);
+            if (!note || !isContextValid()) return false;
+
+            // Use apiKeys from settings
+            const apiKeys = settings.apiKeys || {};
+
+            return new Promise((resolve) => {
+                chrome.runtime.sendMessage({
+                    type: 'SYNC_NOTE',
+                    service,
+                    apiKeys,
+                    data: {
+                        url: note.url,
+                        content: note.content,
+                        domain: note.domain
+                    }
+                }, async (response) => {
+                    if (response && response.ok) {
+                        const integrationId = response.id;
+                        const updates: Partial<Note> = {
+                            integrations: {
+                                ...(note.integrations || {})
+                            }
+                        };
+
+                        let hasUpdate = false;
+                        if (service === 'notion' && integrationId) {
+                            updates.integrations!.notionId = integrationId;
+                            hasUpdate = true;
+                        } else if (service === 'slack' && integrationId) {
+                            updates.integrations!.slackTs = integrationId;
+                            hasUpdate = true;
+                        } else if (service === 'trello' && integrationId) {
+                            updates.integrations!.trelloId = integrationId;
+                            hasUpdate = true;
+                        }
+
+                        if (hasUpdate) {
+                            updates.integrations!.syncedAt = Date.now();
+                            await updateNote(noteId, updates);
+                            resolve(true);
+                        } else {
+                            // If ok is true but no ID, still resolve but don't show as synced
+                            resolve(true);
+                        }
+                    } else {
+                        const errorMsg = response?.error || '알 수 없는 서버 오류';
+                        console.error(`PagePost: ${service} sync fail:`, errorMsg);
+                        alert(`${service} 연동 실패!\n\n[상세 내용]: ${errorMsg}\n\n도움말: 설정의 토큰값이나 데이터베이스 권한(연결 추가)을 다시 확인해 보세요.`);
+                        resolve(false);
+                    }
+                });
+            });
+        },
+
+        saveVoiceMemo: async (noteId, audioBlob) => {
+            const { updateNote } = get();
+
+            // In a real app, we'd upload this to S3/Supabase Storage.
+            // Here we convert to base64 for local persistence.
+            const reader = new FileReader();
+            reader.readAsDataURL(audioBlob);
+            reader.onloadend = async () => {
+                const base64Audio = reader.result as string;
+                await updateNote(noteId, { audioUrl: base64Audio });
+            };
+        }
     };
 });
