@@ -13979,6 +13979,7 @@ const Dashboard = () => {
   const [expandedHistoryId, setExpandedHistoryId] = React.useState(null);
   const [showIntegrations, setShowIntegrations] = React.useState(false);
   const [activeProjectMenuId, setActiveProjectMenuId] = React.useState(null);
+  const [editingProject, setEditingProject] = React.useState(null);
   const [visibleFields, setVisibleFields] = React.useState({});
   const fileInputRef = React.useRef(null);
   const toggleVisibility = (field) => {
@@ -14178,17 +14179,6 @@ const Dashboard = () => {
                   ]
                 }
               ),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                "button",
-                {
-                  onClick: () => setShowIntegrations(true),
-                  className: `w-full px-3 py-2 mt-2 border border-dashed border-slate-200 rounded-lg text-left text-sm font-bold flex items-center gap-3 text-slate-400 hover:border-brand-primary hover:text-brand-primary transition-all`,
-                  children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(Settings, { size: 16 }),
-                    "외부 서비스 연동 설정"
-                  ]
-                }
-              ),
               projects.map((project) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
                 "button",
                 {
@@ -14199,7 +14189,19 @@ const Dashboard = () => {
                       /* @__PURE__ */ jsxRuntimeExports.jsx(Folder, { size: 16, className: currentProjectId === project.id ? "text-white" : "text-slate-400" }),
                       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate", children: project.name })
                     ] }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "button",
+                        {
+                          onClick: (e) => {
+                            e.stopPropagation();
+                            setEditingProject(project);
+                          },
+                          className: `p-1 hover:bg-white/20 rounded transition-all ${currentProjectId === project.id ? "text-white" : "text-slate-400 hover:text-brand-primary"}`,
+                          title: "프로젝트 연동 설정",
+                          children: /* @__PURE__ */ jsxRuntimeExports.jsx(Settings, { size: 12 })
+                        }
+                      ),
                       /* @__PURE__ */ jsxRuntimeExports.jsx(
                         "button",
                         {
@@ -14207,7 +14209,7 @@ const Dashboard = () => {
                             e.stopPropagation();
                             updateProject(project.id, { isPublic: !project.isPublic });
                           },
-                          className: `p-1 hover:bg-white/20 rounded transition-all ${project.isPublic ? "text-emerald-400" : "text-slate-400"} ${currentProjectId === project.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`,
+                          className: `p-1 hover:bg-white/20 rounded transition-all ${project.isPublic ? "text-emerald-400" : "text-slate-400"} ${currentProjectId === project.id ? "opacity-100" : ""}`,
                           title: project.isPublic ? "공개 프로젝트" : "비공개 프로젝트",
                           children: project.isPublic ? /* @__PURE__ */ jsxRuntimeExports.jsx(Globe, { size: 12 }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Lock, { size: 12 })
                         }
@@ -14222,7 +14224,7 @@ const Dashboard = () => {
                               deleteProject(project.id);
                             }
                           },
-                          className: `p-1 hover:bg-red-50 rounded transition-all ${currentProjectId === project.id ? "opacity-100 bg-white/20 text-white" : "opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500"}`,
+                          className: `p-1 hover:bg-red-50 rounded transition-all ${currentProjectId === project.id ? "bg-white/20 text-white" : "text-slate-300 hover:text-red-500"}`,
                           title: "프로젝트 삭제",
                           children: /* @__PURE__ */ jsxRuntimeExports.jsx(Trash2, { size: 12 })
                         }
@@ -14278,7 +14280,18 @@ const Dashboard = () => {
               )),
               sortedDomains.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-10 text-center text-slate-400 text-sm italic font-medium", children: "데이터가 없습니다." })
             ] })
-          ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              onClick: () => setShowIntegrations(true),
+              className: "w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl shadow-sm text-center text-sm font-bold flex items-center justify-center gap-2 text-slate-500 hover:border-brand-primary hover:text-brand-primary transition-all group",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Settings, { size: 18, className: "group-hover:rotate-90 transition-transform text-slate-400 group-hover:text-brand-primary" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "공통 계정/API 키 설정" })
+              ]
+            }
+          )
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "lg:col-span-9 space-y-8", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-2", children: [
@@ -14464,7 +14477,7 @@ const Dashboard = () => {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "p-6 border-b border-slate-100 flex items-center justify-between", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-xl font-bold flex items-center gap-2", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(Send, { className: "text-brand-primary", size: 24 }),
-          "생산성 도구 연동 설정"
+          "공통 계정 설정 (Global Keys)"
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => setShowIntegrations(false), className: "p-2 hover:bg-slate-100 rounded-full transition-colors", children: /* @__PURE__ */ jsxRuntimeExports.jsx(X, { size: 20 }) })
       ] }),
@@ -14480,7 +14493,7 @@ const Dashboard = () => {
                 "input",
                 {
                   type: visibleFields["notionToken"] ? "text" : "password",
-                  placeholder: "Internal Integration Token",
+                  placeholder: "Notion Internal Integration Token",
                   value: settings.apiKeys?.notionToken || "",
                   onChange: (e) => updateSettings({ apiKeys: { ...settings.apiKeys, notionToken: e.target.value } }),
                   className: "w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none pr-10"
@@ -14495,16 +14508,7 @@ const Dashboard = () => {
                 }
               )
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "text",
-                placeholder: "Database ID",
-                value: settings.apiKeys?.notionDatabaseId || "",
-                onChange: (e) => updateSettings({ apiKeys: { ...settings.apiKeys, notionDatabaseId: e.target.value } }),
-                className: "w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none"
-              }
-            )
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] text-slate-400 italic", children: "토큰은 모든 프로젝트에서 공통으로 사용됩니다. 데이터베이스 ID는 각 프로젝트 설정에서 관리하세요." })
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-4", children: [
@@ -14579,16 +14583,7 @@ const Dashboard = () => {
                 }
               )
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "text",
-                placeholder: "List ID (Destination)",
-                value: settings.apiKeys?.trelloListId || "",
-                onChange: (e) => updateSettings({ apiKeys: { ...settings.apiKeys, trelloListId: e.target.value } }),
-                className: "w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none"
-              }
-            )
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] text-slate-400 italic", children: "키와 토큰은 전역 설정입니다. 특정 보드의 리스트 ID는 프로젝트 설정에서 관리하세요." })
           ] })
         ] })
       ] }),
@@ -14600,6 +14595,82 @@ const Dashboard = () => {
           children: "설정 저장 및 닫기"
         }
       ) })
+    ] }) }),
+    editingProject && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[1000] flex items-center justify-center p-4 animate-in fade-in duration-300", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in zoom-in-95 duration-300", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "p-6 border-b border-slate-100 flex items-center justify-between", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-xl font-bold flex items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Folder, { className: "text-brand-primary", size: 24 }),
+          "[",
+          editingProject.name,
+          "] 동기화 설정"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => setEditingProject(null), className: "p-2 hover:bg-slate-100 rounded-full transition-colors", children: /* @__PURE__ */ jsxRuntimeExports.jsx(X, { size: 20 }) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-6 overflow-y-auto space-y-8 max-h-[70vh]", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500 font-medium leading-relaxed", children: "이 프로젝트에 속한 메모들이 각각 어떤 서비스의 목적지로 동기화될지 설정합니다. 인증 정보는 '공통 설정'을 따릅니다." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-5 h-5 bg-slate-800 rounded flex items-center justify-center text-white text-[8px]", children: "N" }),
+            "Notion Database ID"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "text",
+              placeholder: "Notion Database ID for this project",
+              value: editingProject.integrations?.notionDatabaseId || "",
+              onChange: (e) => setEditingProject({ ...editingProject, integrations: { ...editingProject.integrations, notionDatabaseId: e.target.value } }),
+              className: "w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "text-xs font-black text-[#0079BF] uppercase tracking-widest flex items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-5 h-5 bg-[#0079BF] rounded flex items-center justify-center text-white text-[8px]", children: "T" }),
+            "Trello List ID"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "text",
+              placeholder: "Trello List ID for this project",
+              value: editingProject.integrations?.trelloListId || "",
+              onChange: (e) => setEditingProject({ ...editingProject, integrations: { ...editingProject.integrations, trelloListId: e.target.value } }),
+              className: "w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-4 opacity-50", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "text-xs font-black text-[#4A154B] uppercase tracking-widest flex items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-5 h-5 bg-[#4A154B] rounded flex items-center justify-center text-white text-[8px]", children: "#" }),
+            "Slack Integration (Planned)"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs text-slate-400 italic", children: "슬랙 채널별 분기는 다음 업데이트에 포함될 예정입니다." })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("footer", { className: "p-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => setEditingProject(null),
+            className: "px-5 py-2.5 text-slate-400 font-bold hover:text-slate-600 transition-colors",
+            children: "취소"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => {
+              if (editingProject) {
+                updateProject(editingProject.id, { integrations: editingProject.integrations });
+                setEditingProject(null);
+              }
+            },
+            className: "px-6 py-2.5 bg-brand-primary text-white font-bold rounded-xl shadow-lg shadow-brand-primary/20 hover:scale-105 transition-all",
+            children: "변경사항 저장"
+          }
+        )
+      ] })
     ] }) })
   ] });
 };

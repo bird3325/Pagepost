@@ -3043,6 +3043,10 @@
       translate: var(--tw-translate-x) var(--tw-translate-y);
     }
 
+    .group-hover\:rotate-90:is(:where(.group):hover *) {
+      rotate: 90deg;
+    }
+
     .group-hover\:text-brand-primary:is(:where(.group):hover *) {
       color: var(--color-brand-primary);
     }

@@ -119,4 +119,9 @@ export interface Project {
     isPublic?: boolean;
     createdAt: number;
     updatedAt: number;
+    integrations?: {
+        notionDatabaseId?: string;
+        slackChannelId?: string;
+        trelloListId?: string;
+    };
 }
