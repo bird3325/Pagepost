@@ -160,7 +160,16 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
     }
 });
 
+const isExtensionValid = () => {
+    try {
+        return typeof chrome !== 'undefined' && !!chrome.runtime && !!chrome.runtime.id;
+    } catch (e) {
+        return false;
+    }
+};
+
 const handleMessage = (message: any) => {
+    if (!isExtensionValid()) return;
     console.log('PagePost: Message received:', message.type);
     if (message.type === "CREATE_NOTE_CLICK") {
         const normalizedUrl = normalizeUrl(window.location.href);
