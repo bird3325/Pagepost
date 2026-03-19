@@ -15000,7 +15000,7 @@
         window.removeEventListener("resize", updateHeight);
       };
     }, []);
-    if (!isSettingsLoaded || !settings.showMiniMap || notes.length === 0 || mode === "review") return null;
+    if (!isSettingsLoaded || !settings.showToolbar || !settings.isToolbarExpanded || !settings.showMiniMap || notes.length === 0 || mode === "review") return null;
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       "div",
       {

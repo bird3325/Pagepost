@@ -35,7 +35,7 @@ export const MiniMap: React.FC = () => {
         };
     }, []);
 
-    if (!isSettingsLoaded || !settings.showMiniMap || notes.length === 0 || mode === 'review') return null;
+    if (!isSettingsLoaded || !settings.showToolbar || !settings.isToolbarExpanded || !settings.showMiniMap || notes.length === 0 || mode === 'review') return null;
 
     return (
         <div
