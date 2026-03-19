@@ -14738,7 +14738,7 @@ const PopupView = () => {
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-4 bg-brand-primary flex items-center justify-between shadow-sm z-20", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-            isSettingsOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => setIsSettingsOpen(false), className: "p-1 hover:bg-black/5 rounded", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronLeft, { size: 20, className: "text-gray-900" }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(StickyNote, { className: "text-gray-900", size: 20 }),
+            isSettingsOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => setIsSettingsOpen(false), className: "p-1 hover:bg-black/5 rounded", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronLeft, { size: 20, className: "text-gray-900" }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icon48.png", className: "w-5 h-5 rounded shadow-sm", alt: "PagePost Logo" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-lg font-bold text-gray-900", children: isSettingsOpen ? "설정" : "PagePost" })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-2 text-gray-700 items-center", children: !isSettingsOpen && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [

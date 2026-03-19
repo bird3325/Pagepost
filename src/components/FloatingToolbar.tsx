@@ -236,11 +236,14 @@ export const FloatingToolbar: React.FC = () => {
                             />
 
                             <div
-                                className="flex items-center justify-center hover:scale-110 transition-all duration-300 cursor-pointer p-2 rounded-xl"
-                                style={{ color: '#111827' }}
+                                className="flex items-center justify-center hover:scale-110 transition-all duration-300 cursor-pointer p-1 rounded-xl"
                                 title="Open Tools"
                             >
-                                <LayoutList size={28} strokeWidth={2.5} />
+                                <img
+                                    src={chrome.runtime.getURL('icon48.png')}
+                                    className="w-10 h-10 object-contain drop-shadow-md"
+                                    alt="PagePost Logo"
+                                />
                             </div>
 
                             <button

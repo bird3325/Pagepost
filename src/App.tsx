@@ -59,7 +59,7 @@ const PopupView: React.FC = () => {
               <ChevronLeft size={20} className="text-gray-900" />
             </button>
           ) : (
-            <StickyNote className="text-gray-900" size={20} />
+            <img src="icon48.png" className="w-5 h-5 rounded shadow-sm" alt="PagePost Logo" />
           )}
           <h1 className="text-lg font-bold text-gray-900">
             {isSettingsOpen ? '설정' : 'PagePost'}
