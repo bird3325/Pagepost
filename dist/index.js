@@ -13369,41 +13369,47 @@ const createLucideIcon = (iconName, iconNode) => {
   Component.displayName = toPascalCase(iconName);
   return Component;
 };
-const __iconNode$B = [
+const __iconNode$C = [
   ["path", { d: "M8 2v4", key: "1cmpym" }],
   ["path", { d: "M16 2v4", key: "4m81vk" }],
   ["rect", { width: "18", height: "18", x: "3", y: "4", rx: "2", key: "1hopcy" }],
   ["path", { d: "M3 10h18", key: "8toen8" }]
 ];
-const Calendar = createLucideIcon("calendar", __iconNode$B);
-const __iconNode$A = [
+const Calendar = createLucideIcon("calendar", __iconNode$C);
+const __iconNode$B = [
   ["path", { d: "M3 3v16a2 2 0 0 0 2 2h16", key: "c24i48" }],
   ["path", { d: "M18 17V9", key: "2bz60n" }],
   ["path", { d: "M13 17V5", key: "1frdt8" }],
   ["path", { d: "M8 17v-3", key: "17ska0" }]
 ];
-const ChartColumn = createLucideIcon("chart-column", __iconNode$A);
-const __iconNode$z = [["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]];
-const ChevronDown = createLucideIcon("chevron-down", __iconNode$z);
-const __iconNode$y = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
-const ChevronLeft = createLucideIcon("chevron-left", __iconNode$y);
-const __iconNode$x = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
-const ChevronRight = createLucideIcon("chevron-right", __iconNode$x);
-const __iconNode$w = [
+const ChartColumn = createLucideIcon("chart-column", __iconNode$B);
+const __iconNode$A = [["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]];
+const ChevronDown = createLucideIcon("chevron-down", __iconNode$A);
+const __iconNode$z = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
+const ChevronLeft = createLucideIcon("chevron-left", __iconNode$z);
+const __iconNode$y = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
+const ChevronRight = createLucideIcon("chevron-right", __iconNode$y);
+const __iconNode$x = [
   ["path", { d: "M21.801 10A10 10 0 1 1 17 3.335", key: "yps3ct" }],
   ["path", { d: "m9 11 3 3L22 4", key: "1pflzl" }]
 ];
-const CircleCheckBig = createLucideIcon("circle-check-big", __iconNode$w);
-const __iconNode$v = [
+const CircleCheckBig = createLucideIcon("circle-check-big", __iconNode$x);
+const __iconNode$w = [
   ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
   ["path", { d: "m9 12 2 2 4-4", key: "dzmm74" }]
 ];
-const CircleCheck = createLucideIcon("circle-check", __iconNode$v);
-const __iconNode$u = [
+const CircleCheck = createLucideIcon("circle-check", __iconNode$w);
+const __iconNode$v = [
   ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
   ["path", { d: "M8 12h8", key: "1wcyev" }]
 ];
-const CircleMinus = createLucideIcon("circle-minus", __iconNode$u);
+const CircleMinus = createLucideIcon("circle-minus", __iconNode$v);
+const __iconNode$u = [
+  ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
+  ["path", { d: "M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3", key: "1u773s" }],
+  ["path", { d: "M12 17h.01", key: "p32p05" }]
+];
+const CircleQuestionMark = createLucideIcon("circle-question-mark", __iconNode$u);
 const __iconNode$t = [
   ["path", { d: "M12 15V3", key: "m9g1x1" }],
   ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", key: "ih7n3h" }],
@@ -14716,6 +14722,7 @@ const PopupView = () => {
   } = useNoteStore();
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
+  const [isHelpOpen, setIsHelpOpen] = React.useState(false);
   const [viewingHistoryNoteId, setViewingHistoryNoteId] = React.useState(null);
   reactExports.useEffect(() => {
     loadSettings();
@@ -14738,10 +14745,13 @@ const PopupView = () => {
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-4 bg-brand-primary flex items-center justify-between shadow-sm z-20", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-            isSettingsOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => setIsSettingsOpen(false), className: "p-1 hover:bg-black/5 rounded", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronLeft, { size: 20, className: "text-gray-900" }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icon48.png", className: "w-5 h-5 rounded shadow-sm", alt: "PagePost Logo" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-lg font-bold text-gray-900", children: isSettingsOpen ? "설정" : "PagePost" })
+            isSettingsOpen || isHelpOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => {
+              setIsSettingsOpen(false);
+              setIsHelpOpen(false);
+            }, className: "p-1 hover:bg-black/5 rounded", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronLeft, { size: 20, className: "text-gray-900" }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "icon48.png", className: "w-5 h-5 rounded shadow-sm", alt: "PagePost Logo" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-lg font-bold text-gray-900", children: isSettingsOpen ? "설정" : isHelpOpen ? "도움말" : "PagePost" })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-2 text-gray-700 items-center", children: !isSettingsOpen && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-2 text-gray-700 items-center", children: !isSettingsOpen && !isHelpOpen && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
               {
@@ -14758,6 +14768,15 @@ const PopupView = () => {
                 className: "p-1 hover:bg-black/5 rounded",
                 title: "대시보드",
                 children: /* @__PURE__ */ jsxRuntimeExports.jsx(PanelsTopLeft, { size: 18 })
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: () => setIsHelpOpen(true),
+                className: "p-1 hover:bg-black/5 rounded",
+                title: "도움말",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(CircleQuestionMark, { size: 18 })
               }
             ),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -14798,7 +14817,7 @@ const PopupView = () => {
             }
           )
         ] }),
-        !isSettingsOpen && !viewingHistoryNoteId && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-4 py-2 bg-white border-b border-gray-100 flex items-center gap-2 overflow-x-auto no-scrollbar scrollbar-hide", style: { scrollbarWidth: "none", msOverflowStyle: "none" }, children: [
+        !isSettingsOpen && !isHelpOpen && !viewingHistoryNoteId && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-4 py-2 bg-white border-b border-gray-100 flex items-center gap-2 overflow-x-auto no-scrollbar scrollbar-hide", style: { scrollbarWidth: "none", msOverflowStyle: "none" }, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative flex-shrink-0", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
@@ -14860,7 +14879,41 @@ const PopupView = () => {
             }
           )
         ] }),
-        isSettingsOpen ? (
+        isHelpOpen ? (
+          /* Help Section */
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 overflow-y-auto p-4 space-y-8 bg-white animate-in slide-in-from-right duration-300", children: [
+            [
+              {
+                title: "1. 즉각적인 메모 생성",
+                desc: "웹페이지 어디서든 **더블 클릭**하거나 **Alt+N** 단축키를 눌러보세요. 현재 보고 있는 위치에 노란색 점착 메모가 즉시 생성됩니다.",
+                img: "help/step1_note.png"
+              },
+              {
+                title: "2. 시각적인 마크업 도구",
+                desc: "하단 툴바의 **펜이나 형광펜** 아이콘을 클릭하여 웹페이지에 직접 그리거나 중요한 텍스트를 강조할 수 있습니다. 다양한 도형도 추가해 보세요.",
+                img: "help/step2_markup.png"
+              },
+              {
+                title: "3. 강력한 스크롤 캡쳐",
+                desc: "카메라 아이콘의 **스크롤 캡쳐** 기능을 사용하여 긴 웹페이지 전체를 하나의 이미지로 자동 저장할 수 있습니다. 복잡한 영역 선택도 가능합니다.",
+                img: "help/step3_capture.png"
+              },
+              {
+                title: "4. 한눈에 보는 관리 가이드",
+                desc: "우측 **미니맵**의 점들을 클릭하여 메모 위치로 즉시 이동하거나, **대시보드**에서 모든 프로젝트와 메모 히스토리를 체계적으로 관리하세요.",
+                img: "help/step4_nav.png"
+              }
+            ].map((item, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "text-sm font-bold text-gray-800 flex items-center gap-2", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "w-5 h-5 flex items-center justify-center bg-brand-primary rounded-full text-[10px] text-gray-900", children: idx + 1 }),
+                item.title
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl overflow-hidden border border-gray-100 shadow-sm bg-gray-50", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: item.img, alt: item.title, className: "w-full object-cover" }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] text-gray-600 leading-relaxed font-medium", children: item.desc.split("**").map((part, i) => i % 2 === 1 ? /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "text-brand-primary", children: part }, i) : part) })
+            ] }, idx)),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pt-4 pb-8 border-t border-gray-100", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] text-center text-gray-400 italic font-medium", children: "PagePost로 당신의 브라우징 경험을 더 효율적으로 만드세요." }) })
+          ] })
+        ) : isSettingsOpen ? (
           /* Settings Panel */
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 overflow-y-auto p-4 space-y-6 bg-white animate-in fade-in duration-200", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
