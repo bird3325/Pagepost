@@ -6,7 +6,7 @@ import { useNoteStore } from '../store/useNoteStore';
  * representing the vertical positions of all notes on the current page.
  */
 export const MiniMap: React.FC = () => {
-    const { notes, settings, activeNoteId, mode } = useNoteStore();
+    const { notes, settings, activeNoteId, mode, isSettingsLoaded } = useNoteStore();
     const [docHeight, setDocHeight] = useState(0);
 
     useEffect(() => {
@@ -35,7 +35,7 @@ export const MiniMap: React.FC = () => {
         };
     }, []);
 
-    if (!settings.showMiniMap || notes.length === 0 || mode === 'review') return null;
+    if (!isSettingsLoaded || !settings.showMiniMap || notes.length === 0 || mode === 'review') return null;
 
     return (
         <div

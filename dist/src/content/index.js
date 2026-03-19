@@ -14936,7 +14936,7 @@
     );
   };
   const NoteContainer = () => {
-    const { notes, fetchNotesForUrl, fetchMarkupsForUrl, settings, loadSettings, mode, setActiveNoteId } = useNoteStore();
+    const { notes, fetchNotesForUrl, fetchMarkupsForUrl, settings, loadSettings, mode, setActiveNoteId, isSettingsLoaded } = useNoteStore();
     reactExports.useEffect(() => {
       const url = window.location.href;
       loadSettings();
@@ -14971,13 +14971,13 @@
     };
     const isExtensionPage = typeof window !== "undefined" && window.location.protocol === "chrome-extension:";
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { id: "pagepost-notes-root", className: "pointer-events-none", children: [
-      settings.showToolbar && mode !== "capture" && !isExtensionPage && /* @__PURE__ */ jsxRuntimeExports.jsx(FloatingToolbar, {}),
+      isSettingsLoaded && settings.showToolbar && mode !== "capture" && !isExtensionPage && /* @__PURE__ */ jsxRuntimeExports.jsx(FloatingToolbar, {}),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pointer-events-none", style: { position: "relative", zIndex: 100 }, children: notes.map((note) => /* @__PURE__ */ jsxRuntimeExports.jsx(NoteCard, { note }, note.id)) }),
       mode === "review" && /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewSidebar, { notes, onNoteClick: handleNoteClick })
     ] });
   };
   const MiniMap = () => {
-    const { notes, settings, activeNoteId, mode } = useNoteStore();
+    const { notes, settings, activeNoteId, mode, isSettingsLoaded } = useNoteStore();
     const [docHeight, setDocHeight] = reactExports.useState(0);
     reactExports.useEffect(() => {
       const updateHeight = () => {
@@ -15000,7 +15000,7 @@
         window.removeEventListener("resize", updateHeight);
       };
     }, []);
-    if (!settings.showMiniMap || notes.length === 0 || mode === "review") return null;
+    if (!isSettingsLoaded || !settings.showMiniMap || notes.length === 0 || mode === "review") return null;
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       "div",
       {
