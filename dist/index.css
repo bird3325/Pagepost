@@ -486,6 +486,10 @@
     top: calc(var(--spacing) * -1);
   }
 
+  .-top-1\.5 {
+    top: calc(var(--spacing) * -1.5);
+  }
+
   .-top-4 {
     top: calc(var(--spacing) * -4);
   }
@@ -532,6 +536,10 @@
 
   .-right-1 {
     right: calc(var(--spacing) * -1);
+  }
+
+  .-right-1\.5 {
+    right: calc(var(--spacing) * -1.5);
   }
 
   .-right-4 {
@@ -916,6 +924,10 @@
     height: 10px;
   }
 
+  .h-\[12px\] {
+    height: 12px;
+  }
+
   .h-\[14px\] {
     height: 14px;
   }
@@ -1128,6 +1140,14 @@
     min-width: calc(var(--spacing) * 0);
   }
 
+  .min-w-\[12px\] {
+    min-width: 12px;
+  }
+
+  .min-w-\[14px\] {
+    min-width: 14px;
+  }
+
   .flex-1 {
     flex: 1;
   }
@@ -1200,6 +1220,13 @@
   .translate-y-4 {
     --tw-translate-y: calc(var(--spacing) * 4);
     translate: var(--tw-translate-x) var(--tw-translate-y);
+  }
+
+  .scale-0 {
+    --tw-scale-x: 0%;
+    --tw-scale-y: 0%;
+    --tw-scale-z: 0%;
+    scale: var(--tw-scale-x) var(--tw-scale-y);
   }
 
   .scale-90 {
@@ -1935,6 +1962,10 @@
     background-color: var(--color-gray-300);
   }
 
+  .bg-gray-600 {
+    background-color: var(--color-gray-600);
+  }
+
   .bg-gray-800 {
     background-color: var(--color-gray-800);
   }
@@ -2436,6 +2467,10 @@
   .text-xs {
     font-size: var(--text-xs);
     line-height: var(--tw-leading, var(--text-xs--line-height));
+  }
+
+  .text-\[7px\] {
+    font-size: 7px;
   }
 
   .text-\[8px\] {
@@ -3043,12 +3078,30 @@
       translate: var(--tw-translate-x) var(--tw-translate-y);
     }
 
+    .group-hover\:scale-0:is(:where(.group):hover *) {
+      --tw-scale-x: 0%;
+      --tw-scale-y: 0%;
+      --tw-scale-z: 0%;
+      scale: var(--tw-scale-x) var(--tw-scale-y);
+    }
+
+    .group-hover\:scale-100:is(:where(.group):hover *) {
+      --tw-scale-x: 100%;
+      --tw-scale-y: 100%;
+      --tw-scale-z: 100%;
+      scale: var(--tw-scale-x) var(--tw-scale-y);
+    }
+
     .group-hover\:rotate-90:is(:where(.group):hover *) {
       rotate: 90deg;
     }
 
     .group-hover\:text-brand-primary:is(:where(.group):hover *) {
       color: var(--color-brand-primary);
+    }
+
+    .group-hover\:opacity-0:is(:where(.group):hover *) {
+      opacity: 0;
     }
 
     .group-hover\:opacity-100:is(:where(.group):hover *) {

@@ -55,6 +55,7 @@ interface NoteState {
         totalNotes: number;
         totalMarkups: number;
         domainCount: number;
+        projectCounts: Record<string, number>;
     };
     fetchAllNotes: () => Promise<void>;
     fetchAllMarkups: () => Promise<void>;
@@ -191,7 +192,8 @@ export const useNoteStore = create<NoteState>((set, get) => {
         stats: {
             totalNotes: 0,
             totalMarkups: 0,
-            domainCount: 0
+            domainCount: 0,
+            projectCounts: {},
         },
         mode: 'note',
         currentTool: 'pen',
@@ -415,11 +417,19 @@ export const useNoteStore = create<NoteState>((set, get) => {
                 const allNotes = (notesResult[STORAGE_KEY] || []) as Note[];
                 const domains = new Set(allNotes.map(n => n.domain));
 
+                // Compute per-project counts
+                const projectCounts: Record<string, number> = {};
+                allNotes.forEach(n => {
+                    const pid = n.projectId || 'unclassified';
+                    projectCounts[pid] = (projectCounts[pid] || 0) + 1;
+                });
+
                 set({
                     stats: {
                         totalNotes: allNotes.length,
                         totalMarkups: allMarkups.length,
-                        domainCount: domains.size
+                        domainCount: domains.size,
+                        projectCounts
                     }
                 });
             } catch (error) {

@@ -12618,7 +12618,8 @@ const useNoteStore = create((set, get) => {
     stats: {
       totalNotes: 0,
       totalMarkups: 0,
-      domainCount: 0
+      domainCount: 0,
+      projectCounts: {}
     },
     mode: "note",
     currentTool: "pen",
@@ -12801,11 +12802,17 @@ const useNoteStore = create((set, get) => {
         if (!isContextValid()) return;
         const allNotes = notesResult[STORAGE_KEY] || [];
         const domains = new Set(allNotes.map((n) => n.domain));
+        const projectCounts = {};
+        allNotes.forEach((n) => {
+          const pid = n.projectId || "unclassified";
+          projectCounts[pid] = (projectCounts[pid] || 0) + 1;
+        });
         set({
           stats: {
             totalNotes: allNotes.length,
             totalMarkups: allMarkups.length,
-            domainCount: domains.size
+            domainCount: domains.size,
+            projectCounts
           }
         });
       } catch (error) {
@@ -14703,7 +14710,9 @@ const PopupView = () => {
     setCurrentProjectId,
     fetchAllProjects,
     addProject,
-    deleteProject
+    deleteProject,
+    stats,
+    fetchAllMarkups
   } = useNoteStore();
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
@@ -14712,7 +14721,8 @@ const PopupView = () => {
     loadSettings();
     fetchAllProjects();
     fetchAllNotes();
-  }, [fetchAllNotes, loadSettings, fetchAllProjects]);
+    fetchAllMarkups();
+  }, [fetchAllNotes, loadSettings, fetchAllProjects, fetchAllMarkups]);
   reactExports.useEffect(() => {
     fetchAllNotes();
   }, [searchQuery, fetchAllNotes]);
@@ -14789,14 +14799,17 @@ const PopupView = () => {
           )
         ] }),
         !isSettingsOpen && !viewingHistoryNoteId && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-4 py-2 bg-white border-b border-gray-100 flex items-center gap-2 overflow-x-auto no-scrollbar scrollbar-hide", style: { scrollbarWidth: "none", msOverflowStyle: "none" }, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              onClick: () => setCurrentProjectId(null),
-              className: `flex-shrink-0 px-2.5 py-1 rounded text-[10px] font-bold transition-all ${!currentProjectId ? "bg-brand-primary text-gray-900 shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-gray-200"}`,
-              children: "전체"
-            }
-          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative flex-shrink-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: () => setCurrentProjectId(null),
+                className: `px-2.5 py-1 rounded text-[10px] font-bold transition-all ${!currentProjectId ? "bg-brand-primary text-gray-900 shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-gray-200"}`,
+                children: "전체"
+              }
+            ),
+            stats.totalNotes > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "absolute -top-1 -right-1 px-1 min-w-[12px] h-[12px] flex items-center justify-center bg-gray-600 text-white text-[7px] font-black rounded-full shadow-sm border border-white pointer-events-none", children: stats.totalNotes })
+          ] }),
           projects.map((project) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative group flex-shrink-0", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs(
               "button",
@@ -14809,6 +14822,7 @@ const PopupView = () => {
                 ]
               }
             ),
+            stats.projectCounts[project.id] > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "absolute -top-1.5 -right-1.5 px-1 min-w-[14px] h-[14px] flex items-center justify-center bg-gray-600 text-white text-[7px] font-black rounded-full shadow-sm border border-white pointer-events-none transition-all duration-200 group-hover:scale-0 group-hover:opacity-0 z-20", children: stats.projectCounts[project.id] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
               {
@@ -14819,9 +14833,9 @@ const PopupView = () => {
                     deleteProject(project.id);
                   }
                 },
-                className: "absolute -top-1 -right-1 p-0.5 bg-white border border-gray-100 rounded-full text-red-400 shadow-sm opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50 z-10",
+                className: "absolute -top-1.5 -right-1.5 p-0.5 bg-white border border-gray-100 rounded-full text-red-500 shadow-sm opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-50 z-10 scale-0 group-hover:scale-100",
                 title: "프로젝트 삭제",
-                children: /* @__PURE__ */ jsxRuntimeExports.jsx(X, { size: 8 })
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(Trash2, { size: 8 })
               }
             )
           ] }, project.id)),
@@ -14845,13 +14859,6 @@ const PopupView = () => {
               children: /* @__PURE__ */ jsxRuntimeExports.jsx(FolderPlus, { size: 14 })
             }
           )
-        ] }),
-        !viewingHistoryNoteId && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-4 border-b border-gray-200", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-1", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold text-gray-500 uppercase tracking-wider", children: "전체 메모 리스트" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "px-2 py-0.5 bg-gray-200 text-gray-700 text-[10px] rounded-full font-bold", children: notes.length })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-[11px] text-gray-400 truncate max-w-full italic", children: "작성된 모든 메모가 표시됩니다." })
         ] }),
         isSettingsOpen ? (
           /* Settings Panel */
