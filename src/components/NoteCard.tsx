@@ -59,6 +59,18 @@ const NoteCardComponent: React.FC<NoteCardProps> = ({ note }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
+    const [hasBeenAutoEdited, setHasBeenAutoEdited] = useState(false);
+
+    // --- Smart Auto-Edit for New/Empty Notes ---
+    useEffect(() => {
+        if (activeNoteId === note.id && note.content === '' && !isEditing && !hasBeenAutoEdited) {
+            setIsEditing(true);
+            setHasBeenAutoEdited(true);
+        } else if (activeNoteId !== note.id) {
+            // Reset flag when note is no longer active so it can auto-edit again if reactivated while empty
+            setHasBeenAutoEdited(false);
+        }
+    }, [activeNoteId, note.id, note.content, isEditing, hasBeenAutoEdited]);
 
     useEffect(() => {
         loadSettings();

@@ -221,7 +221,10 @@ export const useNoteStore = create<NoteState>((set, get) => {
         markupFetchRequestId: 0,
 
         loadSettings: async () => {
-            if (!isContextValid()) return;
+            if (!isContextValid()) {
+                set({ isSettingsLoaded: true });
+                return;
+            }
             try {
                 const result = await chrome.storage.local.get(SETTINGS_KEY);
                 if (!isContextValid()) return;
@@ -237,6 +240,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
                 }
             } catch (error) {
                 console.error('Failed to load settings:', error);
+                set({ isSettingsLoaded: true });
             }
 
             try {

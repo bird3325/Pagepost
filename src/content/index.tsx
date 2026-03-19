@@ -30,6 +30,61 @@ document.addEventListener('contextmenu', (e: MouseEvent) => {
     lastClickInfo = { x: e.pageX, y: e.pageY }; // Using pageX/Y to include scroll
 }, true);
 
+// Intuitive Note Creation: Double-Click
+document.addEventListener('dblclick', (e: MouseEvent) => {
+    const store = useNoteStore.getState();
+
+    // Only trigger if Toolbar is enabled/visible
+    if (!store.settings.showToolbar) return;
+
+    // Only trigger if in 'note' mode or 'markup' mode (optional: allow in markup too but double-click usually means "place something")
+    // If in capture or review, avoid creation
+    if (store.mode === 'capture' || store.mode === 'review') return;
+
+    // Ignore if clicking on our UI (Toolbar, etc.)
+    if ((e.target as HTMLElement).closest('#pagepost-extension-host')) return;
+
+    // Ignore if clicking on input/textarea/editable
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target as HTMLElement).isContentEditable) {
+        return;
+    }
+
+    // Capture positioning and anchoring
+    const normalizedUrl = normalizeUrl(window.location.href);
+    const targetElement = e.target as HTMLElement;
+    const mouseDocX = e.pageX;
+    const mouseDocY = e.pageY;
+    const anchor = captureAnchor(targetElement, mouseDocX, mouseDocY);
+    const currentSettings = store.settings;
+
+    const newNote = {
+        id: crypto.randomUUID(),
+        url: normalizedUrl,
+        domain: window.location.hostname,
+        anchor,
+        content: '',
+        color: '#FFF9C4',
+        size: { width: 220, height: 160 }, // Slightly larger default for easier typing
+        notePosition: {
+            x: Math.max(0, mouseDocX - 110), // Center slightly relative to click
+            y: Math.max(0, mouseDocY - 80)
+        },
+        tags: [],
+        status: 'pending' as const,
+        isPinned: false,
+        isCollapsed: false,
+        fontFamily: currentSettings.fontFamily,
+        fontSize: currentSettings.fontSize,
+        textColor: currentSettings.textColor,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+    };
+
+    store.addNote(newNote).then(() => {
+        store.setActiveNoteId(newNote.id);
+    });
+});
+
 // Global Hotkeys
 document.addEventListener('keydown', (e: KeyboardEvent) => {
     // Only trigger if not typing in an input/textarea

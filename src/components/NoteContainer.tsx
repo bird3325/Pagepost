@@ -236,7 +236,7 @@ const ReviewSidebar: React.FC<{ notes: any[], onNoteClick: (id: string) => void 
 };
 
 export const NoteContainer: React.FC = () => {
-    const { notes, fetchNotesForUrl, fetchMarkupsForUrl, settings, loadSettings, isSettingsLoaded, mode, setActiveNoteId } = useNoteStore();
+    const { notes, fetchNotesForUrl, fetchMarkupsForUrl, settings, loadSettings, mode, setActiveNoteId } = useNoteStore();
 
     useEffect(() => {
         const url = window.location.href;
@@ -284,7 +284,7 @@ export const NoteContainer: React.FC = () => {
 
     return (
         <div id="pagepost-notes-root" className="pointer-events-none">
-            {isSettingsLoaded && settings.showToolbar && mode !== 'capture' && !isExtensionPage && <FloatingToolbar />}
+            {settings.showToolbar && mode !== 'capture' && !isExtensionPage && <FloatingToolbar />}
 
             {/* Explicit stacking context for notes to keep them below the sidebar */}
             <div className="pointer-events-none" style={{ position: 'relative', zIndex: 100 }}>

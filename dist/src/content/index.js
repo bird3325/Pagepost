@@ -12619,7 +12619,10 @@
       currentProjectId: null,
       markupFetchRequestId: 0,
       loadSettings: async () => {
-        if (!isContextValid()) return;
+        if (!isContextValid()) {
+          set({ isSettingsLoaded: true });
+          return;
+        }
         try {
           const result = await chrome.storage.local.get(SETTINGS_KEY);
           if (!isContextValid()) return;
@@ -12634,6 +12637,7 @@
           }
         } catch (error) {
           console.error("Failed to load settings:", error);
+          set({ isSettingsLoaded: true });
         }
         try {
           const res = await chrome.storage.local.get(DASHBOARD_VIEW_MODE_KEY);
@@ -13908,6 +13912,15 @@
     const [isEditing, setIsEditing] = reactExports.useState(false);
     const [isHovered, setIsHovered] = reactExports.useState(false);
     const [showHistory, setShowHistory] = reactExports.useState(false);
+    const [hasBeenAutoEdited, setHasBeenAutoEdited] = reactExports.useState(false);
+    reactExports.useEffect(() => {
+      if (activeNoteId === note.id && note.content === "" && !isEditing && !hasBeenAutoEdited) {
+        setIsEditing(true);
+        setHasBeenAutoEdited(true);
+      } else if (activeNoteId !== note.id) {
+        setHasBeenAutoEdited(false);
+      }
+    }, [activeNoteId, note.id, note.content, isEditing, hasBeenAutoEdited]);
     reactExports.useEffect(() => {
       loadSettings();
       fetchAllProjects();
@@ -14274,6 +14287,9 @@
     React.useEffect(() => {
       setIsVisible(isExpanded);
     }, [isExpanded]);
+    React.useEffect(() => {
+      setIsExpanded(settings.isToolbarExpanded);
+    }, [settings.isToolbarExpanded]);
     const [isFontPickerOpen, setIsFontPickerOpen] = reactExports.useState(false);
     const [isStickerPickerOpen, setIsStickerPickerOpen] = reactExports.useState(false);
     const [isShapePickerOpen, setIsShapePickerOpen] = reactExports.useState(false);
@@ -15045,7 +15061,7 @@
     );
   };
   const NoteContainer = () => {
-    const { notes, fetchNotesForUrl, fetchMarkupsForUrl, settings, loadSettings, isSettingsLoaded, mode, setActiveNoteId } = useNoteStore();
+    const { notes, fetchNotesForUrl, fetchMarkupsForUrl, settings, loadSettings, mode, setActiveNoteId } = useNoteStore();
     reactExports.useEffect(() => {
       const url = window.location.href;
       loadSettings();
@@ -15080,7 +15096,7 @@
     };
     const isExtensionPage = typeof window !== "undefined" && window.location.protocol === "chrome-extension:";
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { id: "pagepost-notes-root", className: "pointer-events-none", children: [
-      isSettingsLoaded && settings.showToolbar && mode !== "capture" && !isExtensionPage && /* @__PURE__ */ jsxRuntimeExports.jsx(FloatingToolbar, {}),
+      settings.showToolbar && mode !== "capture" && !isExtensionPage && /* @__PURE__ */ jsxRuntimeExports.jsx(FloatingToolbar, {}),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pointer-events-none", style: { position: "relative", zIndex: 100 }, children: notes.map((note) => /* @__PURE__ */ jsxRuntimeExports.jsx(NoteCard, { note }, note.id)) }),
       mode === "review" && /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewSidebar, { notes, onNoteClick: handleNoteClick })
     ] });
@@ -15989,6 +16005,48 @@
     lastElement = e.target;
     lastClickInfo = { x: e.pageX, y: e.pageY };
   }, true);
+  document.addEventListener("dblclick", (e) => {
+    const store = useNoteStore.getState();
+    if (!store.settings.showToolbar) return;
+    if (store.mode === "capture" || store.mode === "review") return;
+    if (e.target.closest("#pagepost-extension-host")) return;
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target.isContentEditable) {
+      return;
+    }
+    const normalizedUrl = normalizeUrl(window.location.href);
+    const targetElement = e.target;
+    const mouseDocX = e.pageX;
+    const mouseDocY = e.pageY;
+    const anchor = captureAnchor(targetElement, mouseDocX, mouseDocY);
+    const currentSettings = store.settings;
+    const newNote = {
+      id: crypto.randomUUID(),
+      url: normalizedUrl,
+      domain: window.location.hostname,
+      anchor,
+      content: "",
+      color: "#FFF9C4",
+      size: { width: 220, height: 160 },
+      // Slightly larger default for easier typing
+      notePosition: {
+        x: Math.max(0, mouseDocX - 110),
+        // Center slightly relative to click
+        y: Math.max(0, mouseDocY - 80)
+      },
+      tags: [],
+      status: "pending",
+      isPinned: false,
+      isCollapsed: false,
+      fontFamily: currentSettings.fontFamily,
+      fontSize: currentSettings.fontSize,
+      textColor: currentSettings.textColor,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    store.addNote(newNote).then(() => {
+      store.setActiveNoteId(newNote.id);
+    });
+  });
   document.addEventListener("keydown", (e) => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target.isContentEditable) {
       return;

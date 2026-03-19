@@ -16,6 +16,11 @@ export const FloatingToolbar: React.FC = () => {
         setIsVisible(isExpanded);
     }, [isExpanded]);
 
+    // Sync internal state with global settings if changed from outside (e.g. Popup)
+    React.useEffect(() => {
+        setIsExpanded(settings.isToolbarExpanded);
+    }, [settings.isToolbarExpanded]);
+
     const [isFontPickerOpen, setIsFontPickerOpen] = useState(false);
     const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
     const [isShapePickerOpen, setIsShapePickerOpen] = useState(false);
