@@ -18,6 +18,7 @@ interface NoteState {
     // ... rest
     setDashboardViewMode: (mode: 'list' | 'canvas') => void;
     updateCanvasPosition: (noteId: string, position: { x: number, y: number }) => Promise<void>;
+    moveNoteToProject: (noteId: string, projectId: string | null) => Promise<void>;
     settings: {
         fontFamily: string;
         fontSize: number;
@@ -281,6 +282,27 @@ export const useNoteStore = create<NoteState>((set, get) => {
                     n.id === noteId ? { ...n, canvasPosition: position, updatedAt: Date.now() } : n
                 );
                 await chrome.storage.local.set({ [STORAGE_KEY]: updatedNotes });
+            }
+        },
+
+        moveNoteToProject: async (noteId, projectId) => {
+            const { updateNoteState, isGlobalView, currentUrl, fetchAllNotes, fetchNotesForUrl } = get();
+
+            // Memory update
+            updateNoteState(noteId, { projectId: projectId || undefined });
+
+            // Persist
+            if (isContextValid()) {
+                const result = await chrome.storage.local.get(STORAGE_KEY);
+                const notes = (result[STORAGE_KEY] || []) as Note[];
+                const updatedNotes = notes.map(n =>
+                    n.id === noteId ? { ...n, projectId: projectId || undefined, updatedAt: Date.now() } : n
+                );
+                await chrome.storage.local.set({ [STORAGE_KEY]: updatedNotes });
+
+                // Refresh views
+                if (isGlobalView) fetchAllNotes();
+                else if (currentUrl) fetchNotesForUrl(currentUrl);
             }
         },
 

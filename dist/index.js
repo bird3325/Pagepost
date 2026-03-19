@@ -12701,6 +12701,20 @@ const useNoteStore = create((set, get) => {
         await chrome.storage.local.set({ [STORAGE_KEY]: updatedNotes });
       }
     },
+    moveNoteToProject: async (noteId, projectId) => {
+      const { updateNoteState, isGlobalView, currentUrl, fetchAllNotes, fetchNotesForUrl } = get();
+      updateNoteState(noteId, { projectId: projectId || void 0 });
+      if (isContextValid()) {
+        const result = await chrome.storage.local.get(STORAGE_KEY);
+        const notes = result[STORAGE_KEY] || [];
+        const updatedNotes = notes.map(
+          (n) => n.id === noteId ? { ...n, projectId: projectId || void 0, updatedAt: Date.now() } : n
+        );
+        await chrome.storage.local.set({ [STORAGE_KEY]: updatedNotes });
+        if (isGlobalView) fetchAllNotes();
+        else if (currentUrl) fetchNotesForUrl(currentUrl);
+      }
+    },
     setCurrentProjectId: (id) => {
       set({ currentProjectId: id });
       if (isContextValid()) {
@@ -13344,20 +13358,22 @@ const createLucideIcon = (iconName, iconNode) => {
   Component.displayName = toPascalCase(iconName);
   return Component;
 };
-const __iconNode$A = [
+const __iconNode$B = [
   ["path", { d: "M8 2v4", key: "1cmpym" }],
   ["path", { d: "M16 2v4", key: "4m81vk" }],
   ["rect", { width: "18", height: "18", x: "3", y: "4", rx: "2", key: "1hopcy" }],
   ["path", { d: "M3 10h18", key: "8toen8" }]
 ];
-const Calendar = createLucideIcon("calendar", __iconNode$A);
-const __iconNode$z = [
+const Calendar = createLucideIcon("calendar", __iconNode$B);
+const __iconNode$A = [
   ["path", { d: "M3 3v16a2 2 0 0 0 2 2h16", key: "c24i48" }],
   ["path", { d: "M18 17V9", key: "2bz60n" }],
   ["path", { d: "M13 17V5", key: "1frdt8" }],
   ["path", { d: "M8 17v-3", key: "17ska0" }]
 ];
-const ChartColumn = createLucideIcon("chart-column", __iconNode$z);
+const ChartColumn = createLucideIcon("chart-column", __iconNode$A);
+const __iconNode$z = [["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]];
+const ChevronDown = createLucideIcon("chevron-down", __iconNode$z);
 const __iconNode$y = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
 const ChevronLeft = createLucideIcon("chevron-left", __iconNode$y);
 const __iconNode$x = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
@@ -13652,21 +13668,31 @@ const CanvasDashboard = () => {
   const {
     notes,
     updateCanvasPosition,
-    searchQuery
+    searchQuery,
+    projects,
+    moveNoteToProject,
+    currentProjectId
   } = useNoteStore();
   const containerRef = reactExports.useRef(null);
   const [pan, setPan] = reactExports.useState({ x: 0, y: 0 });
   const [zoom, setZoom] = reactExports.useState(1);
   const [isPanning, setIsPanning] = reactExports.useState(false);
   const [draggedNoteId, setDraggedNoteId] = reactExports.useState(null);
+  const [activeProjectMenuId, setActiveProjectMenuId] = reactExports.useState(null);
   const dragOffset = reactExports.useRef({ x: 0, y: 0 });
   const filteredNotes = reactExports.useMemo(() => {
-    if (!searchQuery) return notes;
-    const q = searchQuery.toLowerCase();
-    return notes.filter(
-      (n) => n.content.toLowerCase().includes(q) || n.domain.toLowerCase().includes(q) || n.tags.some((t) => t.toLowerCase().includes(q))
-    );
-  }, [notes, searchQuery]);
+    let result = notes;
+    if (currentProjectId) {
+      result = result.filter((n) => n.projectId === currentProjectId);
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (n) => n.content.toLowerCase().includes(q) || n.domain.toLowerCase().includes(q) || n.tags.some((t) => t.toLowerCase().includes(q))
+      );
+    }
+    return result;
+  }, [notes, searchQuery, currentProjectId]);
   const handleMouseDown = (e) => {
     if (e.button === 1 || e.button === 0 && e.altKey) {
       setIsPanning(true);
@@ -13799,6 +13825,64 @@ const CanvasDashboard = () => {
                           }
                         )
                       ] }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative mb-2", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                          "button",
+                          {
+                            onClick: (e) => {
+                              e.stopPropagation();
+                              setActiveProjectMenuId(activeProjectMenuId === note.id ? null : note.id);
+                            },
+                            className: "flex items-center gap-1.5 px-2 py-1 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-100 transition-colors text-[9px] font-bold text-slate-500 group/prj w-full justify-between",
+                            children: [
+                              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 truncate", children: [
+                                /* @__PURE__ */ jsxRuntimeExports.jsx(Folder, { size: 10, className: note.projectId ? "text-brand-primary" : "text-slate-400" }),
+                                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate", children: projects.find((p) => p.id === note.projectId)?.name || "미분류" })
+                              ] }),
+                              /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronDown, { size: 10, className: "text-slate-300 group-hover/prj:text-brand-primary flex-shrink-0" })
+                            ]
+                          }
+                        ),
+                        activeProjectMenuId === note.id && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-[100]", onClick: (e) => {
+                            e.stopPropagation();
+                            setActiveProjectMenuId(null);
+                          } }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute top-full left-0 mt-1 w-40 bg-white rounded-xl shadow-2xl border border-slate-100 z-[110] py-1 animate-in zoom-in-95 duration-200", children: [
+                            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                              "button",
+                              {
+                                onClick: (e) => {
+                                  e.stopPropagation();
+                                  moveNoteToProject(note.id, null);
+                                  setActiveProjectMenuId(null);
+                                },
+                                className: `w-full px-3 py-1.5 text-left text-[10px] hover:bg-slate-50 flex items-center gap-2 ${!note.projectId ? "text-brand-primary font-bold" : "text-slate-600"}`,
+                                children: [
+                                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-1.5 h-1.5 rounded-full bg-slate-200" }),
+                                  " 미분류"
+                                ]
+                              }
+                            ),
+                            projects.map((project) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                              "button",
+                              {
+                                onClick: (e) => {
+                                  e.stopPropagation();
+                                  moveNoteToProject(note.id, project.id);
+                                  setActiveProjectMenuId(null);
+                                },
+                                className: `w-full px-3 py-1.5 text-left text-[10px] hover:bg-slate-50 flex items-center gap-2 ${note.projectId === project.id ? "text-brand-primary font-bold" : "text-slate-600"}`,
+                                children: [
+                                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-1.5 h-1.5 rounded-full", style: { backgroundColor: project.color || "#CBD5E1" } }),
+                                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate", children: project.name })
+                                ]
+                              },
+                              project.id
+                            ))
+                          ] })
+                        ] })
+                      ] }),
                       /* @__PURE__ */ jsxRuntimeExports.jsx(
                         "p",
                         {
@@ -13883,12 +13967,14 @@ const Dashboard = () => {
     updateSettings,
     loadSettings,
     dashboardViewMode,
-    setDashboardViewMode
+    setDashboardViewMode,
+    moveNoteToProject
   } = useNoteStore();
   const [selectedDomain, setSelectedDomain] = React.useState(null);
   const [statusFilter, setStatusFilter] = React.useState(null);
   const [expandedHistoryId, setExpandedHistoryId] = React.useState(null);
   const [showIntegrations, setShowIntegrations] = React.useState(false);
+  const [activeProjectMenuId, setActiveProjectMenuId] = React.useState(null);
   const [visibleFields, setVisibleFields] = React.useState({});
   const fileInputRef = React.useRef(null);
   const toggleVisibility = (field) => {
@@ -13910,10 +13996,11 @@ const Dashboard = () => {
   }, [notes]);
   const filteredNotes = reactExports.useMemo(() => {
     let result = notes;
+    if (currentProjectId) result = result.filter((n) => n.projectId === currentProjectId);
     if (selectedDomain) result = result.filter((n) => n.domain === selectedDomain);
     if (statusFilter) result = result.filter((n) => n.status === statusFilter);
     return result;
-  }, [notes, selectedDomain, statusFilter]);
+  }, [notes, currentProjectId, selectedDomain, statusFilter]);
   const sortedDomains = reactExports.useMemo(() => {
     return Object.keys(notesByDomain).sort(
       (a, b) => notesByDomain[b].length - notesByDomain[a].length
@@ -14221,7 +14308,7 @@ const Dashboard = () => {
             ] })
           ] }),
           dashboardViewMode === "canvas" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-[calc(100vh-280px)] min-h-[500px] rounded-3xl overflow-hidden border border-slate-200 shadow-inner", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CanvasDashboard, {}) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-6", children: [
-            filteredNotes.map((note) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-md transition-all flex flex-col group", children: [
+            filteredNotes.map((note) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "bg-white rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-all flex flex-col group relative", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-5 flex items-start justify-between", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-2.5 h-10 rounded-full", style: { backgroundColor: note.color } }),
@@ -14233,16 +14320,70 @@ const Dashboard = () => {
                         note.status
                       ] })
                     ] }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 mt-0.5", children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsxs("time", { className: "text-[10px] text-slate-400 font-medium whitespace-nowrap", children: [
-                        new Date(note.updatedAt).toLocaleDateString(),
-                        " · ",
-                        new Date(note.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 mt-1.5", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                          "button",
+                          {
+                            onClick: (e) => {
+                              e.stopPropagation();
+                              setActiveProjectMenuId(activeProjectMenuId === note.id ? null : note.id);
+                            },
+                            className: "flex items-center gap-1.5 px-2 py-1 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-100 transition-colors text-[10px] font-bold text-slate-500 group/prj",
+                            children: [
+                              /* @__PURE__ */ jsxRuntimeExports.jsx(Folder, { size: 10, className: note.projectId ? "text-brand-primary" : "text-slate-400" }),
+                              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate max-w-[80px]", children: projects.find((p) => p.id === note.projectId)?.name || "미분류" }),
+                              /* @__PURE__ */ jsxRuntimeExports.jsx(ChevronDown, { size: 10, className: "text-slate-300 group-hover/prj:text-brand-primary" })
+                            ]
+                          }
+                        ),
+                        activeProjectMenuId === note.id && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-[60]", onClick: () => setActiveProjectMenuId(null) }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute top-full left-0 mt-1 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-[70] py-1 animate-in zoom-in-95 duration-200", children: [
+                            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-3 py-1.5 text-[9px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-50 font-serif", children: "프로젝트 이동" }),
+                            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                              "button",
+                              {
+                                onClick: () => {
+                                  moveNoteToProject(note.id, null);
+                                  setActiveProjectMenuId(null);
+                                },
+                                className: `w-full px-3 py-2 text-left text-[11px] hover:bg-slate-50 flex items-center gap-2 ${!note.projectId ? "text-brand-primary font-bold" : "text-slate-600"}`,
+                                children: [
+                                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-2 h-2 rounded-full bg-slate-200" }),
+                                  " 미분류 (기본)"
+                                ]
+                              }
+                            ),
+                            projects.map((project) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                              "button",
+                              {
+                                onClick: () => {
+                                  moveNoteToProject(note.id, project.id);
+                                  setActiveProjectMenuId(null);
+                                },
+                                className: `w-full px-3 py-2 text-left text-[11px] hover:bg-slate-50 flex items-center gap-2 ${note.projectId === project.id ? "text-brand-primary font-bold" : "text-slate-600"}`,
+                                children: [
+                                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-2 h-2 rounded-full", style: { backgroundColor: project.color || "#CBD5E1" } }),
+                                  project.name
+                                ]
+                              },
+                              project.id
+                            ))
+                          ] })
+                        ] })
                       ] }),
-                      note.integrations?.syncedAt && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 px-1.5 py-0.5 bg-slate-50 rounded border border-slate-100/50", children: [
-                        note.integrations.notionId && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-1.5 h-1.5 rounded-full bg-slate-800", title: "Synced to Notion" }),
-                        note.integrations.slackTs && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-1.5 h-1.5 rounded-full bg-[#4A154B]", title: "Synced to Slack" }),
-                        note.integrations.trelloId && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-1.5 h-1.5 rounded-full bg-[#0079BF]", title: "Synced to Trello" })
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+                        note.assignee && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1 px-1.5 py-0.5 bg-slate-50 rounded border border-slate-100/50 text-slate-400", children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx(User, { size: 10 }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[9px] font-bold uppercase", children: note.assignee })
+                        ] }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("time", { className: "text-[10px] text-slate-400 font-medium whitespace-nowrap", children: new Date(note.updatedAt).toLocaleDateString() }),
+                        note.integrations?.syncedAt && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1 px-1 py-0.5 bg-slate-50 rounded border border-slate-100/50 scale-90", children: [
+                          note.integrations.notionId && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-1.5 h-1.5 rounded-full bg-slate-800", title: "Synced to Notion" }),
+                          note.integrations.slackTs && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-1.5 h-1.5 rounded-full bg-[#4A154B]", title: "Synced to Slack" }),
+                          note.integrations.trelloId && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-1.5 h-1.5 rounded-full bg-[#0079BF]", title: "Synced to Trello" })
+                        ] })
                       ] })
                     ] })
                   ] })
@@ -14268,13 +14409,6 @@ const Dashboard = () => {
                   ),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => goToNote(note), className: "p-2 hover:bg-slate-100 rounded-xl text-slate-500 hover:text-brand-primary transition-colors", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExternalLink, { size: 18 }) }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => deleteNote(note.id), className: "p-2 hover:bg-red-50 rounded-xl text-slate-300 hover:text-red-500 transition-colors", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Trash2, { size: 18 }) })
-                ] })
-              ] }),
-              note.assignee && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-5 py-2 bg-slate-50 border-y border-slate-100 flex items-center gap-2", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(User, { size: 12, className: "text-slate-400" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] font-bold text-slate-500 uppercase tracking-tighter", children: [
-                  "담당자: ",
-                  note.assignee
                 ] })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-5 pb-5 flex-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx(

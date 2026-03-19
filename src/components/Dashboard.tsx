@@ -30,7 +30,8 @@ import {
     Eye,
     EyeOff,
     List,
-    Layout as LayoutIcon
+    Layout as LayoutIcon,
+    ChevronDown
 } from 'lucide-react';
 import { CanvasDashboard } from './CanvasDashboard';
 
@@ -58,13 +59,15 @@ const Dashboard: React.FC = () => {
         updateSettings,
         loadSettings,
         dashboardViewMode,
-        setDashboardViewMode
+        setDashboardViewMode,
+        moveNoteToProject
     } = useNoteStore();
 
     const [selectedDomain, setSelectedDomain] = React.useState<string | null>(null);
     const [statusFilter, setStatusFilter] = React.useState<string | null>(null);
     const [expandedHistoryId, setExpandedHistoryId] = React.useState<string | null>(null);
     const [showIntegrations, setShowIntegrations] = React.useState(false);
+    const [activeProjectMenuId, setActiveProjectMenuId] = React.useState<string | null>(null);
     const [visibleFields, setVisibleFields] = React.useState<Record<string, boolean>>({});
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -91,10 +94,11 @@ const Dashboard: React.FC = () => {
 
     const filteredNotes = useMemo(() => {
         let result = notes;
+        if (currentProjectId) result = result.filter(n => n.projectId === currentProjectId);
         if (selectedDomain) result = result.filter(n => n.domain === selectedDomain);
         if (statusFilter) result = result.filter(n => n.status === statusFilter);
         return result;
-    }, [notes, selectedDomain, statusFilter]);
+    }, [notes, currentProjectId, selectedDomain, statusFilter]);
 
     const sortedDomains = useMemo(() => {
         return Object.keys(notesByDomain).sort((a, b) =>
@@ -380,7 +384,7 @@ const Dashboard: React.FC = () => {
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 {filteredNotes.map(note => (
-                                    <article key={note.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-md transition-all flex flex-col group">
+                                    <article key={note.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-all flex flex-col group relative">
                                         {/* Note Header */}
                                         <div className="p-5 flex items-start justify-between">
                                             <div className="flex items-center gap-3">
@@ -400,18 +404,76 @@ const Dashboard: React.FC = () => {
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <div className="flex items-center gap-2 mt-0.5">
-                                                        <time className="text-[10px] text-slate-400 font-medium whitespace-nowrap">
-                                                            {new Date(note.updatedAt).toLocaleDateString()} · {new Date(note.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                        </time>
-                                                        {note.integrations?.syncedAt && (
-                                                            <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-slate-50 rounded border border-slate-100/50">
-                                                                {note.integrations.notionId && <div className="w-1.5 h-1.5 rounded-full bg-slate-800" title="Synced to Notion" />}
-                                                                {note.integrations.slackTs && <div className="w-1.5 h-1.5 rounded-full bg-[#4A154B]" title="Synced to Slack" />}
-                                                                {note.integrations.trelloId && <div className="w-1.5 h-1.5 rounded-full bg-[#0079BF]" title="Synced to Trello" />}
-                                                            </div>
-                                                        )}
+
+                                                    <div className="flex items-center gap-3 mt-1.5">
+                                                        {/* Project Selector - Folder Assignment UI */}
+                                                        <div className="relative">
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setActiveProjectMenuId(activeProjectMenuId === note.id ? null : note.id);
+                                                                }}
+                                                                className="flex items-center gap-1.5 px-2 py-1 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-100 transition-colors text-[10px] font-bold text-slate-500 group/prj"
+                                                            >
+                                                                <Folder size={10} className={note.projectId ? "text-brand-primary" : "text-slate-400"} />
+                                                                <span className="truncate max-w-[80px]">
+                                                                    {projects.find(p => p.id === note.projectId)?.name || '미분류'}
+                                                                </span>
+                                                                <ChevronDown size={10} className="text-slate-300 group-hover/prj:text-brand-primary" />
+                                                            </button>
+
+                                                            {activeProjectMenuId === note.id && (
+                                                                <>
+                                                                    <div className="fixed inset-0 z-[60]" onClick={() => setActiveProjectMenuId(null)} />
+                                                                    <div className="absolute top-full left-0 mt-1 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-[70] py-1 animate-in zoom-in-95 duration-200">
+                                                                        <div className="px-3 py-1.5 text-[9px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-50 font-serif">프로젝트 이동</div>
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                moveNoteToProject(note.id, null);
+                                                                                setActiveProjectMenuId(null);
+                                                                            }}
+                                                                            className={`w-full px-3 py-2 text-left text-[11px] hover:bg-slate-50 flex items-center gap-2 ${!note.projectId ? 'text-brand-primary font-bold' : 'text-slate-600'}`}
+                                                                        >
+                                                                            <div className="w-2 h-2 rounded-full bg-slate-200" /> 미분류 (기본)
+                                                                        </button>
+                                                                        {projects.map(project => (
+                                                                            <button
+                                                                                key={project.id}
+                                                                                onClick={() => {
+                                                                                    moveNoteToProject(note.id, project.id);
+                                                                                    setActiveProjectMenuId(null);
+                                                                                }}
+                                                                                className={`w-full px-3 py-2 text-left text-[11px] hover:bg-slate-50 flex items-center gap-2 ${note.projectId === project.id ? 'text-brand-primary font-bold' : 'text-slate-600'}`}
+                                                                            >
+                                                                                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: project.color || '#CBD5E1' }} />
+                                                                                {project.name}
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                </>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="flex items-center gap-2">
+                                                            {note.assignee && (
+                                                                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-50 rounded border border-slate-100/50 text-slate-400">
+                                                                    <User size={10} />
+                                                                    <span className="text-[9px] font-bold uppercase">{note.assignee}</span>
+                                                                </div>
+                                                            )}
+                                                            <time className="text-[10px] text-slate-400 font-medium whitespace-nowrap">
+                                                                {new Date(note.updatedAt).toLocaleDateString()}
+                                                            </time>
+                                                            {note.integrations?.syncedAt && (
+                                                                <div className="flex items-center gap-1 px-1 py-0.5 bg-slate-50 rounded border border-slate-100/50 scale-90">
+                                                                    {note.integrations.notionId && <div className="w-1.5 h-1.5 rounded-full bg-slate-800" title="Synced to Notion" />}
+                                                                    {note.integrations.slackTs && <div className="w-1.5 h-1.5 rounded-full bg-[#4A154B]" title="Synced to Slack" />}
+                                                                    {note.integrations.trelloId && <div className="w-1.5 h-1.5 rounded-full bg-[#0079BF]" title="Synced to Trello" />}
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
+
                                                 </div>
                                             </div>
                                             <div className="flex gap-1.5 translate-x-2 -translate-y-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -439,14 +501,6 @@ const Dashboard: React.FC = () => {
                                                 </button>
                                             </div>
                                         </div>
-
-                                        {/* Assignee display */}
-                                        {note.assignee && (
-                                            <div className="px-5 py-2 bg-slate-50 border-y border-slate-100 flex items-center gap-2">
-                                                <User size={12} className="text-slate-400" />
-                                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">담당자: {note.assignee}</span>
-                                            </div>
-                                        )}
 
                                         {/* Note Content */}
                                         <div className="px-5 pb-5 flex-1">

@@ -5,14 +5,19 @@ import {
     ZoomIn,
     ZoomOut,
     RefreshCcw,
-    ExternalLink
+    ExternalLink,
+    Folder,
+    ChevronDown
 } from 'lucide-react';
 
 export const CanvasDashboard: React.FC = () => {
     const {
         notes,
         updateCanvasPosition,
-        searchQuery
+        searchQuery,
+        projects,
+        moveNoteToProject,
+        currentProjectId
     } = useNoteStore();
 
     const containerRef = useRef<HTMLDivElement>(null);
@@ -20,17 +25,24 @@ export const CanvasDashboard: React.FC = () => {
     const [zoom, setZoom] = useState(1);
     const [isPanning, setIsPanning] = useState(false);
     const [draggedNoteId, setDraggedNoteId] = useState<string | null>(null);
+    const [activeProjectMenuId, setActiveProjectMenuId] = useState<string | null>(null);
     const dragOffset = useRef({ x: 0, y: 0 });
 
     const filteredNotes = useMemo(() => {
-        if (!searchQuery) return notes;
-        const q = searchQuery.toLowerCase();
-        return notes.filter(n =>
-            n.content.toLowerCase().includes(q) ||
-            n.domain.toLowerCase().includes(q) ||
-            n.tags.some(t => t.toLowerCase().includes(q))
-        );
-    }, [notes, searchQuery]);
+        let result = notes;
+        if (currentProjectId) {
+            result = result.filter(n => n.projectId === currentProjectId);
+        }
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            result = result.filter(n =>
+                n.content.toLowerCase().includes(q) ||
+                n.domain.toLowerCase().includes(q) ||
+                n.tags.some(t => t.toLowerCase().includes(q))
+            );
+        }
+        return result;
+    }, [notes, searchQuery, currentProjectId]);
 
     // Pan logic
     const handleMouseDown = (e: React.MouseEvent) => {
@@ -172,6 +184,57 @@ export const CanvasDashboard: React.FC = () => {
                                 >
                                     <ExternalLink size={12} />
                                 </a>
+                            </div>
+
+                            {/* Project Selector for Canvas */}
+                            <div className="relative mb-2">
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActiveProjectMenuId(activeProjectMenuId === note.id ? null : note.id);
+                                    }}
+                                    className="flex items-center gap-1.5 px-2 py-1 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-100 transition-colors text-[9px] font-bold text-slate-500 group/prj w-full justify-between"
+                                >
+                                    <div className="flex items-center gap-1.5 truncate">
+                                        <Folder size={10} className={note.projectId ? "text-brand-primary" : "text-slate-400"} />
+                                        <span className="truncate">
+                                            {projects.find(p => p.id === note.projectId)?.name || '미분류'}
+                                        </span>
+                                    </div>
+                                    <ChevronDown size={10} className="text-slate-300 group-hover/prj:text-brand-primary flex-shrink-0" />
+                                </button>
+
+                                {activeProjectMenuId === note.id && (
+                                    <>
+                                        <div className="fixed inset-0 z-[100]" onClick={(e) => { e.stopPropagation(); setActiveProjectMenuId(null); }} />
+                                        <div className="absolute top-full left-0 mt-1 w-40 bg-white rounded-xl shadow-2xl border border-slate-100 z-[110] py-1 animate-in zoom-in-95 duration-200">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    moveNoteToProject(note.id, null);
+                                                    setActiveProjectMenuId(null);
+                                                }}
+                                                className={`w-full px-3 py-1.5 text-left text-[10px] hover:bg-slate-50 flex items-center gap-2 ${!note.projectId ? 'text-brand-primary font-bold' : 'text-slate-600'}`}
+                                            >
+                                                <div className="w-1.5 h-1.5 rounded-full bg-slate-200" /> 미분류
+                                            </button>
+                                            {projects.map(project => (
+                                                <button
+                                                    key={project.id}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        moveNoteToProject(note.id, project.id);
+                                                        setActiveProjectMenuId(null);
+                                                    }}
+                                                    className={`w-full px-3 py-1.5 text-left text-[10px] hover:bg-slate-50 flex items-center gap-2 ${note.projectId === project.id ? 'text-brand-primary font-bold' : 'text-slate-600'}`}
+                                                >
+                                                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: project.color || '#CBD5E1' }} />
+                                                    <span className="truncate">{project.name}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
                             </div>
                             <p className="text-xs text-slate-700 leading-relaxed line-clamp-4 whitespace-pre-wrap italic"
                                 style={{ fontFamily: note.fontFamily, fontSize: note.fontSize }}>
