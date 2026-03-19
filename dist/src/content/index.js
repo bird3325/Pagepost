@@ -15775,16 +15775,20 @@
         captureRoot.style.visibility = "hidden";
         captureRoot.style.opacity = "0";
       }
+      const affectedElements = [];
+      let styleTag = null;
       try {
         if (!isExtensionValid2()) throw new Error("Extension context invalidated");
         await new Promise((r) => setTimeout(r, 300));
         const originalScrollPos = { x: window.scrollX, y: window.scrollY };
-        const style = document.createElement("style");
-        style.innerHTML = `
+        window.scrollTo(0, 0);
+        await new Promise((r) => setTimeout(r, 500));
+        styleTag = document.createElement("style");
+        styleTag.innerHTML = `
                 * { transition: none !important; animation: none !important; }
                 html { scroll-behavior: auto !important; }
             `;
-        document.head.appendChild(style);
+        document.head.appendChild(styleTag);
         const totalHeight = Math.max(
           document.body.scrollHeight,
           document.body.offsetHeight,
@@ -15802,10 +15806,29 @@
         if (!ctx) throw new Error("Canvas context failed");
         let currentScrollTop = 0;
         const chunks = [];
+        let stickyElementsHidden = false;
         while (currentScrollTop < totalHeight) {
           window.scrollTo(0, currentScrollTop);
           await new Promise((r) => setTimeout(r, 750));
           if (!isExtensionValid2()) throw new Error("Extension context invalidated");
+          if (currentScrollTop > 0 && !stickyElementsHidden) {
+            const allElements = document.querySelectorAll("*");
+            for (let n = 0; n < allElements.length; n++) {
+              const el = allElements[n];
+              const computedStyle = window.getComputedStyle(el);
+              if (computedStyle.position === "fixed" || computedStyle.position === "sticky") {
+                if (el.id === "pagepost-extension-host" || el.closest("#pagepost-extension-host")) continue;
+                affectedElements.push({
+                  element: el,
+                  originalVisibility: el.style.visibility,
+                  originalOpacity: el.style.opacity
+                });
+                el.style.setProperty("visibility", "hidden", "important");
+                el.style.setProperty("opacity", "0", "important");
+              }
+            }
+            stickyElementsHidden = true;
+          }
           const response = await chrome.runtime.sendMessage({ type: "CAPTURE_TAB" });
           if (response?.dataUrl) {
             const drawHeight = Math.min(viewportHeight, totalHeight - currentScrollTop);
@@ -15838,16 +15861,22 @@
         setCapturedImage(canvas.toDataURL("image/png"));
         setCaptureProgress(100);
         window.scrollTo(originalScrollPos.x, originalScrollPos.y);
-        document.head.removeChild(style);
       } catch (error) {
         console.error("Full page capture failed:", error);
-        alert("개체 캡쳐 중 오류가 발생했습니다.");
+        alert("전체 페이지 캡쳐 중 오류가 발생했습니다.");
       } finally {
         setIsCapturing(false);
+        if (styleTag && styleTag.parentNode) {
+          document.head.removeChild(styleTag);
+        }
         if (captureRoot) {
           captureRoot.style.visibility = "visible";
           captureRoot.style.opacity = "1";
         }
+        affectedElements.forEach((item) => {
+          item.element.style.visibility = item.originalVisibility;
+          item.element.style.opacity = item.originalOpacity;
+        });
       }
     };
     const downloadImage = () => {

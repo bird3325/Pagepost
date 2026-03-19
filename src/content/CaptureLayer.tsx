@@ -202,19 +202,27 @@ export const CaptureLayer: React.FC = () => {
             captureRoot.style.opacity = '0';
         }
 
+        const affectedElements: { element: HTMLElement, originalVisibility: string, originalOpacity: string }[] = [];
+        let styleTag: HTMLStyleElement | null = null;
+
         try {
             if (!isExtensionValid()) throw new Error('Extension context invalidated');
-            // Wait for UI to hide and browser to repaint
+
+            // 1. UI 숨김 대기 및 초기 상태 저장
             await new Promise(r => setTimeout(r, 300));
             const originalScrollPos = { x: window.scrollX, y: window.scrollY };
 
-            // Temporary hide elements that might cause trouble
-            const style = document.createElement('style');
-            style.innerHTML = `
+            // 2. 초기 상태 설정을 위해 맨 위로 이동
+            window.scrollTo(0, 0);
+            await new Promise(r => setTimeout(r, 500));
+
+            // 3. 애니메이션 및 레이아웃 변화 방지 스타일 추가
+            styleTag = document.createElement('style');
+            styleTag.innerHTML = `
                 * { transition: none !important; animation: none !important; }
                 html { scroll-behavior: auto !important; }
             `;
-            document.head.appendChild(style);
+            document.head.appendChild(styleTag);
 
             const totalHeight = Math.max(
                 document.body.scrollHeight,
@@ -235,13 +243,38 @@ export const CaptureLayer: React.FC = () => {
 
             let currentScrollTop = 0;
             const chunks: { dataUrl: string, top: number, height: number }[] = [];
+            let stickyElementsHidden = false;
 
             while (currentScrollTop < totalHeight) {
                 window.scrollTo(0, currentScrollTop);
-                // Wait for rendering & animations and avoid Chrome quota limits
+                // 렌더링 및 브라우저 안정화를 위해 대기
                 await new Promise(r => setTimeout(r, 750));
 
                 if (!isExtensionValid()) throw new Error('Extension context invalidated');
+
+                // 첫 번째 조각(0,0) 이후부터는 모든 고정 요소(헤더 등)를 숨깁니다.
+                // visibility: hidden과 opacity: 0을 병행하여 확실히 처리하되 레이아웃은 유지합니다.
+                if (currentScrollTop > 0 && !stickyElementsHidden) {
+                    const allElements = document.querySelectorAll('*');
+                    for (let n = 0; n < allElements.length; n++) {
+                        const el = allElements[n] as HTMLElement;
+                        const computedStyle = window.getComputedStyle(el);
+                        if (computedStyle.position === 'fixed' || computedStyle.position === 'sticky') {
+                            if (el.id === 'pagepost-extension-host' || el.closest('#pagepost-extension-host')) continue;
+
+                            affectedElements.push({
+                                element: el,
+                                originalVisibility: el.style.visibility,
+                                originalOpacity: el.style.opacity
+                            });
+
+                            el.style.setProperty('visibility', 'hidden', 'important');
+                            el.style.setProperty('opacity', '0', 'important');
+                        }
+                    }
+                    stickyElementsHidden = true;
+                }
+
                 const response = await chrome.runtime.sendMessage({ type: 'CAPTURE_TAB' });
                 if (response?.dataUrl) {
                     const drawHeight = Math.min(viewportHeight, totalHeight - currentScrollTop);
@@ -258,15 +291,9 @@ export const CaptureLayer: React.FC = () => {
                 if (currentScrollTop >= totalHeight) break;
             }
 
-            // Stitch chunks
+            // 5. 이미지 합성
             for (const chunk of chunks) {
                 const img = await loadImage(chunk.dataUrl);
-                // If it's the last chunk and it's partial, we need to take only the bottom part of the captured image
-                // because captureVisibleTab always captures a full viewport from where the scroll is.
-                // But wait, if we scrolled to 'currentScrollTop', the visible part IS what we want.
-                // However, at the very bottom, if the remaining height is less than viewport, 
-                // the screenshot still shows a full viewport, so we need to offset it.
-
                 const isPointAtBottom = chunk.top + viewportHeight > totalHeight;
                 const sourceY = isPointAtBottom ? (viewportHeight - chunk.height) * dpr : 0;
 
@@ -280,18 +307,28 @@ export const CaptureLayer: React.FC = () => {
             setCapturedImage(canvas.toDataURL('image/png'));
             setCaptureProgress(100);
 
-            // Restore
+            // 원래 상태로 복구
             window.scrollTo(originalScrollPos.x, originalScrollPos.y);
-            document.head.removeChild(style);
         } catch (error) {
             console.error('Full page capture failed:', error);
-            alert('개체 캡쳐 중 오류가 발생했습니다.');
+            alert('전체 페이지 캡쳐 중 오류가 발생했습니다.');
         } finally {
             setIsCapturing(false);
+
+            if (styleTag && styleTag.parentNode) {
+                document.head.removeChild(styleTag);
+            }
+
             if (captureRoot) {
                 captureRoot.style.visibility = 'visible';
                 captureRoot.style.opacity = '1';
             }
+
+            // 모든 숨겨진 요소 원복
+            affectedElements.forEach(item => {
+                item.element.style.visibility = item.originalVisibility;
+                item.element.style.opacity = item.originalOpacity;
+            });
         }
     };
 
