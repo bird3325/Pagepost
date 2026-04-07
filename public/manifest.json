@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PagePost",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Contextual sticky notes for the web.",
   "icons": {
     "16": "icon16.png",

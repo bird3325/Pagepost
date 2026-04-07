@@ -12629,8 +12629,10 @@ const useNoteStore = create((set, get) => {
       fontFamily: "Pretendard, -apple-system, sans-serif",
       fontSize: 14,
       textColor: "#1a1a1a",
-      showToolbar: true,
-      isToolbarExpanded: true,
+      showToolbar: false,
+      // Default to false to prevent flashing
+      isToolbarExpanded: false,
+      // Default to false to prevent flashing
       penWidth: 3,
       highlightWidth: 20,
       markupOpacity: 1,
@@ -12648,7 +12650,7 @@ const useNoteStore = create((set, get) => {
     markupFetchRequestId: 0,
     loadSettings: async () => {
       if (!isContextValid()) {
-        set({ isSettingsLoaded: true });
+        set({ settings: { ...get().settings, showToolbar: true, isToolbarExpanded: true }, isSettingsLoaded: true });
         return;
       }
       try {
@@ -12661,7 +12663,14 @@ const useNoteStore = create((set, get) => {
           }
           set({ settings: { ...get().settings, ...loadedSettings }, isSettingsLoaded: true });
         } else {
-          set({ isSettingsLoaded: true });
+          set({
+            settings: {
+              ...get().settings,
+              showToolbar: true,
+              isToolbarExpanded: true
+            },
+            isSettingsLoaded: true
+          });
         }
       } catch (error) {
         console.error("Failed to load settings:", error);

@@ -204,8 +204,8 @@ export const useNoteStore = create<NoteState>((set, get) => {
             fontFamily: 'Pretendard, -apple-system, sans-serif',
             fontSize: 14,
             textColor: '#1a1a1a',
-            showToolbar: true,
-            isToolbarExpanded: true,
+            showToolbar: false, // Default to false to prevent flashing
+            isToolbarExpanded: false, // Default to false to prevent flashing
             penWidth: 3,
             highlightWidth: 20,
             markupOpacity: 1.0,
@@ -224,12 +224,14 @@ export const useNoteStore = create<NoteState>((set, get) => {
 
         loadSettings: async () => {
             if (!isContextValid()) {
-                set({ isSettingsLoaded: true });
+                // If context is invalid (e.g. testing), set it to true but keep defaults or fallback
+                set({ settings: { ...get().settings, showToolbar: true, isToolbarExpanded: true }, isSettingsLoaded: true });
                 return;
             }
             try {
                 const result = await chrome.storage.local.get(SETTINGS_KEY);
                 if (!isContextValid()) return;
+
                 if (result[SETTINGS_KEY]) {
                     const loadedSettings = result[SETTINGS_KEY] as any;
                     // Ensure toolbarPosition is properly merged or defaulted
@@ -238,7 +240,15 @@ export const useNoteStore = create<NoteState>((set, get) => {
                     }
                     set({ settings: { ...get().settings, ...loadedSettings }, isSettingsLoaded: true });
                 } else {
-                    set({ isSettingsLoaded: true });
+                    // New user: enable toolbar by default but AFTER setting isSettingsLoaded to true
+                    set({
+                        settings: {
+                            ...get().settings,
+                            showToolbar: true,
+                            isToolbarExpanded: true
+                        },
+                        isSettingsLoaded: true
+                    });
                 }
             } catch (error) {
                 console.error('Failed to load settings:', error);

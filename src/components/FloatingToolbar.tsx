@@ -56,6 +56,10 @@ export const FloatingToolbar: React.FC = () => {
 
     const handleCollapse = () => {
         setIsVisible(false);
+        // 마크업 모드에서 닫을 때 노트 모드로 자동 전환
+        if (mode === 'markup') {
+            setMode('note');
+        }
         setTimeout(() => {
             setIsExpanded(false);
             updateSettings({ isToolbarExpanded: false });
@@ -195,7 +199,7 @@ export const FloatingToolbar: React.FC = () => {
                             <>
                                 {/* 상단 닫기 (X) 버튼 - 확장 상태 */}
                                 <button
-                                    onClick={() => { if (confirm('툴바를 숨기시겠습니까? 설정에서 다시 켤 수 있습니다.')) updateSettings({ showToolbar: false }); }}
+                                    onClick={() => { if (confirm('툴바를 숨기시겠습니까? 설정에서 다시 켤 수 있습니다.')) { setMode('note'); updateSettings({ showToolbar: false }); } }}
                                     style={{
                                         position: 'absolute',
                                         top: '-8px',
@@ -425,7 +429,7 @@ export const FloatingToolbar: React.FC = () => {
                             </div>
 
                             <button
-                                onClick={(e) => { e.stopPropagation(); if (confirm('Hide toolbar? You can re-enable it in settings.')) updateSettings({ showToolbar: false }); }}
+                                onClick={(e) => { e.stopPropagation(); if (confirm('Hide toolbar? You can re-enable it in settings.')) { setMode('note'); updateSettings({ showToolbar: false }); } }}
                                 style={{
                                     position: 'absolute',
                                     top: '-6px',

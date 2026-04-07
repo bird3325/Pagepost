@@ -12602,8 +12602,10 @@
         fontFamily: "Pretendard, -apple-system, sans-serif",
         fontSize: 14,
         textColor: "#1a1a1a",
-        showToolbar: true,
-        isToolbarExpanded: true,
+        showToolbar: false,
+        // Default to false to prevent flashing
+        isToolbarExpanded: false,
+        // Default to false to prevent flashing
         penWidth: 3,
         highlightWidth: 20,
         markupOpacity: 1,
@@ -12621,7 +12623,7 @@
       markupFetchRequestId: 0,
       loadSettings: async () => {
         if (!isContextValid()) {
-          set({ isSettingsLoaded: true });
+          set({ settings: { ...get().settings, showToolbar: true, isToolbarExpanded: true }, isSettingsLoaded: true });
           return;
         }
         try {
@@ -12634,7 +12636,14 @@
             }
             set({ settings: { ...get().settings, ...loadedSettings }, isSettingsLoaded: true });
           } else {
-            set({ isSettingsLoaded: true });
+            set({
+              settings: {
+                ...get().settings,
+                showToolbar: true,
+                isToolbarExpanded: true
+              },
+              isSettingsLoaded: true
+            });
           }
         } catch (error) {
           console.error("Failed to load settings:", error);
@@ -14347,6 +14356,9 @@
     ];
     const handleCollapse = () => {
       setIsVisible(false);
+      if (mode === "markup") {
+        setMode("note");
+      }
       setTimeout(() => {
         setIsExpanded(false);
         updateSettings({ isToolbarExpanded: false });
@@ -14453,7 +14465,10 @@
                   "button",
                   {
                     onClick: () => {
-                      if (confirm("툴바를 숨기시겠습니까? 설정에서 다시 켤 수 있습니다.")) updateSettings({ showToolbar: false });
+                      if (confirm("툴바를 숨기시겠습니까? 설정에서 다시 켤 수 있습니다.")) {
+                        setMode("note");
+                        updateSettings({ showToolbar: false });
+                      }
                     },
                     style: {
                       position: "absolute",
@@ -14716,7 +14731,10 @@
                   {
                     onClick: (e) => {
                       e.stopPropagation();
-                      if (confirm("Hide toolbar? You can re-enable it in settings.")) updateSettings({ showToolbar: false });
+                      if (confirm("Hide toolbar? You can re-enable it in settings.")) {
+                        setMode("note");
+                        updateSettings({ showToolbar: false });
+                      }
                     },
                     style: {
                       position: "absolute",
